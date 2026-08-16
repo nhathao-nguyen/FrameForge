@@ -1,0 +1,16 @@
+# Local upstream/reference repositories are audit inputs only.
+references/
+
+# Local development artifacts.
+.DS_Store
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+.env
+.env.*
+!.env.example
+
