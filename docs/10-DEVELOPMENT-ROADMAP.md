@@ -132,13 +132,19 @@
 
 ## 8. Phase 5 — Studio frontend and review workflow
 
-**Scope:** user-facing project/script/scene/subtitle/voice/timeline review over Product API only.
+**Scope:** user-facing project/script/scene/subtitle/voice/timeline review over Product API only,
+through both web browser and desktop client.
 
 **Prerequisites:** Phase 4; primary progress transport and edit command format decided.
 
-**Deliverables:** project dashboard; upload/status; Script editor/version review; Scene/Character browser; match/Clip override; subtitle/voice controls; Timeline editor; render panel; SSE reconnect/snapshot reducer.
+**Deliverables:** shared client SDK/contracts; web project dashboard; desktop shell; upload/status;
+Script editor/version review; Scene/Character browser; match/Clip override; subtitle/voice controls;
+Timeline editor; render panel; SSE reconnect/snapshot reducer; desktop packaging/security baseline.
 
-**Tests/evidence:** browser authorization; reload/reconnect/retention-gap; optimistic conflict; undo/version creation; review approve/reject; accessibility/basic responsive behavior; no secret/direct provider/engine calls; e2e edit→resume→render.
+**Tests/evidence:** browser and desktop authorization; reload/reconnect/retention-gap; optimistic
+conflict; undo/version creation; review approve/reject; accessibility/basic responsive behavior;
+desktop native permission/token redaction; no secret/direct provider/engine calls; e2e edit→resume→render
+from both clients.
 
 **Acceptance criteria:**
 
@@ -147,6 +153,7 @@
 - AI rerun cannot overwrite user-origin edit silently;
 - browser never receives engine/provider/storage credentials beyond scoped presigned URLs;
 - persisted state survives tab/browser loss.
+- desktop app restart preserves only safe local draft/session behavior while server Job state remains durable.
 
 **Non-goals:** real-time multi-user collaboration/CRDT, billing, mobile-native app or public plugin marketplace.
 

@@ -75,7 +75,10 @@ None after remediation. Added dedicated specifications for:
 
 ## Open decisions
 
-All 14 decisions use required Question/Why/Options/Pros/Cons/Recommendation/`OPEN` format and hard-block only dependent tasks.
+The original 14 decisions use the required Question/Why/Options/Pros/Cons/Recommendation/`OPEN`
+format and hard-block only dependent tasks. A later desktop-client scope extension adds OQ-15 in
+the same format; it blocks only desktop shell/package work and does not change the original V2
+server/engine boundaries.
 
 Highest-priority decisions:
 
@@ -86,7 +89,7 @@ Highest-priority decisions:
 - OQ-03: Redis queue primitive—blocks QueuePort implementation.
 - OQ-05: provider credential ownership/secret backend—blocks provider configuration/real adapters.
 
-Other open choices (Timeline projection/edit transport, event transport, vector storage, legacy ownership, retention and pipeline authoring) have safe fixed invariants and explicit task gates.
+Other open choices (Timeline projection/edit transport, event transport, vector storage, legacy ownership, retention, pipeline authoring and desktop shell/runtime) have safe fixed invariants and explicit task gates.
 
 ## Upstream assumptions verified
 
@@ -126,7 +129,7 @@ Residual risks are implementation/test obligations in T224, T313, T600–T602, n
 
 - Current user instruction and documentation gate prohibit application code.
 - T000 owner ratification is required before Phase 0 tasks.
-- OQ-12/OQ-13/OQ-14 must be decided before T100/T002/T003 respectively.
+- OQ-12/OQ-13/OQ-14 must be decided before T100/T002/T003 respectively; OQ-15 must be decided before T433–T434.
 - Each later task lists specific OQ and prior-task dependencies; agents must not infer a recommendation as approval.
 - `.agents/skills/` is absent; this is not a blocker because AGENTS routes agents to canonical docs.
 

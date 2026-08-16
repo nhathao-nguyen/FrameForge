@@ -23,7 +23,8 @@ Product API không chạy FFmpeg/Pillow/ML model nặng trong request thread. Wo
 
 ## 2. Authentication and authorization
 
-- Browser dùng product identity/session hoặc bearer token do auth layer cấp; không dùng Movie Narrator engine key.
+- Web browser và desktop dùng product identity/session hoặc bearer token do auth layer cấp; không
+  dùng Movie Narrator engine key.
 - Mọi request scoped theo `workspace_id`; mọi resource access kiểm tra membership/role và project ownership.
 - Roles baseline: `owner`, `admin`, `editor`, `viewer`.
 - `viewer` chỉ đọc và nhận signed download URL; `editor` sửa content/submit Job; `admin/owner` quản lý member/provider policy.
@@ -120,6 +121,18 @@ Third-party Python plugin là arbitrary code và có thể đọc filesystem/env
 - Error response safe, không traceback/path/provider key.
 - Content-Security-Policy, X-Frame-Options, secure headers cho frontend.
 - Download `Content-Disposition` và content type không được cho phép response header injection.
+
+### Desktop client security
+
+- Desktop binary không chứa provider key, database credential, Redis credential hoặc engine secret.
+- Session/token dùng OS credential store khi shell hỗ trợ; log native không ghi token, presigned URL
+  đầy đủ, local path nhạy cảm hoặc user media content.
+- File picker chỉ gửi file sau khi user chọn rõ ràng; client không tự quét toàn bộ filesystem.
+- Deep link/custom protocol, auto-update manifest và downloaded installer phải được allowlist,
+  ký/xác minh và kiểm tra origin; không thực thi payload từ project/media.
+- Desktop chỉ gọi HTTPS Product API với certificate/hostname validation chuẩn; không cho user
+  override TLS verification trong production build.
+- Local cache/draft là untrusted và reconstructable; server vẫn là source of truth.
 
 ## 9. Pipeline and timeline safety
 

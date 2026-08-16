@@ -5,7 +5,8 @@
 Hệ thống bắt đầu là modular monorepo/deployment đơn giản, không tách thành nhiều microservice độc lập ngay. Các boundary logic phải rõ để sau này scale thành worker pool.
 
 ```text
-apps/web ──HTTPS──> apps/api ──SQL──> PostgreSQL
+apps/web (browser) ──HTTPS──┐
+apps/desktop ───────HTTPS───┴──> apps/api ──SQL──> PostgreSQL
                          │
                          ├── Redis: queue, lease, pub/sub
                          ├── S3/MinIO: presigned upload/download
@@ -38,7 +39,7 @@ apps/web ──HTTPS──> apps/api ──SQL──> PostgreSQL
 ### Dependency direction
 
 ```text
-web → product API → domain/application ports
+web/desktop → packages/sdk + contracts → Product API → domain/application ports
                     ├── repository ports → PostgreSQL
                     ├── blob ports → object storage
                     ├── queue ports → Redis
@@ -57,6 +58,7 @@ Core domain không import FastAPI, Pydantic HTTP models, Redis client, boto3 hay
 ```text
 apps/
   web/                         # Next.js/React, UI only
+  desktop/                     # Native shell + shared client SDK, no business backend
   api/                         # FastAPI routes, auth, application services
 services/
   engine/
@@ -71,7 +73,7 @@ services/
   worker/                      # queue consumer, lease, sandbox, heartbeat
 packages/
   contracts/                   # versioned JSON/Pydantic contracts
-  sdk/                         # generated/manual API client
+  sdk/                         # shared web/desktop Product API client
   shared/                      # IDs, time, error codes, validation helpers
 infra/
   postgres/
@@ -98,7 +100,7 @@ tools/
 POST /projects
 POST /projects/{id}/assets/upload-session
   → API trả presigned multipart URLs
-Browser upload trực tiếp object storage
+Browser hoặc desktop upload trực tiếp object storage
 POST /projects/{id}/assets/{asset_id}/complete
   → API enqueue probe/ingest job
 ```
@@ -131,13 +133,17 @@ Một project giữ canonical timeline. Mỗi `Render` chọn `timeline_version_
 
 ### Development/local — initial architecture
 
-Một API process, Redis, PostgreSQL, MinIO và **một Engine Worker pool**. Worker controller có service identity giới hạn; node media chạy trong temp workspace/sandbox và không giữ DB/Redis credential. Có thể dùng LocalStorage/LocalQueue adapter cho unit test nhưng interface không đổi.
+Web dev server và desktop dev shell đều gọi một API process; phía server có Redis, PostgreSQL,
+MinIO và **một Engine Worker pool**. Worker controller có service identity giới hạn; node media
+chạy trong temp workspace/sandbox và không giữ DB/Redis credential. Có thể dùng
+LocalStorage/LocalQueue adapter cho unit test nhưng interface không đổi.
 
 ### Staging/production baseline — vẫn một worker class
 
 ```text
 HTTPS reverse proxy
-  → FastAPI API replicas
+  ├→ web static/SSR delivery (hoặc CDN)
+  └→ FastAPI API replicas
   → PostgreSQL
   → Redis
   → S3/MinIO private bucket
@@ -145,6 +151,10 @@ HTTPS reverse proxy
 ```
 
 Media worker có filesystem tạm riêng, non-root, resource limit và không có product secrets không cần thiết.
+
+Desktop client được phân phối riêng cho máy người dùng. Desktop chỉ lưu endpoint cấu hình, session
+được bảo vệ bởi OS credential store và local draft tối thiểu; mọi product state durable, Job và
+Artifact vẫn thuộc server. Không expose API/worker port public ngoài HTTPS Product API.
 
 Không yêu cầu Kubernetes, GPU scheduler riêng hoặc ba service worker trong Phase 1–3. Scale ngang cùng worker image trước; chỉ route capability tới pool riêng sau benchmark và operational evidence.
 
@@ -202,6 +212,8 @@ Engine không trả raw HTTP response và không ghi trực tiếp vào bảng p
 - Mọi event có `event_id`, `occurred_at`, `job_id`, `sequence` và correlation ID.
 - Tất cả provider calls có timeout, retry policy, circuit breaker và redacted logging.
 - Product API phải query được status mà không cần worker còn sống.
+- Client reconnect được bằng snapshot + event replay; tab/app đóng không làm mất Job state.
+- Desktop offline chỉ là local draft/import mode; không được mô phỏng server Job state.
 
 Chi tiết provider, storage và worker nằm lần lượt ở `11-PROVIDER-ARCHITECTURE.md`, `12-STORAGE-ARCHITECTURE.md` và `13-WORKER-ARCHITECTURE.md`.
 
@@ -222,4 +234,6 @@ Metadata V1 như `metadata.json`, match summary, duration metrics, alignment dia
 - Không bắt buộc Kubernetes.
 - Không chuyển mọi V1 module sang V2 trong một PR.
 - Không để frontend giữ API key của engine/provider.
+- Không để web/desktop client chứa Product DB credential, provider secret hoặc engine credential.
+- Không buộc desktop client cài Python/FFmpeg/ML runtime để dùng remote-server mode.
 - Không coi local filesystem là durable storage.

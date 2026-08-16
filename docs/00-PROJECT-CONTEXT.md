@@ -9,6 +9,7 @@
 Xây một **AI Video Production Engine** có Movie Narrator V1 làm reference implementation và legacy engine, nhưng sản phẩm mới có:
 
 - backend/frontend tách biệt;
+- có web client và desktop client dùng chung contract/SDK, đều kết nối Product API;
 - project state có thể chỉnh sửa và render lại;
 - pipeline dạng node, có checkpoint, pause/resume, partial execution;
 - Timeline là nguồn sự thật cho renderer;
@@ -28,7 +29,8 @@ Movie recap chỉ là workflow đầu tiên. Về sau có thể thêm documentar
 - AI/video engine: phân tích media, tạo script, narration, alignment, scene intelligence, matching, timeline proposal, render.
 - Worker: lấy job, thực thi node, retry/cancel/checkpoint, phát progress.
 - Storage: PostgreSQL cho metadata, Redis cho queue/event coordination, S3-compatible/MinIO cho blob.
-- Frontend: project dashboard, script/scene/subtitle/voice/timeline editor và render panel.
+- Clients: project dashboard, script/scene/subtitle/voice/timeline editor và render panel trên
+  web browser và desktop app; cả hai chỉ gọi Product API.
 - Adapter và migration từ Movie Narrator V1.
 
 ### Ngoài phạm vi giai đoạn đầu
@@ -42,28 +44,27 @@ Movie recap chỉ là workflow đầu tiên. Về sau có thể thêm documentar
 
 ## Các quyết định kiến trúc bắt buộc giữ
 
-1. Browser không gọi trực tiếp Movie Narrator API và không nhận engine API key.
-2. Product API là FastAPI; frontend là Next.js/React.
-3. PostgreSQL là database sản phẩm; Redis là queue/event coordination; S3/MinIO là object storage.
-4. Engine được gọi qua `VideoEngine` interface; implementation đầu tiên là `LegacyMovieNarratorAdapter`.
-5. V2 dùng pipeline node độc lập thay cho chuỗi function cứng.
-6. `Project`, `Asset`, `Job`, `JobStep`, `Artifact`, `Timeline` là nền móng.
-7. AI tạo proposal; user hoặc automation editor có thể override.
-8. Timeline là nguồn sự thật của renderer, không phải output trực tiếp của AI.
-9. Worker càng stateless càng tốt; media không tin cậy phải chạy trong sandbox.
-10. Không hard-code provider, model hoặc filesystem path.
-11. Giữ namespace `movie_narrator` trong migration; namespace V2 có thể là `your_engine`/tên dự án sau khi chốt.
-12. Giữ regression test V1 và upstream remote/branch baseline.
+1. Web browser và desktop app không gọi trực tiếp Movie Narrator API, engine, worker hoặc provider.
+2. Product API là FastAPI; web là Next.js/React; desktop là native shell mỏng dùng chung SDK/contracts.
+3. Client có thể chạy trên máy người dùng; server/API/worker/storage có thể chạy trên VPS riêng.
+4. PostgreSQL là database sản phẩm; Redis là queue/event coordination; S3/MinIO là object storage.
+5. Engine được gọi qua `VideoEngine` interface; implementation đầu tiên là `LegacyMovieNarratorAdapter`.
+6. V2 dùng pipeline node độc lập thay cho chuỗi function cứng.
+7. `Project`, `Asset`, `Job`, `JobStep`, `Artifact`, `Timeline` là nền móng.
+8. AI tạo proposal; user hoặc automation editor có thể override.
+9. Timeline là nguồn sự thật của renderer, không phải output trực tiếp của AI.
+10. Worker càng stateless càng tốt; media không tin cậy phải chạy trong sandbox.
+11. Không hard-code provider, model hoặc filesystem path.
+12. Giữ namespace `movie_narrator` trong migration; namespace V2 có thể là `your_engine`/tên dự án sau khi chốt.
+13. Giữ regression test V1 và upstream remote/branch baseline.
 
 ## Ranh giới hệ thống
 
 ```text
 User
-  │ HTTPS
-  ▼
-Web App (Next.js/React)
-  │ product auth/session
-  ▼
+  ├─ HTTPS → Web App (Next.js/React) ───────┐
+  └─ HTTPS → Desktop App (native shell) ────┴─ product auth/session
+                                             ▼
 Product API (FastAPI)
   ├── PostgreSQL: metadata, versions, state, audit
   ├── Redis: queue, lease, event fan-out
@@ -94,9 +95,12 @@ Nhận một execution lease, tải input artifact cần thiết, chạy engine 
 
 PostgreSQL giữ metadata có cấu trúc và trạng thái; Redis giữ dữ liệu ngắn hạn/coordination; object storage giữ byte lớn. Không dùng raw local path làm API identity.
 
-### Frontend
+### Web và desktop clients
 
-Hiển thị và chỉnh sửa product state qua Product API, subscribe progress qua SSE/WebSocket, không gọi provider hoặc worker trực tiếp. Frontend không là nguồn sự thật của pipeline/timeline.
+Web browser và desktop app hiển thị/chỉnh sửa product state qua Product API, subscribe progress qua
+SSE/WebSocket, không gọi provider hoặc worker trực tiếp. Desktop chỉ được cấp quyền native tối
+thiểu (file picker, download/export và notification nếu cần); không chứa Product DB, provider
+secret hoặc engine runtime. Client không là nguồn sự thật của pipeline/timeline.
 
 ## Các mode vận hành
 
@@ -160,6 +164,9 @@ Có thể chạy local Whisper, local VLM, local LLM, local TTS và FFmpeg; medi
 | `CODEX-INSTRUCTIONS.md` | guardrails cho coding agent |
 | `IMPLEMENTATION-ORDER.md` | task nhỏ, thứ tự giao việc |
 | `OPEN-QUESTIONS.md` | quyết định chưa đủ rõ, options và recommendation |
+| `SETUP-PLAN.md` | setup foundation, client/server profiles và V0–V10 certification |
+| `PRODUCTION-PLAN.md` | phase execution, client delivery, staging/canary/production gates |
+| `PRODUCTION-EXECUTION-PROMPT.md` | prompt vận hành cho agent thực hiện production plan |
 | `GLOSSARY.md` | terminology và canonical status vocabulary |
 | `UPSTREAM-MODULE-AUDIT.md` | source-level V1 disposition/evidence |
 | `SPEC-CONSISTENCY-MATRIX.md` | master/domain/DB/API/event mapping và scenarios A–H |

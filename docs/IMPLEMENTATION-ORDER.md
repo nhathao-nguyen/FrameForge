@@ -64,7 +64,7 @@ Every task has the required handoff fields. A dependency marked `OQ-x decided` i
 
 ### T100 — Create approved package skeleton
 
-- **Goal:** establish `apps/web`, `apps/api`, `services/engine`, `services/worker`, `packages/contracts`, `infra`, test boundaries.
+- **Goal:** establish `apps/web`, `apps/desktop`, `apps/api`, `services/engine`, `services/worker`, `packages/contracts`, `packages/sdk`, `infra`, test boundaries.
 - **Files/modules affected:** new package/layout metadata only; legacy `references/movie-narrator` untouched.
 - **Dependencies:** T005; OQ-12 decided.
 - **Implementation notes:** no media/domain implementation; enforce dependency direction with minimal import tests.
@@ -559,7 +559,7 @@ Every task has the required handoff fields. A dependency marked `OQ-x decided` i
 ### T430 — Build frontend shell and API client
 
 - **Goal:** create auth-aware Project navigation/API client/error/progress snapshot foundation.
-- **Files/modules affected:** `apps/web`, generated/manual SDK tests.
+- **Files/modules affected:** `apps/web`, `packages/sdk`, shared client contract tests.
 - **Dependencies:** T106, T210, T230, T340; OQ-01/OQ-04.
 - **Implementation notes:** no direct worker/provider/S3 credential except presigned URL.
 - **Tests required:** auth/error/pagination/reconnect, secret scan, accessibility smoke.
@@ -582,6 +582,32 @@ Every task has the required handoff fields. A dependency marked `OQ-x decided` i
 - **Implementation notes:** use approved command/full-replace contract; retain origin/proposal refs.
 - **Tests required:** Clip replace/version/undo-conflict/reload, invalid range, user override rerun.
 - **Definition of Done:** Scenario C edits one Clip and schedules rerender without AI-stage commands.
+
+### T433 — Build desktop client shell and remote-session integration
+
+- **Goal:** provide a first-class desktop client that uses the same Product API, SDK, contracts,
+  auth/session, upload, event reconnect and artifact download behavior as web.
+- **Files/modules affected:** `apps/desktop`, `packages/sdk`, desktop integration/e2e tests; no engine code.
+- **Dependencies:** T101, T106, T210, T223, T340, T430; desktop shell choice approved in setup gate.
+- **Implementation notes:** remote-server mode is default; native permissions are limited to file
+  picker/download/notification as needed; no provider/DB/engine secret or authoritative local state.
+- **Tests required:** server URL per environment, login/logout/token revocation, direct multipart
+  upload, reconnect after app restart, safe error display, role denial, no secret/path leakage.
+- **Definition of Done:** desktop can authenticate, upload, follow a Job, review a version and
+  download an Artifact through Product API without direct engine/provider access.
+
+### T434 — Package and secure desktop release baseline
+
+- **Goal:** produce reproducible desktop dev/staging builds, platform permission manifest and
+  signed-update decision boundary without coupling the client to server internals.
+- **Files/modules affected:** desktop packaging metadata, CI matrix, release/runbook tests.
+- **Dependencies:** T433; desktop framework and distribution policy approved.
+- **Implementation notes:** signing keys stay outside the repository; update/deep-link origins are
+  allowlisted; client releases never hard-code a production secret or localhost endpoint.
+- **Tests required:** clean build, install/uninstall, update verification, tampered package rejection,
+  endpoint configuration, OS permission review and rollback to previous desktop build.
+- **Definition of Done:** a signed/reproducible staging client can be rolled back and connects only
+  to an authorized API origin.
 
 ## Gate G — Providers, intelligence and rendering
 

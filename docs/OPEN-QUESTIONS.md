@@ -505,3 +505,44 @@ Option A for the frozen baseline unless owner can prove unused surfaces and appr
 **Decision status:** OPEN
 
 Blocks: Phase 0 compatibility profile and T360–T362; does not block upstream inventory.
+
+## OQ-15 — Desktop client shell/runtime
+
+**Question**
+
+Which desktop shell should package the first-class remote Product API client?
+
+**Why it matters**
+
+It fixes native permission boundaries, build/signing/update tooling, OS support, local filesystem
+integration and CI runners. It does not change the Product API, Engine, Worker or storage boundary.
+
+**Option A — Tauri 2 with web UI**
+
+Pros: small native footprint, explicit capability permissions, suitable for a remote-first client,
+and avoids bundling Python/FFmpeg/ML runtimes.
+
+Cons: Rust toolchain/native build matrix and plugin review are additional skills/CI requirements.
+
+**Option B — Electron**
+
+Pros: mature web ecosystem and straightforward reuse of the web client.
+
+Cons: larger runtime, broader native surface and stronger hardening/update discipline.
+
+**Option C — Native client per operating system**
+
+Pros: strongest platform integration and native UX.
+
+Cons: highest maintenance cost and duplicated client behavior; does not improve the server boundary.
+
+**Recommendation**
+
+Option A for a lightweight remote-first client, subject to owner approval and a signed-build proof.
+The desktop client must remain a Product API client; it must not embed the engine or become a second
+business backend.
+
+**Decision status:** OPEN
+
+Blocks: T433–T434 desktop shell/package implementation; does not block Product API contracts, web
+client setup or remote server architecture.

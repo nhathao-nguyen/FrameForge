@@ -7,6 +7,10 @@ Read before changing this repository:
 3. Use the topic specification in `docs/01`–`docs/14` and `docs/OPEN-QUESTIONS.md`.
 4. Follow `docs/IMPLEMENTATION-ORDER.md`; an OPEN recommendation is not an approved decision.
 5. `references/movie-narrator` is frozen legacy/reference behavior, not V2 architecture.
+6. Before starting work, read `docs/memory/PROJECT-MEMORY.md`, `docs/memory/CURRENT-STATE.md`,
+   `docs/memory/DECISIONS.md`, and `docs/memory/IMPLEMENTATION-STATUS.md`.
+7. For setup or release work, also read `docs/SETUP-PLAN.md` and `docs/PRODUCTION-PLAN.md`.
+8. After each task, update the relevant memory/evidence entry in the same change.
 
 Project-wide invariants:
 
@@ -22,3 +26,8 @@ Project-wide invariants:
 - Preserve upstream license/attribution and compatibility behavior until documented removal criteria pass.
 
 Detailed coding/handoff rules are in `docs/CODEX-INSTRUCTIONS.md`; do not duplicate the full specification here.
+
+Project memory is a concise, versioned operational index. It does not replace the normative
+specifications. If memory conflicts with a specification, the specification wins; record the
+discrepancy and repair the memory before implementation. Do not store secrets, presigned URLs,
+user data, or durable local paths in memory.

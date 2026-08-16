@@ -11,6 +11,22 @@
 - Job/JobStep status dùng canonical states ở `02-DOMAIN-MODEL.md`; V2 không trả `processing`, `executing`, `succeeded`, `waiting_review` hoặc `dead`.
 - Delete Project/Asset/Script/Timeline/ProviderConfiguration là soft-delete/command; Artifact physical deletion không public direct action.
 
+### Client compatibility
+
+Web và desktop là hai client của cùng Product API, không phải hai backend khác nhau. Cả hai dùng
+`packages/contracts` và `packages/sdk` để chia sẻ ID, error envelope, ETag/If-Match, pagination,
+upload-session và event reducer. Client không được gọi `VideoEngine`, worker, provider, PostgreSQL,
+Redis hoặc object storage credentials trực tiếp.
+
+- Web chạy browser và có thể được serve cùng reverse proxy hoặc CDN.
+- Desktop chạy trên máy người dùng, chỉ giữ endpoint/session/local draft cần thiết; native shell
+  không sở hữu Product state.
+- Server base URL có thể khác theo dev/staging/production nhưng API version và contract phải giữ
+  tương thích; không hard-code localhost trong client release.
+- Upload/download bytes dùng presigned URL được cấp theo resource authorization; Product API không
+  proxy large media.
+- Desktop reconnect/retry dùng cùng snapshot + event replay semantics với web.
+
 ### Error envelope
 
 ```json

@@ -14,6 +14,8 @@ Redis
 MinIO or S3-compatible storage
 Docker or Podman optional for infrastructure/sandbox
 Ollama optional for local LLM/VLM
+Node.js/pnpm (web and shared TypeScript client tooling)
+Desktop shell toolchain selected by the client setup gate (Tauri/Electron/native option)
 ```
 
 Không `pip install` vào Python system của Arch, không dùng PEP 668 override và không ghi dependency vào global site-packages.
@@ -56,6 +58,18 @@ Docker Compose hoặc Podman Compose có thể chạy PostgreSQL/Redis/MinIO. Pi
 ### Local adapters
 
 Unit tests có thể dùng fake/LocalQueue/LocalStorage nhưng integration gate phải chạy PostgreSQL + Redis + S3-compatible adapter để tránh chỉ chứng minh in-memory path.
+
+### Web and desktop clients
+
+Web và desktop phải dùng chung API contract/SDK. Desktop remote-server mode không yêu cầu Python,
+FFmpeg, model hoặc database trên máy người dùng; các native capability như file picker/download/
+notification phải nằm sau một adapter nhỏ và có permission review. Desktop framework (Tauri 2,
+Electron hoặc native shell) là một setup decision cần owner chốt trước khi tạo shell production;
+khuyến nghị ban đầu là Tauri 2 nếu yêu cầu là client nhẹ, remote-first và không cần nhúng engine.
+
+Client profiles phải kiểm thử ít nhất: server URL config theo environment, login/session, direct
+multipart upload, reconnect event stream, download artifact, safe error display và logout/token
+revocation. Không commit desktop signing key hoặc local secret.
 
 ## 5. Optional ML/local providers
 
