@@ -60,19 +60,24 @@ At the frozen commit:
   handling covered by the license.
 - The legacy container declares `PYTHON_VERSION=3.12`; this is the frozen V1
   legacy/ML runtime recorded at the baseline commit.
-- **Historical decision note:** At the time T001 was originally recorded, the
-  then-current OQ-13 decision assigned Python 3.13 to Product/API/core.
-- That decision was subsequently superseded on 2026-08-16 by
-  `D-T000-013-SUPERSEDING`.
-- **Current normative topology:** Product API/control plane is Go; Python 3.12
-  is isolated to ML/AI and frozen V1 compatibility; the V1 runtime/dependency
-  evidence in this baseline remains unchanged.
 - The V1 repository advertises Python `>=3.10` and includes the legacy
   `movie_narrator*` package namespace. V2 must keep that namespace behind the
   legacy adapter rather than exposing it as the new product namespace.
 
-The historical note above does not change the frozen V1 evidence, commit/tree/tag identity,
-runtime evidence or rollback baseline recorded in this document.
+### Historical decision note — not normative
+
+At the time T001 was originally recorded, the then-current OQ-13 decision
+assigned Python 3.13 to Product/API/core. That decision was subsequently
+superseded on 2026-08-16 by `D-T000-013-SUPERSEDING`.
+
+### Current normative topology
+
+- Product API/control plane: Go.
+- Python 3.12: isolated ML/AI and frozen V1 compatibility workloads.
+- The V1 runtime/dependency evidence in this baseline remains unchanged.
+
+The historical note does not change the frozen V1 evidence, commit/tree/tag
+identity, runtime evidence or rollback baseline recorded in this document.
 
 ## Verification performed
 
