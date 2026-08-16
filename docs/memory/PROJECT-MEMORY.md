@@ -15,10 +15,12 @@ workflow, not the long-term product boundary.
 
 ## System boundary
 
-- **Product API** owns identity, Workspace membership/authorization, Project, Asset, Job,
-  database transactions, upload orchestration, idempotency and product events.
-- **Engine** owns media/AI execution, pipeline nodes, provider ports, timeline proposals and
-  rendering. It has no user, session, billing or UI responsibility.
+- **Go Product API/control plane** owns identity, Workspace membership/authorization, Project, Asset,
+  Job, database transactions, upload orchestration, idempotency and product events. It does not
+  depend on Python, FFmpeg or ML runtimes.
+- **Compute/Engine plane** owns media/AI execution, pipeline nodes, provider ports, timeline proposals
+  and rendering. Prefer Go for media/FFmpeg workers; isolate Python `nh_media` for ML/AI and
+  `movie_narrator` for frozen V1 compatibility. It has no user, session, billing or UI responsibility.
 - **Worker controller** owns leases, heartbeats, sandbox launch and guarded execution reports; it
   does not become the durable business-state owner.
 - **Media executor** is disposable and least-privilege. It handles untrusted media in an isolated
@@ -41,6 +43,10 @@ workflow, not the long-term product boundary.
   into the pipeline.
 - Workers are disposable, checkpoint-aware, retry-aware, idempotent and least-privilege.
 - Queue messages contain IDs/references, never media bytes, secrets, user tokens or local paths.
+- Go↔Python uses only versioned language-neutral JSON/Protobuf/schema envelopes; no pickle, gob, ORM
+  objects, Pydantic internals or in-process Python embedding as durable/public contracts.
+- Product API enqueues bounded asynchronous work; it never executes long-running media/ML inline or
+  creates an unbounded worker/goroutine per request.
 - No `shell=True`, untrusted plugin auto-loading, arbitrary production executable override,
   traceback/path/secret leakage, or large-media proxying through Product API.
 - Approved ScriptVersion/TimelineVersion is immutable; edits create a new version with concurrency
@@ -79,9 +85,9 @@ must be recorded in [`CHANGELOG.md`](CHANGELOG.md), then repaired before depende
 
 ## Things agents must not do
 
-Do not implement `apps/`, `services/`, `packages/`, migrations, runtime/API/frontend/desktop/worker
-behavior, or provider integrations before T001–T005/Phase 0 evidence and the task prerequisites
-pass. Do not merge `main` implicitly,
+Do not implement `apps/`, `services/`, `packages/`, `cmd/`, `internal/`, migrations, runtime/API/
+frontend/desktop/worker behavior, or provider integrations before T001–T005/Phase 0 evidence and the
+task prerequisites pass. Do not create `go.mod` during the T000 amendment. Do not merge `main` implicitly,
 push `develop` without owner request, infer OQ recommendations as decisions, expose raw paths,
 secrets or tracebacks, or mutate the frozen V1 reference to make a baseline pass.
 

@@ -1,5 +1,20 @@
 # Movie Narrator Rebuild — Project Context & Development Plan
 
+## Owner architecture amendment — 2026-08-16
+
+The owner supersedes the earlier Python Product/API assumption before V2 implementation. The V2
+Product API/control plane is Go and starts from the module path
+`github.com/nhathao-nguyen/FrameForge`; it must not depend on Python, FFmpeg or ML runtimes. Go media
+workers are preferred for FFmpeg/media orchestration. Python remains isolated to ML/AI compute and
+frozen V1 compatibility workloads (`nh_media` and `movie_narrator`).
+
+All API, schema, event, state-machine, worker/job, Artifact and error contracts remain
+language-neutral and versioned. Do not use pickle, gob, ORM objects or framework-specific model
+types across the boundary. The old Python Product/API wording in earlier planning history is
+superseded by this amendment; it is retained only where it describes the frozen V1 implementation.
+This language change is not permission for a big-bang rewrite, unrelated cleanup or API/schema
+redesign. Preserve the old implementation until parity and rollback evidence pass.
+
 > Tài liệu tổng hợp dùng làm context cho Codex/AI coding agent khi xây dựng hệ thống mới dựa trên repo:
 >
 > https://github.com/zcbacxc/movie-narrator.git
@@ -335,8 +350,8 @@ Movie Narrator Engine
                          │ HTTPS
                          ▼
                   ┌──────────────┐
-                  │    FastAPI   │
-                  │  Product API │
+                  │ Go Product API│
+                  │  control plane│
                   └──────┬───────┘
                          │
            ┌─────────────┼─────────────┐
@@ -348,7 +363,9 @@ Movie Narrator Engine
            │             │             │
            │             ▼             │
            │      ┌──────────────┐      │
-           └─────►│ Engine Worker│◄─────┘
+           └─────►│ bounded      │◄─────┘
+                  │ Go/Python    │
+                  │ workers      │
                   │              │
                   │ Movie        │
                   │ Narrator V2  │
@@ -378,25 +395,24 @@ Movie Narrator Engine
 your-project/
 
 ├── apps/
-│   ├── web/
-│   │   └── Next.js / React
-│   │
-│   └── api/
-│       └── FastAPI
+│   ├── web/                         # Next.js / React
+│   └── desktop/                     # Tauri 2 remote-first client
 │
+├── cmd/
+│   ├── product-api/                 # Go Product API
+│   └── media-worker/                # Go FFmpeg/media worker
+├── internal/
+│   ├── domain/
+│   ├── application/
+│   ├── ports/
+│   ├── adapters/{postgres,redis,storage}/
+│   └── transport/http/
 ├── services/
-│   ├── engine/
-│   │   ├── core/
-│   │   ├── pipeline/
-│   │   ├── media/
-│   │   ├── ai/
-│   │   ├── tts/
-│   │   ├── vision/
-│   │   ├── speech/
-│   │   ├── rendering/
-│   │   └── providers/
-│   │
-│   └── worker/
+│   ├── ml-worker/                   # Python `nh_media`
+│   └── legacy-compat/               # frozen `movie_narrator`
+├── packages/
+│   ├── contracts/                   # language-neutral versioned schemas
+│   └── sdk/                         # web/desktop client SDK
 │
 ├── packages/
 │   ├── contracts/
@@ -1288,7 +1304,7 @@ Backend creates Job
  ↓
 Queue
  ↓
-Engine Worker
+bounded Go/Python worker contract
  ↓
 Artifacts
  ↓
@@ -1304,7 +1320,7 @@ Client
 Không nên:
 
 ```text
-Browser → FastAPI → Worker
+Browser → Go Product API → versioned Worker contract
 ```
 
 cho video 5–50 GB.
@@ -1394,11 +1410,9 @@ Movie Narrator ML stack không nên dựa vào Python hệ thống.
 Khuyến nghị:
 
 ```text
-uv
+Go toolchain pinned by the environment task
 +
-Python 3.13
-+
-project virtualenv
+uv + Python 3.12 for isolated ML/V1 workloads
 ```
 
 Ví dụ:
@@ -1406,9 +1420,9 @@ Ví dụ:
 ```bash
 sudo pacman -S uv ffmpeg git
 
-uv python install 3.13
+uv python install 3.12
 
-uv venv --python 3.13
+uv venv --python 3.12
 
 source .venv/bin/activate
 ```
@@ -1602,7 +1616,7 @@ clone repo
 create own repo
 add upstream remote
 tag baseline
-pin Python 3.13
+pin supported Go toolchain; isolate Python 3.12 ML/V1 runtime
 environment reproducible
 tests pass
 sample video chạy được
@@ -1624,10 +1638,11 @@ infra/
 Có:
 
 ```text
-FastAPI
+Go Product API/control plane
 PostgreSQL
 Redis
 MinIO
+bounded Go media worker + isolated Python ML/V1 worker
 ```
 
 Engine vẫn gọi V1.
@@ -1920,15 +1935,13 @@ rewrite tất cả
 Kiến trúc bắt đầu:
 
 ```text
-Next.js
+Next.js / Tauri 2
    ↓
-FastAPI
+Go Product API/control plane
    ↓
-PostgreSQL
-Redis
-MinIO
-   ↓
-VideoEngine interface
+PostgreSQL / Redis / MinIO
+   ↓ versioned worker contract
+Go media worker / Python ML-V1 worker
    ↓
 Legacy Movie Narrator Adapter
    ↓
@@ -1938,13 +1951,13 @@ Movie Narrator V1
 Rồi dần chuyển sang:
 
 ```text
-Next.js
+Next.js / Tauri 2
    ↓
-FastAPI
+Go Product API/control plane
    ↓
-V2 Pipeline
+V2 Pipeline contracts
    ↓
-AI / ML / Render Workers
+Go media / Python ML workers
    ↓
 Timeline Renderer
 ```
@@ -1956,7 +1969,7 @@ Timeline Renderer
 - [ ] Tạo repository riêng.
 - [ ] Thêm upstream remote.
 - [ ] Tag baseline upstream.
-- [ ] Pin Python 3.13.
+- [ ] Pin supported Go toolchain; isolate Python 3.12 ML/V1 runtime.
 - [ ] Dùng uv.
 - [ ] Cài FFmpeg.
 - [ ] Chạy toàn bộ tests.

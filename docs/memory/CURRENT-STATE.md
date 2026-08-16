@@ -31,15 +31,17 @@ repository-host configuration step, not performed by this local-only task.
 
 - **Specification audit:** `READY` according to [`../SPEC-AUDIT-REPORT.md`](../SPEC-AUDIT-REPORT.md).
 - **Documentation gate:** T000/Phase -1 ratified by owner on 2026-08-16.
-- **Application implementation:** still blocked until T001–T005/Phase 0 evidence passes; then T100
+- **Application implementation:** still blocked until T002–T005/Phase 0 evidence passes; then T100
   is eligible because OQ-12 is decided.
-- **Current work:** T001 immutable V1 upstream baseline manifest, documentation/evidence-only.
-- **Next authorized task:** T002 — Build reproducible Arch/uv environment matrix.
+- **Current work:** T000 architecture amendment, documentation/evidence-only; no T001 restart.
+- **Next authorized task:** T002 — Build reproducible Go/Python/Arch environment matrix, only after this amendment passes consistency review.
 
 ## Open blockers
 
-- OQ-01 through OQ-11 remain `OPEN`; OQ-12–OQ-15 are `DECIDED` on 2026-08-16.
-- T000 owner sign-off is complete; T001 is complete; T002–T005 evidence is still missing.
+- OQ-01 through OQ-11 remain `OPEN`; OQ-12–OQ-15 are `DECIDED` on 2026-08-16. OQ-13's earlier
+  Python Product/API decision is superseded by the Go-control-plane decision recorded in memory.
+- T000 owner sign-off and amendment are complete; T001 was already complete and was not restarted;
+  T002–T005 evidence is still missing.
 - The T001 upstream baseline is recorded in [`../baselines/upstream-movie-narrator-v1.1.0.md`](../baselines/upstream-movie-narrator-v1.1.0.md).
 - V1 compatibility profile, golden media outputs and rollback image are not yet produced.
 - No V2 application code, infrastructure runtime, CI gate or production deployment exists.
@@ -49,6 +51,9 @@ repository-host configuration step, not performed by this local-only task.
 - Complete documentation set, consistency matrix and audit report at the baseline commit.
 - Existing upstream/module audit identifies V1 behavior; T001 freezes commit `bc2d276` with
   commit/tree/tag/license/runtime evidence.
+- Current language topology is Go Product API/control plane, bounded Go media workers, isolated
+  Python `nh_media` ML/AI workers and frozen `movie_narrator` compatibility workloads. Cross-language
+  boundaries are versioned and language-neutral.
 - This memory foundation and its consistency checker are documentation/evidence tooling only.
 - Setup/production plans now define V0–V10 setup certification, desktop client gates and the full
   phase/release path; no setup or production runtime evidence exists yet.
@@ -56,12 +61,12 @@ repository-host configuration step, not performed by this local-only task.
 ## Handoff
 
 ```text
-Task: T001 — Record immutable upstream baseline manifest
-Status: complete — baseline recorded 2026-08-16
-Implemented boundary: recorded exact V1 commit/tree/tags/remote/license/runtime/inventory evidence in docs/baselines
-Tests: upstream status/ref/tree/inventory/diff checks; documentation consistency; tools/check_memory.py
-Compatibility: no V1 files or contracts changed; frozen source remains behind the legacy adapter
+Task: T000 amendment — Supersede Product/API runtime decision
+Status: complete — owner amended 2026-08-16
+Implemented boundary: Go control plane, bounded worker topology, isolated Python ML/V1 and language-neutral contracts recorded across normative docs
+Tests: documentation/link/terminology audit; decision-history review; application-source absence check; tools/check_memory.py
+Compatibility: no V1 files or contracts changed; T001 baseline remains valid and was not restarted
 Security: no secrets, presigned URLs, user data or durable local paths stored
 Open questions: OQ-01–OQ-11 remain OPEN; OQ-12–OQ-15 are DECIDED
-Next task: T002 — Build reproducible Arch/uv environment matrix
+Next task: T002 — Build reproducible Go/Python/Arch environment matrix, after amendment acceptance
 ```

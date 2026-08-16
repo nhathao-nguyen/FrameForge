@@ -6,8 +6,9 @@ Development target là Arch Linux nhưng project không phụ thuộc system Pyt
 
 ```text
 Git
-uv
-Python 3.13 managed by uv
+Go toolchain pinned by T002 (current supported stable release at execution time)
+uv (only for Python compute/legacy environments)
+Python 3.12 managed by uv for ML/CUDA and frozen V1 where required
 FFmpeg/ffprobe (pinned/tested version recorded in baseline)
 PostgreSQL
 Redis
@@ -20,23 +21,30 @@ Rust stable/pinned targets and Tauri 2 tooling for the desktop client
 
 Không `pip install` vào Python system của Arch, không dùng PEP 668 override và không ghi dependency vào global site-packages.
 
-## 2. Python policy
+## 2. Language and runtime policy
 
-Master plan chọn `uv + Python 3.13 + project virtualenv` cho development. Upstream V1 `pyproject.toml` khai báo Python 3.10–3.13 và CI test cả bốn version; do đó core V1 phải được baseline trên Python 3.13.
+Product API/control plane là Go và không phụ thuộc Python runtime. T002 phải chọn một Go release
+stable được hỗ trợ tại thời điểm thực hiện, pin trong toolchain/environment/CI và kiểm tra version
+trong clean-room evidence. Không để CI/production tự trôi theo `latest`.
 
-Upstream Dockerfile hiện dùng Python 3.12 có chủ ý vì compatibility wheel của ML stack. OQ-13 đã
-được quyết định: Product/API/core dùng Python 3.13; frozen legacy/ML image tạm dùng Python 3.12
-với lock/image riêng. Chỉ hợp nhất sau khi Phase 0 chứng minh dependency/ML/CUDA parity trên 3.13.
-Product/core và frozen legacy/ML phải có lock/report/image metadata riêng; không dùng một lockfile
-chung để che khác biệt runtime.
+Python chỉ dành cho isolated ML/AI workers và frozen V1 compatibility workloads. Upstream Dockerfile
+dùng Python 3.12 có chủ ý vì compatibility wheel của ML stack; V2 ML bắt đầu ở 3.12 với lock/image
+riêng. Chỉ chuyển V2 ML image lên 3.13 sau khi dependency/ML/CUDA parity được chứng minh. Frozen V1
+runtime/dependencies không bị thay đổi để phù hợp với Product API.
+
+Go, Python, web và desktop không import implementation nội bộ của nhau. Job/event/worker/artifact/
+error contracts là versioned JSON/Protobuf/schema envelopes; không dùng pickle, gob, ORM objects,
+Pydantic internals hoặc in-process Python embedding làm durable contract.
 
 Expected setup contract sau Phase 0 (lệnh cụ thể sẽ được lock bởi task implementation):
 
 ```text
-uv python install 3.13
-uv sync --frozen --all-groups (hoặc groups được project định nghĩa)
+go version (pinned toolchain)
+go test ./...
+uv python install 3.12
+uv sync --frozen (ML/V1 environment only)
 uv run python --version
-uv run pytest ...
+uv run pytest ... (ML/V1 compatibility scope)
 ```
 
 Lockfile là required source; dependency change phải update lock và CI evidence.
@@ -61,7 +69,9 @@ Docker Compose hoặc Podman Compose có thể chạy PostgreSQL/Redis/MinIO. Pi
 
 ### Local adapters
 
-Unit tests có thể dùng fake/LocalQueue/LocalStorage nhưng integration gate phải chạy PostgreSQL + Redis + S3-compatible adapter để tránh chỉ chứng minh in-memory path.
+Unit tests có thể dùng fake/LocalQueue/LocalStorage nhưng Go integration gate phải chạy PostgreSQL +
+Redis + S3-compatible adapter để tránh chỉ chứng minh in-memory path. Worker protocol tests phải
+chạy language-neutral fixtures against both Go and Python implementations when each exists.
 
 ### Web and desktop clients
 
@@ -96,13 +106,13 @@ revocation. Không commit desktop signing key hoặc local secret.
 | Check | Required evidence |
 |---|---|
 | Git baseline | remote URL, local HEAD, remote main, tag object/peeled commit, dirty status |
-| Python | uv-managed 3.13 version; optional 3.12 ML/container result |
+| Language runtimes | pinned Go version/toolchain; Python 3.12 ML/V1 lock/image; any later 3.13 ML parity evidence |
 | Dependencies | lock hash, install command, optional-group matrix |
 | FFmpeg | version/build flags, ffprobe, required codec/filter checks |
 | V1 unit | upstream test command/result and coverage gate |
 | V1 integration | media/FFmpeg/PySceneDetect path and sample artifacts |
 | CLI | `mn --help`, `mn version`, create/config/resume behavior |
-| REST | serve/submit/status/cancel/result/artifact/auth behavior |
+| Product API | Go `/api/v1` serve/submit/status/cancel/result/artifact/auth behavior |
 | Storage | Local + S3/MinIO conformance/security tests |
 | Containers | non-root UID, health/readiness, mounted paths, CPU/GPU variant |
 
@@ -112,7 +122,8 @@ If a check cannot pass on Arch, baseline report records exact blocker; không th
 
 V2 CI tối thiểu:
 
-- lint/type/unit on pinned primary Python;
+- Go format/vet/test/static/security checks on pinned toolchain;
+- Python lint/type/unit/security only in isolated ML/V1 scopes;
 - compatibility tests against V1 baseline;
 - PostgreSQL migration clean bootstrap;
 - Redis queue duplicate/reclaim tests;

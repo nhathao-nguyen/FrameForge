@@ -6,12 +6,16 @@ This file is normative for V2 naming. V1 terms may appear only in quoted upstrea
 
 | Term | Canonical meaning | Do not conflate with |
 |---|---|---|
-| Product backend / Product API | FastAPI/application layer owning identity, authorization, Project, commands, persistence and public contracts. | Engine algorithm, FFmpeg worker, frontend. |
+| Product backend / Product API | Go application/control-plane layer owning identity, authorization, Project, commands, persistence and public contracts. | Engine algorithm, FFmpeg worker, Python runtime, frontend. |
 | Trusted orchestration | Application services guarding Job/Run/Step transitions, outbox, queue scheduling and commit. | Untrusted media executor. |
-| AI/video engine | Provider-neutral pipeline/media/AI/Timeline/render contracts and algorithms. | User, billing, session, HTTP shape. |
+| AI/video engine | Provider-neutral pipeline/media/AI/Timeline/render contracts and algorithms implemented by compute workers. | User, billing, session, HTTP shape, Product API. |
 | Worker controller | Queue consumer with scoped execution identity; claims leases and launches executor. | PipelineNode definition or browser API. |
 | Media executor | Disposable sandbox process/container running one node attempt over untrusted media. | Durable state owner. |
-| Frontend | Next.js/React client using Product API/events. | Timeline source of truth or secret holder. |
+| Frontend | Next.js/React web client or Tauri 2 desktop client using Product API/events. | Timeline source of truth or secret holder. |
+| Go control plane | Go Product API and durable orchestration boundary; module path starts at `github.com/nhathao-nguyen/FrameForge`. | Media/ML execution or a global public `frameforge` package. |
+| Media worker | Prefer Go worker for media I/O, FFmpeg process orchestration, progress parsing and Artifact commit. | Codec reimplementation or Product API request handler. |
+| ML worker | Isolated Python worker for PyTorch/CUDA/model ecosystem workloads; new Python namespace is `nh_media`. | Product API/control plane. |
+| Language-neutral contract | Versioned JSON/Protobuf/schema envelope shared by Go, Python, web and desktop. | Go struct, Python class, Pydantic model, ORM object, pickle or gob. |
 | Storage | StoragePort implementations for blob bytes. | PostgreSQL metadata or local cache. |
 
 ## Domain

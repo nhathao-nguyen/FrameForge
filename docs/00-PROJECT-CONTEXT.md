@@ -2,7 +2,7 @@
 
 ## Trạng thái tài liệu
 
-Đây là technical specification chuẩn hóa từ `docs/movie-narrator-rebuild-context/PROJECT_REBUILD_PLAN.md`. Tài liệu này là baseline để review trước khi viết application code. Mọi quyết định kiến trúc đã có trong master plan là bất biến trong giai đoạn thiết kế; các điểm chưa đủ rõ được ghi tại [`OPEN-QUESTIONS.md`](OPEN-QUESTIONS.md), không được tự suy diễn khi implement.
+Đây là technical specification chuẩn hóa từ `docs/movie-narrator-rebuild-context/PROJECT_REBUILD_PLAN.md`. Tài liệu này là baseline để review trước khi viết application code. Quyết định kiến trúc đã approve là normative cho tới khi owner ghi một amendment superseding có ngày/owner; lịch sử cũ không bị xóa. Các điểm chưa đủ rõ được ghi tại [`OPEN-QUESTIONS.md`](OPEN-QUESTIONS.md), không được tự suy diễn khi implement.
 
 ## Mục tiêu
 
@@ -45,7 +45,7 @@ Movie recap chỉ là workflow đầu tiên. Về sau có thể thêm documentar
 ## Các quyết định kiến trúc bắt buộc giữ
 
 1. Web browser và desktop app không gọi trực tiếp Movie Narrator API, engine, worker hoặc provider.
-2. Product API là FastAPI; web là Next.js/React; desktop là native shell mỏng dùng chung SDK/contracts.
+2. Product API/control plane là Go; web là Next.js/React; desktop là Tauri 2 shell mỏng dùng chung SDK/contracts.
 3. Client có thể chạy trên máy người dùng; server/API/worker/storage có thể chạy trên VPS riêng.
 4. PostgreSQL là database sản phẩm; Redis là queue/event coordination; S3/MinIO là object storage.
 5. Engine được gọi qua `VideoEngine` interface; implementation đầu tiên là `LegacyMovieNarratorAdapter`.
@@ -55,9 +55,44 @@ Movie recap chỉ là workflow đầu tiên. Về sau có thể thêm documentar
 9. Timeline là nguồn sự thật của renderer, không phải output trực tiếp của AI.
 10. Worker càng stateless càng tốt; media không tin cậy phải chạy trong sandbox.
 11. Không hard-code provider, model hoặc filesystem path.
-12. Giữ namespace `movie_narrator` trong migration; namespace V2 dùng `nh_media`.
-13. Không dùng `your_engine`, `video_engine` hoặc `frameforge` làm public V2 namespace ở thời điểm này.
-14. Giữ regression test V1 và upstream remote/branch baseline.
+12. Giữ namespace `movie_narrator` trong migration; Python-side V2 compute/ML dùng `nh_media`.
+13. Go control-plane module dùng `github.com/nhathao-nguyen/FrameForge`; ưu tiên `internal/domain`,
+    `internal/application`, `internal/ports`, `internal/adapters` và `internal/transport/http`,
+    không tạo global public `frameforge` package.
+14. Không dùng `your_engine`, `video_engine` hoặc `frameforge` làm Python public namespace.
+15. Giữ regression test V1 và upstream remote/branch baseline.
+
+## Ngôn ngữ và control-plane/compute-plane topology
+
+Đây là owner decision superseding OQ-13, có hiệu lực từ 2026-08-16:
+
+- Go Product API/control plane sở hữu HTTP, auth/authorization integration, Workspace/Project/Asset/
+  Job orchestration, PostgreSQL repositories, Redis coordination, object-storage orchestration,
+  scheduling, progress/events và admission control. Product API không phụ thuộc Python runtime.
+- Go media worker là lựa chọn mặc định cho download/input, FFmpeg subprocess, progress parsing,
+  output validation và Artifact upload. FFmpeg vẫn là executable native; Go không reimplement codec.
+- Python chỉ ở ML/AI compute workers và frozen V1 compatibility workloads. Python ML bắt đầu ở 3.12
+  theo dependency/ML/CUDA matrix; chỉ chuyển image V2 ML lên 3.13 sau khi parity được chứng minh.
+- Go và Python giao tiếp bằng versioned, language-neutral JSON/Protobuf/schema envelope; không dùng
+  pickle, gob, ORM objects, Pydantic internals hoặc Go structs làm durable/public contract.
+- Implementation language replaceable: API/schema/event/state/worker/artifact/error semantics là
+  boundaries độc lập với Go/Python. Language migration không được trở thành architecture redesign.
+
+Topology chuẩn:
+
+```text
+Web / Tauri 2
+      │ versioned Product API + shared contracts/SDK
+      ▼
+Go Product API / control plane
+      ├── PostgreSQL: durable product state
+      ├── Redis: coordination/queue/event fan-out only
+      └── private object storage: source media/artifacts
+              │ versioned Job/Worker contract
+              ├── Go media worker ───────> FFmpeg
+              ├── Python ML worker ──────> PyTorch/CUDA/models
+              └── frozen V1 compatibility workload (`movie_narrator`)
+```
 
 ## Ranh giới hệ thống
 
@@ -66,7 +101,7 @@ User
   ├─ HTTPS → Web App (Next.js/React) ───────┐
   └─ HTTPS → Desktop App (native shell) ────┴─ product auth/session
                                              ▼
-Product API (FastAPI)
+Go Product API / control plane
   ├── PostgreSQL: metadata, versions, state, audit
   ├── Redis: queue, lease, event fan-out
   └── S3/MinIO: source media, intermediate data, renders
@@ -124,7 +159,8 @@ Mỗi human gate phải là trạng thái persisted của Job/JobStep, không ph
 
 ### Local/offline mode
 
-Có thể chạy local Whisper, local VLM, local LLM, local TTS và FFmpeg; media không rời máy. Product API/worker vẫn dùng cùng interface, chỉ thay provider và storage backend.
+Có thể chạy local Whisper, local VLM, local LLM, local TTS và FFmpeg; media không rời máy. Go
+Product API/worker protocol vẫn dùng cùng interface, chỉ thay provider và storage backend.
 
 ## Nguyên tắc dữ liệu
 

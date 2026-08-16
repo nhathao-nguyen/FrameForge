@@ -8,8 +8,10 @@ owner: repository owner / task assignee
 
 The normative task definitions, dependencies and definitions of done are in
 [`../IMPLEMENTATION-ORDER.md`](../IMPLEMENTATION-ORDER.md). This ledger intentionally records no
-application implementation: T000 is complete, and only the documentation/baseline tasks T001–T005
-are now eligible. Application implementation remains blocked until Gate A/Phase 0 passes.
+application implementation: T000 is complete (including the 2026-08-16 owner amendment), T001 was
+completed before this amendment, and only the documentation/baseline tasks T002–T005 are now eligible.
+Application implementation remains blocked until Gate A/Phase 0 passes. This amendment did not start
+or rerun T001.
 
 ## Status vocabulary
 
@@ -24,19 +26,19 @@ defaults when a task is authorized.
 
 | ID | Task | Dependency / status | Evidence | Compatibility / rollback | Next |
 |---|---|---|---|---|---|
-| T000 | Ratify specification decisions | complete — owner approved 2026-08-16 | user approval + docs/spec/memory update | V1 unchanged; docs-only | T001 |
+| T000 | Ratify specification decisions | complete — owner approved and amended 2026-08-16 | superseding OQ-13 + Go/Python topology docs/memory/consistency evidence | V1 unchanged; docs-only; old decision history retained | T002 (T001 already complete) |
 | T001 | Record immutable upstream baseline manifest | complete — 2026-08-16 | [`../baselines/upstream-movie-narrator-v1.1.0.md`](../baselines/upstream-movie-narrator-v1.1.0.md); upstream ref/tree/tag/status/inventory checks | frozen V1 source recorded; rollback image remains T005 | T002 |
-| T002 | Build reproducible Arch/uv environment matrix | pending — T001 complete | none | Product/core 3.13; frozen legacy/ML 3.12 | T003 |
+| T002 | Build reproducible Go/Python/Arch environment matrix | pending — T001 complete | none | Go control plane; Python 3.12 isolated ML/V1; FFmpeg pin | T003 |
 | T003 | Freeze V1 compatibility profile | blocked by T001–T002 | none | all verified V1 CLI/REST surfaces preserved | T004 |
 | T004 | Produce V1 golden media outputs | blocked by T001–T003 | none | golden outputs protect V1 parity | T005 |
 | T005 | Freeze runnable V1 rollback image | blocked by T001–T004 | none | required rollback target; no image yet | T100 |
-| T100 | Create approved package skeleton | blocked by T005/Gate A; OQ-12 decided | none | V1 remains isolated; rollback to no V2 code | T101 |
+| T100 | Create approved Go/control-plane and compute package skeleton | blocked by T005/Gate A; OQ-12 decided | none | V1 remains isolated; rollback to no V2 code | T101 |
 | T101 | Add shared identity/time/error primitives | blocked by T100 | none | contracts must not change V1 surface | T102 |
 | T102 | Add configuration and redaction boundary | blocked by T100 | none | preserve V1 config through adapter | T103 |
 | T103 | Provision PostgreSQL dev service | blocked by T100 | none | no V1 state migration yet | T104 |
 | T104 | Provision Redis dev service | blocked by T100 | none | no V1 queue replacement yet | T105 |
 | T105 | Provision MinIO dev service | blocked by T100 | none | preserve V1 artifact compatibility | T106 |
-| T106 | Implement FastAPI shell/error middleware | blocked by T100–T105 | none | no legacy route removal; rollback shell | T107 |
+| T106 | Implement Go Product API shell and error middleware | blocked by T100–T105 | none | no legacy route removal; no Python/media runtime; rollback shell | T107 |
 | T107 | Implement health/readiness endpoints | blocked by T100–T106 | none | no V1 behavior change | T108 |
 | T108 | Establish V2 CI gates | blocked by T100–T107 | none | V1 regression remains required; revert CI change if needed | T200 |
 | T200 | Add migration framework/schema invariants | blocked by Gate B | none | no legacy DB rewrite; downgrade plan required | T201 |

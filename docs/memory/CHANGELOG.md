@@ -27,10 +27,15 @@ owner: repository owner / task assignee
   commit/tree/tag/remote/license/runtime/tracked-inventory evidence is in
   [`../baselines/upstream-movie-narrator-v1.1.0.md`](../baselines/upstream-movie-narrator-v1.1.0.md).
   The upstream worktree and index were clean and no V1 file was changed.
+- Recorded the owner amendment to T000: the earlier Python Product/API 3.13 decision is retained
+  as superseded history; Go now owns the V2 Product API/control plane, Go is preferred for media/
+  FFmpeg workers, and Python is isolated to ML/AI plus frozen V1 compatibility. Language-neutral
+  versioned contracts, bounded asynchronous workers and migration/rollback safeguards are normative.
 - No application code, V1 source, migration, runtime, API, frontend or worker implementation was
   added.
 
 ## Next update
 
-T000 is ratified and T001 is complete. T002 is the next eligible task; T002–T005/Phase 0 evidence
-must pass before any application task is marked eligible.
+T000 is ratified and amended; T001 is already complete and was not restarted. T002 is the next
+eligible task only after this amendment is accepted; T002–T005/Phase 0 evidence must pass before any
+application task is marked eligible.

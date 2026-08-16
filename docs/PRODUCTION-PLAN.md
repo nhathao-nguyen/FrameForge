@@ -13,7 +13,8 @@ Complete NH-Media from the documentation baseline to a production release suppor
 - browser web client and first-class desktop client;
 - Product API on a server/VPS separate from user devices;
 - durable PostgreSQL product state, Redis coordination and private object storage;
-- disposable Engine Workers and sandboxed media execution;
+- Go Product API/control plane with bounded Go media workers and isolated Python ML/V1 workers;
+- sandboxed media execution;
 - frozen Movie Narrator V1 compatibility through `VideoEngine`;
 - native V2 pipeline, editable Script/Timeline, review workflow and multi-profile render;
 - observable, recoverable, backed-up and rollback-capable production operations.
@@ -34,19 +35,19 @@ accepted without an owner-approved decision and rollback path.
 ## 3. Target production topology
 
 ```text
-Browser / signed desktop client
+Browser / signed Tauri 2 desktop client
           │ HTTPS only
           ▼
 Reverse proxy / TLS / rate limit / origin policy
           ├── web delivery (browser)
-          └── Product API replicas
+          └── Go Product API replicas (no Python/media runtime)
                     ├── PostgreSQL: source of durable product state
                     ├── Redis: queue/lease/event fan-out, not audit source
                     ├── private S3/MinIO: source media and Artifacts
-                    └── Engine Worker controller
-                              └── disposable sandbox executor
-                                    ├── LegacyMovieNarratorAdapter
-                                    └── V2 Pipeline Runtime
+                    └── versioned worker/job contract
+                          ├── bounded Go media worker ──> FFmpeg
+                          ├── isolated Python ML worker ──> `nh_media`
+                          └── frozen V1 compatibility ──> `movie_narrator`
 ```
 
 Desktop is distributed separately and connects to the same versioned Product API. It never opens
@@ -58,9 +59,11 @@ database/Redis/engine ports. Workers can move to a second VPS/GPU host without c
 
 Tasks: T000.
 
-T000 has now recorded namespace `nh_media` (OQ-12), the Product/core 3.13 plus frozen legacy/ML
-3.12 split (OQ-13), all verified V1 compatibility surfaces (OQ-14) and Tauri 2 desktop runtime
-(OQ-15). Auth/Workspace/queue/provider choices remain required when their dependent tasks begin.
+T000 has recorded namespace policy `nh_media`/`movie_narrator` plus Go module conventions (OQ-12),
+the superseding Go Product/control-plane and isolated Python ML/V1 topology (OQ-13), all verified
+V1 compatibility surfaces (OQ-14) and Tauri 2 desktop runtime (OQ-15). Auth/Workspace/queue/provider
+choices remain required when their dependent tasks begin. The earlier Python Product/API decision is
+preserved in history but is not normative.
 The ratification update must remain synchronized across every affected specification, this plan,
 memory and implementation order.
 
@@ -71,7 +74,7 @@ remaining non-blocking OQs, and confirmation that no application code was added 
 
 Tasks: T001–T005.
 
-Record the immutable upstream remote/tag/peeled commit, uv/Python/FFmpeg/environment matrix, V1
+Record the immutable upstream remote/tag/peeled commit, pinned Go + isolated Python/FFmpeg/environment matrix, V1
 CLI/REST/config/status/output profile, golden media outputs and a digest-pinned non-root rollback
 image. Run the complete V1 unit/integration/security/media evidence selected by OQ-14.
 
@@ -82,10 +85,11 @@ dependency exceptions are documented; V1 source is unchanged.
 
 Tasks: T100–T108 plus the verification passes in [`SETUP-PLAN.md`](SETUP-PLAN.md).
 
-Create package boundaries for web, desktop, API, engine, worker, contracts, SDK, shared tooling,
-infra and tests. Add safe ID/time/error contracts, configuration/redaction, private PostgreSQL,
-Redis/MinIO, FastAPI shell, health/readiness and CI. Client behavior remains a later Phase 5 task;
-this phase only proves the package/contract boundary and no direct engine/provider access.
+Create package boundaries for web, desktop, Go Product API/control plane, Go media worker, isolated
+Python ML/V1 workers, contracts, SDK, shared tooling, infra and tests. Add safe ID/time/error
+contracts, configuration/redaction, private PostgreSQL, Redis/MinIO, Go API shell, health/readiness
+and CI. Client behavior remains a later Phase 5 task; this phase proves the package/contract boundary,
+bounded asynchronous execution and no direct engine/provider access.
 
 Exit evidence: setup V0–V10 pass, local and clean VPS profiles reproduce, clients cannot bypass API,
 and setup rollback is documented.
@@ -107,8 +111,9 @@ concurrency evidence.
 
 Tasks: T300–T361.
 
-Implement canonical state transitions, durable events/replay, QueuePort, scheduler, leases,
+Implement canonical Go state transitions, durable events/replay, QueuePort, scheduler, leases,
 sandboxed MediaProcessPort, `VideoEngine`, `LegacyMovieNarratorAdapter`, V1 DTO/status/path mapping,
+Go/Python worker protocol,
 Artifact commits, checkpoint/crash resume, pause/review/cancel/retry/DLQ, SSE and approved V1
 compatibility gateway.
 

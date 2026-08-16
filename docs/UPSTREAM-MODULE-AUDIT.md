@@ -41,7 +41,7 @@ Removal shorthand:
 | Module | Class | Verified current behavior | Target and technical reason | Compatibility | Tests / removal |
 |---|---|---|---|---|---|
 | `cloud/__init__.py` | REUSE | Re-export facade for V1 cloud package. | Keep for old imports. | Legacy-only facade. | `C`; `legacy-retire`. |
-| `cloud/api.py` | REPLACE | stdlib HTTP TaskAPIServer; task/batch/schedule/DLQ/artifact/health routes; X-API-Key; request limits. | FastAPI Product API needs Project/auth/versioning/DB contracts unavailable here. Keep server unchanged behind compatibility boundary. | Route/status/result gateway or frozen daemon. | `C,A,S`; `legacy-retire`. |
+| `cloud/api.py` | REPLACE | stdlib HTTP TaskAPIServer; task/batch/schedule/DLQ/artifact/health routes; X-API-Key; request limits. | Go Product API/control plane owns Project/auth/versioning/DB contracts unavailable here. Keep V1 server unchanged behind compatibility boundary. | Versioned route/status/result gateway or frozen daemon. | `C,A,S`; `legacy-retire`. |
 | `cloud/openapi.py` | REPLACE | Hand-built OpenAPI 3.1 for V1 routes. | Product OpenAPI generated/versioned from new contract; V1 document remains compatibility artifact. | Expose exact legacy spec on compatibility listener. | `C`; `legacy-retire`. |
 | `cloud/models.py` | WRAP | TaskRequest/Status/Progress/Result/Batch models; status includes `dead`; result exposes paths. | Mapper to Job/PipelineRun/Artifact; V2 status vocabulary remains separate. | Accept `format` alias and frozen fields. | `C,A`; `legacy-retire`. |
 | `cloud/queue.py` | REPLACE | `TaskQueue` protocol + in-process ThreadPoolExecutor/JSON state; running tasks can remain stale after crash. | Product requires Redis delivery + PostgreSQL state/lease/outbox; replacement is requirement-driven, not code style. | LocalTaskQueue remains legacy daemon backend. | `C,R`; `legacy-retire`. |
@@ -57,7 +57,7 @@ Removal shorthand:
 | `cloud/health.py` | PORT | Core/deep dependency checks, ready/health payloads. | Port semantics to product/worker health boundaries; avoid leaking dependency details publicly. | Legacy payload version preserved. | `C,S`; V2 health contract gate. |
 | `cloud/metrics.py` | PORT | In-process Prometheus metrics implementation/exposition. | Port metric names/behavior where useful; use bounded labels and V2 run/step concepts. | Legacy `/metrics` remains. | `C,R`; observability acceptance. |
 | `cloud/scheduler.py` | IGNORE | Cron schedules persisted locally and submit to LocalTaskQueue. | Scheduling is not master-plan MVP and must not inflate Phase 1. | Preserve only if frozen V1 compatibility profile includes routes. | `C`; `never-product` until explicit decision. |
-| `cloud/distributed.py` | IGNORE | Conditional remote render when enabled/healthy/long; remote failure falls back local; shared inputs unresolved. | Initial architecture is one Engine Worker pool; not a production distributed scheduler. | V1 feature remains legacy. | `C,R,M`; future ADR before port. |
+| `cloud/distributed.py` | IGNORE | Conditional remote render when enabled/healthy/long; remote failure falls back local; shared inputs unresolved. | Go/Python workers use a bounded versioned worker contract; V1 distributed behavior remains a compatibility surface, not evidence of a durable scheduler. | V1 feature remains legacy. | `C,R,M`; future ADR before port. |
 
 ## 4. Pipeline modules
 

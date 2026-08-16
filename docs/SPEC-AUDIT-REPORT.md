@@ -4,13 +4,15 @@
 
 **READY**
 
-Meaning: the architecture/specification set is internally consistent and implementation work can be decomposed without inventing architecture. T000 was owner-ratified on 2026-08-16; application code remains blocked until T001–T005/Phase 0 evidence and each later task's Open Question prerequisites pass.
+Meaning: the architecture/specification set is internally consistent and implementation work can be decomposed without inventing architecture. T000 was owner-ratified and amended on 2026-08-16; application code remains blocked until T002–T005/Phase 0 evidence and each later task's Open Question prerequisites pass.
 
 Audit date: 2026-08-15 (Asia/Ho_Chi_Minh).
 
-T000 ratification update: 2026-08-16 (Asia/Ho_Chi_Minh). OQ-12, OQ-13, OQ-14 and OQ-15 are now
-`DECIDED` with affected specs/tasks updated. OQ-01–OQ-11 remain `OPEN` and block only their
-dependent work.
+T000 ratification/amendment update: 2026-08-16 (Asia/Ho_Chi_Minh). OQ-12, OQ-13, OQ-14 and OQ-15
+are `DECIDED` with affected specs/tasks updated. The earlier Python Product/API OQ-13 decision is
+retained in history but superseded by Go Product/control plane, bounded Go media workers and
+isolated Python ML/V1 workloads with language-neutral contracts. OQ-01–OQ-11 remain `OPEN` and
+block only their dependent work.
 
 ## Critical issues
 
@@ -18,12 +20,17 @@ No unresolved critical contradiction remains between the master plan, domain, Po
 
 Critical issues fixed during this audit:
 
-1. Initial worker topology previously implied specialized AI/ML/Render pools too early. It now requires one Engine Worker class initially and capability pools only after evidence.
+1. Initial worker topology previously implied specialized AI/ML/Render pools too early. It now
+   requires bounded Go media and isolated Python ML/V1 workers, with further capability pools only
+   after evidence.
 2. Job/node state names diverged (`pending`, `succeeded`, `waiting_review`, `retry_wait`, `dead`). Canonical V2 sets now match DB/API/events exactly.
 3. Missing PipelineRun/Workflow/ScriptVersion/TimelineVersion/SubtitleTrack/Voice/Narration/RenderProfile/ProviderConfiguration semantics and persistence were added.
 4. Asset and Artifact duplicated storage identity. Asset is now logical input and original bytes are an immutable Artifact.
 5. V1 queue was implicitly treated as distributed/durable. Source proves it is per-process ThreadPoolExecutor + JSON state; V2 shared queue/state architecture is now explicit.
 6. Studio “edit Script then resume” lacked a non-mutating command model. Generic ReviewRequest/Resolution now selects an edited version as node output and invalidates descendants only.
+7. The earlier Python Product/API runtime decision was superseded before V2 implementation. The
+   current control plane is Go; Python is isolated to ML/AI and frozen V1 compatibility, with
+   bounded asynchronous workers and language-neutral contracts.
 
 ## Major issues
 
@@ -72,9 +79,9 @@ None after remediation. Added dedicated specifications for:
 | Render vs output file | Render is request/result; MP4/audio/subtitle/QA are Artifacts. |
 | Match result vs TimelineClip | Match is proposal; TimelineClip is canonical user/AI edit decision. |
 | Asset stores object key and Artifact also stores blob | Asset points to original/variant Artifacts; Artifact owns storage locator/checksum. |
-| Phase 1 specialized worker pools | Initial one Engine Worker; future capability pools are deployment evolution. |
+| Phase 1 worker topology | Bounded Go media workers plus isolated Python ML/V1 workers; capability routing remains an explicit deployment evolution. |
 | V1 JSON/SQLite task store assumption | Source confirms JSON file storage, not SQLite product state. |
-| Python 3.13 master vs upstream Docker 3.12 | Product/core target stays 3.13; runtime split is explicit OQ-13 based on actual ML wheel evidence. |
+| Python Product/API vs upstream Docker 3.12 | OQ-13 superseding decision makes Product API Go; Python 3.12 is isolated to ML/V1 initially, with 3.13 ML migration gated by parity. |
 | Compatibility docs omitted batch/schedule/DLQ | Verified routes recorded; preservation breadth is OQ-14, not silently dropped. |
 
 ## Open decisions
@@ -89,8 +96,9 @@ Remaining decisions:
 - OQ-03: Redis queue primitive—blocks QueuePort implementation.
 - OQ-05: provider credential ownership/secret backend—blocks provider configuration/real adapters.
 
-Resolved for the current gate: OQ-12=`nh_media`, OQ-13=3.13 core plus temporary 3.12 legacy/ML,
-OQ-14=all verified V1 CLI/REST surfaces, and OQ-15=Tauri 2 remote-first desktop client.
+Resolved for the current gate: OQ-12=`nh_media` plus Go module conventions, OQ-13=Go Product/control
+plane with isolated Python ML/V1 and language-neutral contracts, OQ-14=all verified V1 CLI/REST
+surfaces, and OQ-15=Tauri 2 remote-first desktop client.
 
 Other open choices (Timeline projection/edit transport, event transport, vector storage, legacy ownership, retention and pipeline authoring) have safe fixed invariants and explicit task gates.
 
@@ -131,7 +139,8 @@ Residual risks are implementation/test obligations in T224, T313, T600–T602, n
 ## Implementation blockers
 
 - Phase 0 baseline evidence and the implementation-order gate still prohibit application code.
-- T000 owner ratification is complete; T001 is the next task.
+- T000 owner ratification/amendment is complete; T001 was already completed before this amendment and
+  was not restarted; T002 is next only after amendment consistency acceptance.
 - OQ-12/OQ-13/OQ-14/OQ-15 are decided; OQ-01–OQ-11 continue to block only their dependent tasks.
 - Each later task lists specific OQ and prior-task dependencies; agents must not infer a recommendation as approval.
 - `.agents/skills/` is absent; this is not a blocker because AGENTS routes agents to canonical docs.
@@ -151,7 +160,7 @@ All required scenarios A–H have complete traces in `SPEC-CONSISTENCY-MATRIX.md
 
 ## Final recommendation
 
-Accept the specification set as **READY**, proceed with T001 (record immutable upstream baseline
-manifest), and keep application code blocked until T001–T005/Phase 0 evidence passes. Do not begin
-Product scaffold/Phase 1 until the frozen V1 baseline, compatibility profile, golden outputs and
-rollback image are complete.
+Accept the specification set as **READY**, keep application code blocked, and proceed with T002 only
+after this T000 amendment's documentation/link/consistency evidence passes. T001's immutable upstream
+baseline is already recorded and was not restarted. Do not begin Product scaffold/Phase 1 until the
+Go/Python environment matrix, compatibility profile, golden outputs and rollback image are complete.

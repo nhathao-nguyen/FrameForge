@@ -5,16 +5,20 @@
 Initial architecture (Phase 1–3):
 
 ```text
-Product API / trusted orchestration
-            ↓ DB outbox
+Go Product API / trusted orchestration
+            ↓ durable outbox
          Redis queue
-            ↓
-   Engine Worker replicas
-     ├─ controller
+            ↓ versioned worker contract
+   bounded worker replicas
+     ├─ Go media worker (FFmpeg/I/O)
+     ├─ Python ML worker (`nh_media`)
+     ├─ frozen V1 compatibility worker (`movie_narrator`)
      └─ disposable node executor
 ```
 
-Một Engine Worker image/class xử lý mọi capability được cài đặt. Có thể chạy nhiều replica nhưng không tách AI/ML/Render service, không yêu cầu Kubernetes và không có distributed scheduler phức tạp.
+Ban đầu có thể chạy một deployment profile với Go media worker và Python ML/V1 worker riêng, nhưng
+mỗi worker có bounded concurrency và capability declaration. Không yêu cầu Kubernetes hoặc
+distributed scheduler phức tạp. Product API không execute compute inline.
 
 Scale-out chỉ sau benchmark:
 
@@ -31,10 +35,10 @@ Pipeline contract, JobStep state và event contract không đổi khi tách pool
 
 Worker gồm hai trust levels:
 
-- **Controller**: trusted service code, có queue credential và execution-state service identity giới hạn. Controller claim lease, resolve manifests, launch executor, heartbeat và report result.
+- **Controller**: trusted Go service code, có queue credential và execution-state service identity giới hạn. Controller claim lease, resolve manifests, launch executor, heartbeat và report result.
 - **Executor sandbox**: xử lý untrusted media/node. Chỉ nhận input files/manifest, output staging location, cancellation channel và đúng provider credential nếu cần. Không có product DB, broad Redis, user session, billing hoặc unrelated provider secrets.
 
-Trusted orchestration là owner của transition. Controller không được `UPDATE jobs` tùy ý; mọi report đi qua guarded `ExecutionStatePort` để validate current state, lease token và expected revision. Baseline adapter của port dùng cùng application transition service + PostgreSQL repository với một DB role giới hạn cho controller; nếu sau này chuyển sang internal HTTP/gRPC, contract/state machine không đổi. Media executor không bao giờ nhận DB role đó.
+Trusted orchestration là owner của transition. Controller không được `UPDATE jobs` tùy ý; mọi report đi qua guarded `ExecutionStatePort` để validate current state, lease token và expected revision. Baseline adapter của port dùng Go application transition service + PostgreSQL repository với một DB role giới hạn cho controller; nếu sau này chuyển sang internal HTTP/gRPC, contract/state machine không đổi. Media executor không bao giờ nhận DB role đó.
 
 ## 3. Queue message and claim
 
@@ -61,7 +65,7 @@ Claim protocol:
 2. Call `claim(job_step_id, attempt, worker_id, expected_status=queued)`.
 3. Orchestrator atomically creates/updates attempt `running`, lease token hash/expiry và `node.started` event.
 4. Duplicate/stale message không claim được thì ack/drop sau state inspection.
-5. Controller materialize inputs, launch executor và heartbeat dưới lease token.
+5. Controller materialize inputs, route tới worker Go/Python theo capability, launch executor và heartbeat dưới lease token.
 
 ## 4. Lease, heartbeat and progress
 
@@ -85,7 +89,7 @@ prepare isolated workspace
   → terminate process tree and clean workspace
 ```
 
-Executor result contract:
+Go/Python worker result contract:
 
 ```text
 outcome: completed | skipped | waiting_for_review | paused | failed | cancelled
@@ -95,7 +99,7 @@ progress_summary, warnings, metrics, provider_usage
 error {code, category, retryable, safe_message}?
 ```
 
-Executor không phát trực tiếp browser event và không quyết định Job aggregate terminal state.
+Worker không phát trực tiếp browser event và không quyết định Job aggregate terminal state.
 
 ## 6. Resource and sandbox policy
 
@@ -157,6 +161,6 @@ Upstream `cloud/distributed.py` là best-effort remote render dispatch với loc
 - cancel/timeout kills process tree and cleans staged output;
 - executor cannot access DB/Redis/unrelated secret/host path;
 - oversized/malicious media is contained by quotas and quarantine flow;
-- one baseline Engine Worker runs full compatibility pipeline;
-- capability split later runs same pipeline/event contract without migration;
+- one bounded Go media worker plus isolated Python compatibility/ML worker runs the baseline pipeline;
+- moving a capability between Go/Python workers runs the same contract/event contract without migration;
 - graceful drain rejects claims, lets bounded attempts finish, then reconciles remainder.

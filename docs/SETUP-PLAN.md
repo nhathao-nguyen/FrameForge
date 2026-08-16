@@ -8,14 +8,15 @@ owner: repository owner / setup owner
 
 ## 1. Mục tiêu và trạng thái
 
-Mục tiêu của plan này là tạo một nền móng có thể mở rộng cho web client, desktop client, Product
-API/FastAPI, Engine, Worker, provider, storage và các service mới, với Product API/Engine/Worker
-có thể chạy trên một server hoặc VPS riêng. Desktop là client remote-first; nó không nhúng engine,
-database, provider hoặc business state.
+Mục tiêu của plan này là tạo một nền móng có thể mở rộng cho web client, desktop client, Go Product
+API/control plane, Go media worker, isolated Python ML/V1 workers, provider, storage và các service
+mới, với control plane/worker/storage có thể chạy trên một server hoặc VPS riêng. Desktop là client
+remote-first; nó không nhúng engine, database, provider hoặc business state.
 
-**Trạng thái:** T000 đã được owner approve; setup chưa được thực thi. Repository hiện chỉ có
-specification, frozen V1 reference, memory và consistency tooling. Không tạo application code cho
-tới khi T001–T005/Phase 0 evidence hoàn tất.
+**Trạng thái:** T000 đã được owner approve và amend; T001 đã hoàn tất trước amendment và không được
+khởi động lại. Setup chưa được thực thi. Repository hiện chỉ có specification, frozen V1 reference,
+memory và consistency tooling. Không tạo application code cho tới khi T002–T005/Phase 0 evidence
+hoàn tất.
 
 Setup chỉ được đánh dấu `complete` khi tất cả verification pass và evidence nằm trong
 `docs/baselines/` hoặc `docs/memory/TEST-EVIDENCE.md`. “Các thư mục đã tạo” không đủ để pass setup.
@@ -24,14 +25,14 @@ Setup chỉ được đánh dấu `complete` khi tất cả verification pass v�
 
 ```text
 Browser ──HTTPS──┐
-Desktop ─HTTPS───┴─> Product API (FastAPI)
+Desktop ─HTTPS───┴─> Go Product API/control plane
                          ├─ PostgreSQL: durable product state
                          ├─ Redis: queue/lease/event coordination
                          ├─ S3/MinIO: private bytes/artifacts
-                         └─ VideoEngine port
-                              ├─ LegacyMovieNarratorAdapter
-                              └─ V2 Pipeline Runtime
-                                   └─ Engine Worker → sandbox executor
+                         └─ versioned worker contract
+                              ├─ Go media worker → FFmpeg
+                              ├─ Python ML worker → `nh_media`
+                              └─ frozen V1 compatibility → `movie_narrator`
 ```
 
 - Web và desktop chỉ phụ thuộc `packages/contracts`/`packages/sdk` và Product API.
@@ -49,13 +50,21 @@ Desktop ─HTTPS───┴─> Product API (FastAPI)
 ```text
 apps/
 ├── web/                         # Next.js/React browser client
-├── desktop/                     # native shell; UI/SDK shared, no engine/database
-└── api/                         # FastAPI Product API
+└── desktop/                     # Tauri 2 shell; UI/SDK shared, no engine/database
+cmd/
+├── product-api/                 # Go Product API entrypoint
+└── media-worker/                # bounded Go FFmpeg/media worker
+internal/
+├── domain/                      # product aggregates
+├── application/                 # orchestration/state transitions
+├── ports/                       # language-neutral boundary implementations
+├── adapters/{postgres,redis,storage}/
+└── transport/http/              # versioned API transport
 services/
-├── engine/                      # core, pipeline, media, AI, speech, TTS, rendering, providers
-└── worker/                      # controller, lease, sandbox, heartbeat, execution reporting
+├── ml-worker/                   # Python `nh_media`, isolated ML/AI runtime
+└── legacy-compat/               # frozen Python `movie_narrator` boundary
 packages/
-├── contracts/                   # versioned API/event/domain-neutral schemas
+├── contracts/                   # versioned language-neutral API/event/worker schemas
 ├── sdk/                         # shared web/desktop Product API client
 └── shared/                      # IDs, time, errors, validation, redaction helpers
 infra/
@@ -86,11 +95,14 @@ another layer.
 Developer machine
 ├── web dev server
 ├── desktop dev shell
-└── API + PostgreSQL + Redis + MinIO + one Engine Worker
+├── Go Product API
+├── bounded Go media worker
+├── isolated Python ML/V1 worker (when needed)
+└── PostgreSQL + Redis + MinIO
 ```
 
-Use uv-managed Python, pinned FFmpeg, Node/pnpm for web/shared client tooling and a disposable
-containerized infrastructure profile. Desktop remote mode points to the local API; it does not
+Use pinned Go, isolated uv-managed Python, pinned FFmpeg, Node/pnpm for web/shared client tooling
+and a disposable containerized infrastructure profile. Desktop remote mode points to the local API; it does not
 start a second database or engine.
 
 ### Profile B — Single VPS/server baseline
@@ -98,14 +110,15 @@ start a second database or engine.
 ```text
 HTTPS reverse proxy
 ├── web static/SSR delivery
-├── FastAPI API
-├── one Engine Worker class
+├── Go Product API replicas
+├── bounded Go media worker host(s)
+├── isolated Python ML/V1 worker host(s) as required
 ├── PostgreSQL (private)
 ├── Redis (private)
 └── S3/MinIO (private)
 ```
 
-Only the HTTPS reverse proxy is public. API, worker, PostgreSQL, Redis and object storage are on a
+Only the HTTPS reverse proxy is public. Go API, workers, PostgreSQL, Redis and object storage are on a
 private network. This is the first supported remote-server deployment; Kubernetes and specialized
 GPU pools are not setup prerequisites.
 
@@ -118,7 +131,8 @@ API VPS / API replicas
         ├── managed PostgreSQL
         ├── managed Redis
         ├── private S3
-        └── Engine Worker host(s), optionally GPU-capable
+        ├── Go media worker host(s), optionally GPU-capable
+        └── Python ML/V1 worker host(s), optionally GPU-capable
 ```
 
 The contracts, queue messages, leases and artifact references remain unchanged when services move
@@ -128,7 +142,7 @@ to separate machines. Do not expose worker or engine ports to clients.
 
 | Stage | Scope | Required work | Gate |
 |---|---|---|---|
-| S0 | Ratification | T000 complete; client/server requirement and OQ-12/OQ-13/OQ-14/OQ-15 recorded | Phase 0 authorized; application code still blocked |
+| S0 | Ratification | T000 complete/amended; client/server requirement, Go control plane and OQ-12/OQ-13/OQ-14/OQ-15 recorded | Phase 0 authorized; application code still blocked |
 | S1 | V1 baseline | T001–T005; immutable upstream manifest, environment, compatibility, golden outputs, rollback image | Gate A pass |
 | S2 | Monorepo skeleton | T100; create package boundaries including `apps/desktop` and `packages/sdk` | import-boundary tests |
 | S3 | Shared contracts/config | T101–T102; opaque IDs, time, revision/ETag, safe errors, config namespaces and redaction | schema/redaction tests |

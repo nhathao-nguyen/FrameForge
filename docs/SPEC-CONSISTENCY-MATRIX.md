@@ -5,7 +5,7 @@
 | Master decision | Specification location | Audit result |
 |---|---|---|
 | V1 is legacy/reference; no immediate rewrite | `00`, `01`, `09`, module audit | Preserved; Strangler/rollback/module gates explicit. |
-| VideoEngine abstraction; Product backend not implementation-dependent | `01 §6`, `05 §11`, implementation T320–T323 | Preserved. |
+| VideoEngine/worker abstraction; Product control plane not implementation-dependent | `00`, `01 §6`, `05 §11`, implementation T320–T323 | Preserved; Go/Python implementations use language-neutral contracts. |
 | Engine has no user/billing/subscription logic | `00`, `01 §2`, AGENTS | Preserved. |
 | Pipeline nodes + checkpoint/resume/partial | `02 §5`, `05`, `07`, worker spec | Preserved with generic start/stop/review semantics. |
 | Timeline is renderer source of truth | `02`, `05 §10`, `06`, implementation T420/T530 | Preserved; matches are proposal only. |
@@ -17,7 +17,7 @@
 | Movie recap is one workflow | Workflow entity + `movie_recap_v2` built-in definition | Preserved. |
 | Multi-output avoids upstream rerun | `02` invariants, `06 §6`, T532 | Preserved through Timeline/Profile/input fingerprints. |
 | Public API vs media worker security | `08`, `13` | Preserved and expanded to three trust boundaries. |
-| Initial one Engine Worker; specialized pools later | `01 §5`, `13 §1` | Corrected from prior docs and now matches master. |
+| Bounded Go media + isolated Python ML/V1 workers | `01 §5`, `13 §1` | Product API is Go; worker capability boundaries are explicit and bounded. |
 | No mandatory Kubernetes Phase 1 | `01`, `10` non-goals | Preserved. |
 
 ## 2. Entity-to-persistence/API mapping
@@ -110,7 +110,7 @@ POST Project
 → committed original Artifact + Asset ready
 → POST Job(mode=automatic, movie_recap Pipeline)
 → Job/Run/Steps/outbox
-→ Redis → Engine Worker → node checkpoints/Artifacts
+→ Redis → bounded Go/Python worker contract → node checkpoints/Artifacts
 → match proposal → build_timeline → automatic approval policy
 → exact TimelineVersion → render_timeline → QA
 → Render/Artifact committed → Job completed

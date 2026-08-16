@@ -6,30 +6,27 @@ Hệ thống bắt đầu là modular monorepo/deployment đơn giản, không t
 
 ```text
 apps/web (browser) ──HTTPS──┐
-apps/desktop ───────HTTPS───┴──> apps/api ──SQL──> PostgreSQL
+apps/desktop ───────HTTPS───┴──> Go Product API/control plane ──SQL──> PostgreSQL
                          │
                          ├── Redis: queue, lease, pub/sub
                          ├── S3/MinIO: presigned upload/download
                          └── Trusted Orchestrator / EngineGateway
-                                │
+                                │ versioned worker contract
                  ┌──────────────┴──────────────┐
                  ▼                             ▼
-        LegacyMovieNarratorAdapter       V2 Pipeline Runtime
+          Go media worker                 Python ML/V1 worker
+          FFmpeg + media I/O               nh_media / movie_narrator
                  │                             │
                  └──────────────┬──────────────┘
                                 ▼
-                       Engine Worker
-                    (single pool initially)
-                                │
-                                ▼
-                    disposable media executor
+                    disposable execution sandbox
 ```
 
 ## 2. Ownership boundaries
 
 | Boundary | Sở hữu | Không được sở hữu |
 |---|---|---|
-| Product API | auth, workspace, project, asset registration, job command, DB transaction, API version | scene matching, TTS call, FFmpeg, provider-specific prompt |
+| Go Product API/control plane | auth, workspace, project, asset registration, job command, DB transaction, API version | scene matching, TTS call, FFmpeg, provider-specific prompt, Python runtime |
 | Engine | domain-neutral media/AI execution, node contracts, artifact outputs, provider calls | user/session/billing, HTTP response shape, UI state |
 | Worker controller | queue consumption, execution lease, heartbeat, sandbox launch, result report | business authorization, arbitrary product-table mutation, permanent project truth |
 | Media executor sandbox | chạy đúng một node với scoped inputs/capability | DB/Redis credentials, product/user secrets, durable state |
@@ -39,19 +36,20 @@ apps/desktop ───────HTTPS───┴──> apps/api ──SQL─
 ### Dependency direction
 
 ```text
-web/desktop → packages/sdk + contracts → Product API → domain/application ports
+web/desktop → packages/sdk + contracts → Go Product API → domain/application ports
                     ├── repository ports → PostgreSQL
                     ├── blob ports → object storage
                     ├── queue ports → Redis
                     └── engine port → VideoEngine
 
-engine → contracts / provider ports / media adapters
-worker controller → trusted execution-state port + engine
-media executor → engine node contract + scoped artifact/provider ports
-legacy adapter → movie_narrator.contract (stable surface)
+Go control plane → language-neutral contracts / ports → worker protocols
+Go media worker → media/FFmpeg adapters
+Python ML/V1 worker → `nh_media.*` / `movie_narrator.*` adapters
+media executor → worker contract + scoped artifact/provider ports
 ```
 
-Core domain không import FastAPI, Pydantic HTTP models, Redis client, boto3 hay UI code. Adapter/infrastructure là outer layer.
+Core domain không import HTTP framework types, Go transport structs, Python classes, ORM models,
+Redis client, boto3 hay UI code. Adapter/infrastructure là outer layer.
 
 ## 3. Proposed repository layout
 
@@ -59,22 +57,24 @@ Core domain không import FastAPI, Pydantic HTTP models, Redis client, boto3 hay
 apps/
   web/                         # Next.js/React, UI only
   desktop/                     # Tauri 2 shell + shared client SDK, no business backend
-  api/                         # FastAPI routes, auth, application services
+cmd/
+  product-api/                 # Go Product API entrypoint
+  media-worker/                # Go media/FFmpeg worker entrypoint
+internal/
+  domain/                      # job, project, asset and other product aggregates
+  application/                 # commands, orchestration, state transitions
+  ports/                       # storage, queue, worker and provider-neutral ports
+  adapters/postgres/           # Go PostgreSQL adapter
+  adapters/redis/              # Go Redis adapter
+  adapters/storage/            # Go object-storage adapter
+  transport/http/              # versioned Product API transport
 services/
-  engine/
-    core/                      # engine-neutral IDs, context, errors
-    pipeline/                  # DAG runtime, node registry, checkpoint
-    media/                     # ffprobe/FFmpeg/MoviePy/PySceneDetect adapters
-    ai/                        # prompt, matching, scene intelligence
-    speech/                    # ASR/alignment orchestration
-    tts/                       # narration orchestration
-    rendering/                 # timeline compiler and render profiles
-    providers/                 # LLM/VLM/TTS/ASR/Embedding ports and registry
-  worker/                      # queue consumer, lease, sandbox, heartbeat
+  ml-worker/                   # Python `nh_media` ML/AI worker, isolated runtime
+  legacy-compat/               # frozen Python `movie_narrator` compatibility boundary
 packages/
-  contracts/                   # versioned JSON/Pydantic contracts
+  contracts/                   # versioned language-neutral JSON/Protobuf/schema contracts
   sdk/                         # shared web/desktop Product API client
-  shared/                      # IDs, time, error codes, validation helpers
+  shared/                      # client-side generated/runtime-neutral helpers only
 infra/
   postgres/
   redis/
@@ -105,7 +105,7 @@ POST /projects/{id}/assets/{asset_id}/complete
   → API enqueue probe/ingest job
 ```
 
-Video 5–50 GB không đi xuyên qua FastAPI.
+Video 5–50 GB không đi xuyên qua Go Product API.
 
 ### Job execution
 
@@ -133,21 +133,22 @@ Một project giữ canonical timeline. Mỗi `Render` chọn `timeline_version_
 
 ### Development/local — initial architecture
 
-Web dev server và desktop dev shell đều gọi một API process; phía server có Redis, PostgreSQL,
-MinIO và **một Engine Worker pool**. Worker controller có service identity giới hạn; node media
-chạy trong temp workspace/sandbox và không giữ DB/Redis credential. Có thể dùng
-LocalStorage/LocalQueue adapter cho unit test nhưng interface không đổi.
+Web dev server và desktop dev shell đều gọi một Go Product API process; phía server có Redis,
+PostgreSQL, MinIO và worker pools với bounded concurrency. Go media worker xử lý FFmpeg/media I/O;
+Python worker chỉ xử lý ML/AI hoặc frozen V1. Worker controller có service identity giới hạn; node
+media chạy trong temp workspace/sandbox và không giữ DB/Redis credential. Interface không đổi giữa
+local và remote.
 
-### Staging/production baseline — vẫn một worker class
+### Staging/production baseline — bounded language-specific worker classes
 
 ```text
 HTTPS reverse proxy
   ├→ web static/SSR delivery (hoặc CDN)
-  └→ FastAPI API replicas
+  └→ Go Product API replicas
   → PostgreSQL
   → Redis
   → S3/MinIO private bucket
-  → Engine Worker replicas
+  → bounded Go media / Python ML-V1 worker replicas
 ```
 
 Media worker có filesystem tạm riêng, non-root, resource limit và không có product secrets không cần thiết.
@@ -183,7 +184,7 @@ Trusted orchestration là owner duy nhất của Job/JobStep transition. Worker 
 
 ## 6. Engine gateway
 
-Product API chỉ gọi port tương đương:
+Go Product API chỉ gọi language-neutral worker port tương đương:
 
 ```text
 VideoEngine
@@ -196,9 +197,11 @@ VideoEngine
   list_artifacts(pipeline_run_id)
 ```
 
-Implementation đầu tiên map tới `LegacyMovieNarratorAdapter`, implementation sau là `V2PipelineEngine`. Gateway chuyển đổi domain command thành engine-neutral command và ngược lại.
+Worker protocol map tới `LegacyMovieNarratorAdapter` trong frozen Python workload hoặc native Go/
+Python V2 compute worker. Gateway chuyển đổi domain command thành language-neutral command và ngược lại.
 
-Engine không trả raw HTTP response và không ghi trực tiếp vào bảng product nếu chạy remote; worker/reporting layer materialize kết quả.
+Worker/engine không trả raw HTTP response và không ghi trực tiếp vào bảng product nếu chạy remote;
+worker/reporting layer gửi result command để Go control plane materialize kết quả.
 
 ## 7. Consistency and reliability requirements
 
@@ -211,13 +214,30 @@ Engine không trả raw HTTP response và không ghi trực tiếp vào bảng p
 - Cancellation cooperative tại node boundary; node media dài phải kiểm tra cancellation giữa các chunk.
 - Mọi event có `event_id`, `occurred_at`, `job_id`, `sequence` và correlation ID.
 - Tất cả provider calls có timeout, retry policy, circuit breaker và redacted logging.
-- Product API phải query được status mà không cần worker còn sống.
+- Go Product API phải query được status mà không cần worker còn sống.
 - Client reconnect được bằng snapshot + event replay; tab/app đóng không làm mất Job state.
 - Desktop offline chỉ là local draft/import mode; không được mô phỏng server Job state.
+- Product API không execute FFmpeg, render, transcription, ML inference hay long-running media compute
+  inline trong HTTP request lifecycle.
+- Mọi worker có bounded concurrency, CPU/GPU/resource admission, lease/timeout, cancellation,
+  retry/idempotency và observable progress; không tạo một goroutine/worker không giới hạn cho mỗi request.
+
+## 8. Language-neutral boundary and replaceability
+
+- Module path của Go control plane bắt đầu là `github.com/nhathao-nguyen/FrameForge`, nhưng không
+  biến module path thành public domain package naming.
+- Durable/public contracts dùng schema/versioned envelope; tối thiểu có `schema_version`, `job_id`,
+  `job_type` và typed `input`/`result` theo contract.
+- Không dùng Python pickle, Go gob, shared ORM objects, Pydantic internals hoặc in-process Python
+  embedding làm mặc định.
+- API/schema/event/state-machine/worker/artifact/error semantics là language-neutral. Thay Go bằng
+  Python/Rust hoặc ngược lại không được kéo theo redesign boundary.
+- Language migration không gộp với cleanup không liên quan; API/schema/event/state-machine changes
+  là task owner-approved riêng; old implementation giữ lại cho tới khi parity và rollback evidence pass.
 
 Chi tiết provider, storage và worker nằm lần lượt ở `11-PROVIDER-ARCHITECTURE.md`, `12-STORAGE-ARCHITECTURE.md` và `13-WORKER-ARCHITECTURE.md`.
 
-## 8. Observability
+## 9. Observability
 
 Bắt buộc:
 
@@ -228,7 +248,7 @@ Bắt buộc:
 
 Metadata V1 như `metadata.json`, match summary, duration metrics, alignment diagnostics và quality dashboard được lưu như artifact/audit metadata trong migration; không làm API phụ thuộc vào một JSON blob duy nhất.
 
-## 9. Non-goals của architecture hiện tại
+## 10. Non-goals của architecture hiện tại
 
 - Không đưa users/subscriptions/billing vào engine.
 - Không bắt buộc Kubernetes.

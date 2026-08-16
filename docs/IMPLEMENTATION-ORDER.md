@@ -1,8 +1,10 @@
 # Implementation Order
 
-T000 was ratified by the owner on 2026-08-16. T001–T005 are now the next eligible documentation/
-baseline tasks; application code remains blocked until Gate A/Phase 0 evidence passes. After that,
-assign one task/PR at a time. Paths use the approved `nh_media` namespace.
+T000 was ratified and amended by the owner on 2026-08-16. The amendment supersedes the earlier
+Python Product/API decision: Go owns the V2 control plane; Python is isolated to ML/AI and frozen V1
+compatibility workloads. T001 was already completed before this amendment and is not restarted here;
+T002–T005 remain documentation/baseline tasks, and application code remains blocked until Gate A/
+Phase 0 evidence passes. After that, assign one task/PR at a time.
 
 Every task has the required handoff fields. A dependency marked `OQ-x decided` is a hard block; recommendation is not a decision.
 
@@ -13,12 +15,14 @@ Every task has the required handoff fields. A dependency marked `OQ-x decided` i
 - **Goal:** owner reviews audit and records decisions needed for Phase 0/first scaffold.
 - **Files/modules affected:** docs only: `OPEN-QUESTIONS.md`, affected specs, optional ADRs.
 - **Dependencies:** specification audit complete.
-- **Implementation notes:** preserve master invariants; replace affected `OPEN` entries with dated
-  decision/owner; record `nh_media`, the Python 3.13/3.12 split, all verified V1 surfaces and Tauri
-  2 in dependent contracts, not only OQ text.
+- **Implementation notes:** preserve master invariants; append a dated superseding owner decision
+  without erasing the earlier OQ-13 history; record Go control plane/module path, bounded worker
+  topology, language-neutral contracts, `nh_media`, all verified V1 surfaces and Tauri 2 in dependent
+  contracts, not only OQ text. Do not create `go.mod` or application code in this task.
 - **Tests required:** link/terminology/consistency checks; confirm no application source diff.
-- **Definition of Done:** Phase -1 acceptance signed; OQ-12/OQ-13/OQ-14/OQ-15 decisions recorded;
-  affected specs, memory and task dependencies updated; no application source diff.
+- **Definition of Done:** Phase -1 amendment signed; OQ-12/OQ-13/OQ-14/OQ-15 decisions recorded;
+  old OQ-13 history preserved and marked superseded; affected specs, memory and task dependencies
+  updated; no application source diff or T001 restart.
 
 ### T001 — Record immutable upstream baseline manifest
 
@@ -29,14 +33,18 @@ Every task has the required handoff fields. A dependency marked `OQ-x decided` i
 - **Tests required:** `git status`, remote/peeled-tag comparison, signed/hash manifest, license headers.
 - **Definition of Done:** another agent can resolve identical source from report and clean worktree; divergence is explained.
 
-### T002 — Build reproducible Arch/uv environment matrix
+### T002 — Build reproducible Go/Python/Arch environment matrix
 
-- **Goal:** lock V1/core and optional ML dependencies without system Python.
+- **Goal:** pin a supported stable Go toolchain for Product/control plane and lock isolated Python ML/V1 environments without system Python.
 - **Files/modules affected:** environment lock/config and `docs/baselines/environment-*`; container metadata only as approved.
 - **Dependencies:** T001; OQ-13 decided.
-- **Implementation notes:** uv-managed Python; record FFmpeg/ffprobe build; keep product 3.13 and legacy/ML split if decision says so.
-- **Tests required:** clean install, Python/version/lock hash, dependency groups, FFmpeg codec/filter probes.
-- **Definition of Done:** documented commands reproduce environment on clean Arch host/container without global pip.
+- **Implementation notes:** Go toolchain is pinned in environment/CI; Python 3.12 is isolated to ML/V1
+  locks/images; record Node/Tauri tooling and FFmpeg/ffprobe build; any later Python 3.13 ML move
+  requires parity evidence. No Go/Python internal types cross the contract boundary.
+- **Tests required:** clean Go install/test, Go version/toolchain hash, isolated Python install/version/
+  lock hash, dependency groups, FFmpeg codec/filter probes and language-neutral worker fixtures.
+- **Definition of Done:** documented commands reproduce the matrix on clean Arch host/container without
+  global pip or floating Go/CI/production toolchains.
 
 ### T003 — Freeze V1 compatibility profile
 
@@ -67,14 +75,19 @@ Every task has the required handoff fields. A dependency marked `OQ-x decided` i
 
 ## Gate B — Product foundation
 
-### T100 — Create approved package skeleton
+### T100 — Create approved Go/control-plane and compute package skeleton
 
-- **Goal:** establish `apps/web`, `apps/desktop`, `apps/api`, `services/engine`, `services/worker`, `packages/contracts`, `packages/sdk`, `infra`, test boundaries.
+- **Goal:** establish web/desktop clients, Go `cmd/` + `internal/` control-plane/media-worker boundaries,
+  isolated Python ML/V1 worker boundaries, `packages/contracts`, `packages/sdk`, `infra` and tests.
 - **Files/modules affected:** new package/layout metadata only; legacy `references/movie-narrator` untouched.
 - **Dependencies:** T005; OQ-12 decided.
-- **Implementation notes:** no media/domain implementation; enforce dependency direction with minimal import tests.
-- **Tests required:** package install/import, forbidden dependency checks, V1 baseline still clean.
-- **Definition of Done:** skeleton imports and boundary test proves product/engine/legacy separation.
+- **Implementation notes:** Go module path starts at `github.com/nhathao-nguyen/FrameForge`; prefer
+  `internal/domain`, `internal/application`, `internal/ports`, `internal/adapters`, `internal/transport/http`.
+  Python packages use `nh_media`; frozen code keeps `movie_narrator`. No media/domain implementation.
+- **Tests required:** Go module/test, client/package checks, Python boundary/import checks, forbidden
+  dependency checks, language-neutral contract fixtures and V1 baseline still clean.
+- **Definition of Done:** skeleton boundaries prove Go control plane, Go media, Python ML/V1 and clients
+  are replaceable and cannot depend on each other's internals.
 
 ### T101 — Add shared identity/time/error contract primitives
 
@@ -121,19 +134,20 @@ Every task has the required handoff fields. A dependency marked `OQ-x decided` i
 - **Tests required:** health/auth/private ACL, restart, multipart capability.
 - **Definition of Done:** scoped dev bucket works and unauthenticated object access fails.
 
-### T106 — Implement FastAPI shell and error middleware
+### T106 — Implement Go Product API shell and error middleware
 
 - **Goal:** expose `/api/v1` shell with request/correlation IDs and canonical errors.
-- **Files/modules affected:** `apps/api` bootstrap/middleware/tests.
+- **Files/modules affected:** Go `cmd/product-api`, `internal/transport/http`, application error middleware/tests.
 - **Dependencies:** T101–T105; OQ-01 auth seam decision.
 - **Implementation notes:** no Project/media route; no V1 internal import; bounded request body/CORS placeholder policy.
-- **Tests required:** startup, request IDs, safe 4xx/5xx, no traceback, OpenAPI smoke.
+- **Tests required:** startup, request IDs, safe 4xx/5xx, no traceback, API contract/OpenAPI smoke and
+  proof that no Python/FFmpeg/ML runtime is imported or executed.
 - **Definition of Done:** API shell passes contract tests with mocked dependencies.
 
 ### T107 — Implement health/readiness endpoints
 
 - **Goal:** distinguish liveness, readiness and protected deep dependency diagnostics.
-- **Files/modules affected:** API health application service/adapters/tests.
+- **Files/modules affected:** Go Product API health application service/adapters/tests.
 - **Dependencies:** T103–T106.
 - **Implementation notes:** public response minimal; deep checks protected; preserve compatibility listener semantics separately.
 - **Tests required:** each dependency down, draining state, timeout, information disclosure.
@@ -141,10 +155,11 @@ Every task has the required handoff fields. A dependency marked `OQ-x decided` i
 
 ### T108 — Establish V2 CI gates
 
-- **Goal:** run lint/type/unit/security plus V1 regression without weakening upstream checks.
+- **Goal:** run Go format/vet/test/security, isolated Python ML/V1 checks, contract tests and V1 regression without weakening upstream checks.
 - **Files/modules affected:** CI workflows/config/scripts.
 - **Dependencies:** T100–T107.
-- **Implementation notes:** scoped advisory exceptions need owner/expiry; do not copy Bandit B404/B603 skip blindly.
+- **Implementation notes:** pin Go and Python toolchains; scoped advisory exceptions need owner/expiry;
+  do not copy Bandit B404/B603 skip blindly; contract tests must be language-independent.
 - **Tests required:** intentionally failing lint/type/security/contract jobs, V1 baseline job, artifact reports.
 - **Definition of Done:** branch gate names/stages documented and required checks pass on clean baseline.
 
@@ -391,9 +406,10 @@ Every task has the required handoff fields. A dependency marked `OQ-x decided` i
 ### T312 — Implement worker controller lease/heartbeat
 
 - **Goal:** claim one JobStep attempt, heartbeat, report result and reconcile expired leases.
-- **Files/modules affected:** `services/worker` controller, ExecutionStatePort adapter, tests.
+- **Files/modules affected:** Go `cmd/media-worker` controller, `internal/ports` ExecutionStatePort adapter, tests.
 - **Dependencies:** T300–T311.
-- **Implementation notes:** controller has restricted identity; executor no DB/Redis; exact attempt token.
+- **Implementation notes:** Go controller has restricted identity; Python ML/V1 workers receive only
+  language-neutral manifests; executor has no DB/Redis; exact attempt token and bounded concurrency.
 - **Tests required:** two workers, stale token, lease expiry, graceful drain, progress without heartbeat.
 - **Definition of Done:** only one attempt commits and worker death transitions by retry policy.
 

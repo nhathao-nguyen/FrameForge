@@ -2,7 +2,7 @@
 
 ## 1. Vai trò
 
-Codex làm việc trên hệ thống AI Video Production Engine theo bộ tài liệu trong thư mục `docs/`. `PROJECT_REBUILD_PLAN.md` là master context; bộ technical specification này là bản triển khai có cấu trúc. Khi có khác biệt, không tự đổi quyết định kiến trúc của master plan; ghi điểm khác biệt vào `docs/OPEN-QUESTIONS.md` và dừng phần implementation bị ảnh hưởng.
+Codex làm việc trên hệ thống AI Video Production Engine theo bộ tài liệu trong thư mục `docs/`. `PROJECT_REBUILD_PLAN.md` là master context; bộ technical specification này là bản triển khai có cấu trúc. Khi có khác biệt, không tự đổi quyết định kiến trúc; chỉ owner amendment có ngày/owner mới được supersede quyết định và phải giữ decision history, cập nhật toàn bộ affected docs rồi mới cho phép phần implementation bị ảnh hưởng.
 
 ## 2. Documentation-first gate
 
@@ -29,12 +29,14 @@ Không lấy assumption trong code V1 làm kiến trúc V2. V1 là legacy/refere
 
 ## 4. Boundary rules
 
-- Product backend sở hữu user/workspace/project/job/database/auth; engine không import chúng.
-- Engine sở hữu media/AI/pipeline/timeline compilation; không biết HTTP/session/billing.
+- Go Product API/control plane sở hữu user/workspace/project/job/database/auth; không phụ thuộc Python runtime hoặc media compute.
+- Go media worker sở hữu orchestration của FFmpeg/media I/O; Python ML worker sở hữu PyTorch/CUDA/model workloads; frozen V1 compatibility workload giữ `movie_narrator`.
+- Engine/compute boundary sở hữu media/AI/pipeline/timeline compilation; không biết HTTP/session/billing.
 - Worker chỉ execute lease và báo progress/checkpoint; không giữ business state duy nhất.
 - Frontend không gọi engine/provider trực tiếp, không giữ secret.
 - Storage access qua Asset/Artifact refs; không đưa absolute path vào API/domain event.
 - Job/JobStep state dùng nguyên canonical vocabulary trong `GLOSSARY.md`; compatibility adapter là nơi duy nhất map `Task/pending/dead/success` của V1.
+- Go/Python/web/desktop chỉ giao tiếp qua versioned language-neutral contracts/envelopes. Không leak Go structs, Python/Pydantic classes, ORM models, pickle/gob hoặc framework types.
 
 ## 5. Coding rules sau khi được phép implement
 
@@ -51,6 +53,7 @@ Không lấy assumption trong code V1 làm kiến trúc V2. V1 là legacy/refere
 11. Không `shell=True`; subprocess qua wrapper được review.
 12. Không auto-load plugin không tin cậy.
 13. Secrets không vào logs/events/checkpoints/LLM prompts không cần thiết.
+14. Product API không chạy long-running compute inline; worker concurrency, resource admission, lease, cancellation, retry và idempotency luôn bounded/explicit.
 
 ## 6. Migration rules
 
@@ -96,6 +99,8 @@ Nếu task chỉ là documentation, xác nhận application code không bị tha
 - expose traceback/path/API key;
 - xóa upstream license/attribution;
 - thay đổi behavior legacy mà không có feature flag/compatibility test.
+- biến migration Go/Python thành big-bang rewrite hoặc gộp với cleanup không liên quan;
+- tạo `go.mod`, app skeleton, worker skeleton hoặc API code trong amendment T000 này.
 
 ## 10. Handoff format
 

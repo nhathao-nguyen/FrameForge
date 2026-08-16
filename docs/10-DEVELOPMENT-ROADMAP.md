@@ -34,12 +34,13 @@
 
 **Scope:** establish immutable, executable V1 behavior baseline before Product/V2 code.
 
-**Prerequisites:** Phase -1 accepted; OQ-13 Option B runtime split is decided and must be evidenced
-by separate Product/core 3.13 and frozen legacy/ML 3.12 locks/images.
+**Prerequisites:** Phase -1 accepted; the superseding OQ-13 Go-control-plane topology is decided and
+must be evidenced by a pinned Go toolchain plus isolated Python 3.12 ML/V1 locks/images. Any later
+Python 3.13 ML image requires dependency/ML/CUDA parity evidence.
 
 **Deliverables:** recorded upstream remote/peeled tag/commit; immutable baseline branch/tag; uv lock/environment report; FFmpeg build report; frozen compatibility profile (CLI/routes/config/status/outputs); golden sample outputs and test report; license/dependency/security exception inventory.
 
-**Tests/evidence:** upstream full unit/integration/security commands; Python 3.13 core and decided ML/container matrix; CLI create/config/start/pause/resume; REST tasks/cancel/result/artifacts plus selected batch/schedule/DLQ routes; scene/match/TTS/ASR/render real-media sample; SHA-256 artifact manifest.
+**Tests/evidence:** pinned Go toolchain; isolated Python ML/V1 matrix; upstream full unit/integration/security commands; CLI create/config/start/pause/resume; Go Product API tasks/cancel/result/artifacts plus selected batch/schedule/DLQ routes; scene/match/TTS/ASR/render real-media sample; SHA-256 artifact manifest.
 
 **Acceptance criteria:**
 
@@ -57,17 +58,17 @@ by separate Product/core 3.13 and frozen legacy/ML 3.12 locks/images.
 
 **Prerequisites:** Phase 0; OQ-01/OQ-06/OQ-12 decisions needed by auth/ownership/namespace tasks.
 
-**Deliverables:** minimal monorepo skeleton; configuration/secret boundary; FastAPI shell; PostgreSQL/Redis/MinIO dev stack; request/correlation IDs; safe error envelope; health/readiness; empty VideoEngine port seam; baseline single Engine Worker controller shell only when task order reaches it.
+**Deliverables:** minimal monorepo skeleton; Go module/control-plane configuration and secret boundary; Go `/api/v1` shell; PostgreSQL/Redis/MinIO dev stack; request/correlation IDs; safe error envelope; health/readiness; language-neutral worker/engine port seams; bounded Go media and isolated Python ML/V1 worker boundaries only when task order reaches them.
 
 **Tests/evidence:** import/dependency-boundary tests; clean infra start/stop; health/readiness dependency failure tests; config/secret redaction; API auth seam/error/OpenAPI smoke; V1 suite still runs unchanged.
 
 **Acceptance criteria:**
 
-- product backend cannot import V1 internals except designated adapter package;
-- engine package has no user/billing/HTTP dependency;
+- Go product backend cannot import V1/Python internals except a language-neutral worker/compatibility boundary;
+- compute workers have no user/billing/HTTP dependency;
 - local infra is reproducible, private/default-safe and version-pinned;
-- API shell exposes no media upload body/engine key/secret;
-- no Kubernetes or premature specialized worker pools required.
+- Go API shell exposes no media upload body/engine key/secret and does not execute long-running compute inline;
+- no Kubernetes or premature capability-pool fan-out beyond the required Go media and isolated Python ML/V1 boundaries.
 
 **Non-goals:** full DB schema, Project CRUD, actual Job execution, Timeline editor or V1 node port.
 
@@ -97,7 +98,10 @@ by separate Product/core 3.13 and frozen legacy/ML 3.12 locks/images.
 
 **Prerequisites:** Phase 2; OQ-03/OQ-04/OQ-09 and worker-state transport/security decisions.
 
-**Deliverables:** canonical state transition service; DB outbox/Redis queue; one Engine Worker controller + sandbox executor; lease/heartbeat/reconcile; VideoEngine + LegacyMovieNarratorAdapter; status/progress/artifact mapping; pause/resume/partial/cancel/retry/DLQ; SSE and optional WebSocket; legacy REST/CLI gateway.
+**Deliverables:** canonical Go state transition service; DB outbox/Redis queue; bounded Go media
+worker plus isolated Python ML/V1 worker contracts and sandbox executor; lease/heartbeat/reconcile;
+VideoEngine + LegacyMovieNarratorAdapter; status/progress/artifact mapping; pause/resume/partial/
+cancel/retry/DLQ; SSE and optional WebSocket; legacy REST/CLI gateway.
 
 **Tests/evidence:** duplicate delivery/competing workers; process death after each V1 step; stale checkpoint/input; cancel/kill/drain; event ordering/replay/reset; exact V1 soft/hard/strict/status/output aliases; full Browser/API→queue→worker→V1→Artifact trace.
 
@@ -109,7 +113,7 @@ by separate Product/core 3.13 and frozen legacy/ML 3.12 locks/images.
 - worker death resumes first incomplete compatible node and does not duplicate Artifact;
 - compatibility clients pass frozen profile and rollback route remains usable.
 
-**Non-goals:** porting all V1 nodes, specialized worker pools, collaborative editor or changing output quality.
+**Non-goals:** porting all V1 nodes, additional capability-pool fan-out, collaborative editor or changing output quality.
 
 ## 7. Phase 4 — V2 pipeline and studio backend
 

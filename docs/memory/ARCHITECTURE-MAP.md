@@ -11,7 +11,7 @@ owner: repository owner / architecture ratifier
 ```text
 User
   ├─ Browser → apps/web (Next.js/React) ──HTTPS──┐
-  └─ Desktop → apps/desktop (thin native shell) ─┴──> apps/api (FastAPI Product API)
+  └─ Desktop → apps/desktop (Tauri 2 shell) ─┴──> Go Product API/control plane
                                                     │ Product auth/session and commands
                                                     ▼
                                             Product API server
@@ -23,10 +23,13 @@ User
         └── V2 Pipeline Runtime → nodes/providers/timeline/compiler
                   │
                   ▼
-          Engine Worker controller
+          versioned worker contract
+            ├── bounded Go media worker → FFmpeg
+            ├── isolated Python ML worker → `nh_media`
+            └── frozen V1 compatibility → `movie_narrator`
                   │
                   ▼
-          disposable media executor sandbox
+          disposable execution sandbox
 ```
 
 ## Upload → job → render flow
@@ -49,18 +52,19 @@ Project
 ## Ownership and dependency direction
 
 ```text
-web → Product API → domain/application ports
+web/desktop → Go Product API → domain/application ports
                   ├→ repository ports → PostgreSQL
                   ├→ StoragePort → S3/MinIO/LocalStorage
                   ├→ QueuePort → Redis
                   └→ VideoEngine → engine/provider/media ports
-worker controller → ExecutionStatePort + VideoEngine
+Go/Python workers → versioned worker contract + ExecutionStatePort
 media executor → declared node contract + scoped artifact/provider access
 legacy adapter → stable movie_narrator V1 contract only
 ```
 
-The core domain must not import FastAPI HTTP models, Redis clients, boto3 or UI code. The engine
-must not own identity, authorization, billing or sessions. Web and desktop clients must not call
+The core domain must not import HTTP framework models, Go transport structs, Python classes, Redis
+clients, boto3 or UI code. The compute plane must not own identity, authorization, billing or
+sessions. Web and desktop clients must not call
 engine or provider endpoints directly. Desktop is remote-first and does not own durable product
 state.
 

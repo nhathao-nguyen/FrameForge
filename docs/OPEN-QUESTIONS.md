@@ -431,7 +431,8 @@ Cons: generic/collision risk and may not fit publishing.
 
 **Recommendation**
 
-Option B. Until decided, docs use conceptual `services/engine`; do not create placeholder application package.
+Option B. Until decided, docs use the language-neutral compute/worker boundary; do not create a
+placeholder application package or infer a queue technology.
 
 **Decision status:** DECIDED — 2026-08-16
 
@@ -439,51 +440,59 @@ Option B. Until decided, docs use conceptual `services/engine`; do not create pl
 
 **Decision:** Use `nh_media` as the V2 Python/package namespace. Do not use `your_engine`,
 `video_engine` or `frameforge` as the public V2 namespace at this time. Keep the legacy
-`movie_narrator` namespace unchanged.
+`movie_narrator` namespace unchanged. Go control-plane code uses normal Go module/package
+conventions with initial module path `github.com/nhathao-nguyen/FrameForge`, prefers internal
+domain-oriented packages and does not expose a generic public `frameforge` package. Contracts shared
+with Go are language-neutral and must not depend on Python package naming.
 
 Blocks: resolved for T100; Phase 0 baseline tasks remain required before application scaffold.
 
-## OQ-13 — Python version split for legacy ML/container
+## OQ-13 — Runtime/language topology
 
 **Question**
 
-Should all packages/containers standardize on Python 3.13, or keep V1/ML container on 3.12 while Product/API development uses 3.13?
+Which implementation language and runtime boundaries apply to the V2 Product API/control plane,
+media workers, ML/AI workers and frozen V1 compatibility workloads?
 
-**Why it matters**
+**Historical decision — SUPERSEDED — 2026-08-16**
 
-Master specifies Arch + uv + Python 3.13. Upstream supports 3.13 in CI, but its Dockerfile intentionally uses 3.12 for ML wheel compatibility.
+The earlier T000 decision recorded Product/API/core in Python 3.13 and frozen legacy/ML in Python
+3.12. It remains in decision history as `D-T000-013`, but it is no longer normative and must not
+be used to select the Product API implementation.
 
-**Option A — Python 3.13 everywhere**
+**Current owner decision — SUPERSEDING — 2026-08-16**
 
-Pros: one runtime; exactly follows master setup.
+1. V2 Product API/control plane is Go and must not depend on Python. It owns HTTP, auth/authorization
+   integration, Workspace/Project/Asset/Job orchestration, PostgreSQL repositories, Redis
+   coordination/queue adapter, object-storage orchestration, scheduling, progress/events and
+   rate/resource admission control.
+2. Pin a currently supported stable Go release in T002/environment/CI/production; no floating
+   `latest` toolchain is allowed. Initial module path is `github.com/nhathao-nguyen/FrameForge`
+   unless validation finds a concrete repository/module blocker. Prefer internal domain-oriented Go
+   packages; do not create a global public `frameforge` package.
+3. Prefer Go for V2 media-only workers responsible for input/download, FFmpeg subprocess
+   orchestration, progress parsing, output validation and Artifact upload. FFmpeg remains the native
+   codec/media process; Go does not reimplement codecs.
+4. Python is isolated to ML/AI compute workers and frozen V1 compatibility workloads. Start ML at
+   Python 3.12 where required by the verified ML/CUDA matrix; move V2 ML to 3.13 only after parity
+   evidence. Frozen V1 runtime/dependencies remain unchanged for compatibility and rollback.
+5. Go and Python communicate only through versioned language-neutral JSON/Protobuf/schema envelopes.
+   Durable/public contracts must not use pickle, gob, framework model serialization, in-process
+   Python embedding or shared ORM objects.
+6. Implementation language is replaceable. API/schema/event/state-machine/worker/artifact/error
+   semantics remain language-neutral; a Go/Python/Rust change is not permission to redesign those
+   boundaries.
+7. Product API must never run long-running rendering, FFmpeg, transcription, ML inference or other
+   expensive compute inline in an HTTP request. Use durable Job transaction → outbox/queue → bounded
+   worker → execution → Artifact commit → durable result/state update, with explicit limits,
+   lease/timeout, cancellation, retry/idempotency and progress.
 
-Cons: optional ML/CUDA wheels may fail or require different pins/builds; must be proven, not assumed.
-
-**Option B — Product/API/core 3.13; frozen legacy/ML image 3.12 temporarily**
-
-Pros: honors development target while preserving upstream container compatibility and strangler isolation.
-
-Cons: two runtime matrices/lock groups and serialization boundary discipline.
-
-**Option C — Python 3.12 everywhere initially**
-
-Pros: closest to upstream image/ML availability.
-
-Cons: contradicts explicit master development recommendation without sufficient need for Product/API.
-
-**Recommendation**
-
-Option B until Phase 0 dependency/ML matrix proves A. Record separate locks/images and remove split when 3.13 parity passes.
-
-**Decision status:** DECIDED — 2026-08-16
+**Decision status:** DECIDED — SUPERSEDING OWNER DECISION — 2026-08-16
 
 **Decision owner:** repository owner
 
-**Decision:** Product/API/core target Python 3.13. The frozen legacy/ML image temporarily uses
-Python 3.12 with separate locks/images. Merge the runtimes only after Phase 0 proves dependency,
-ML and CUDA parity on Python 3.13.
-
-Blocks: resolved for T002; the separate runtime/lock/image evidence is still required by Phase 0.
+Blocks: resolved for language topology and T002/T100 planning. OQ-01–OQ-11 still govern their own
+dependent tasks; implementation remains blocked by the Phase 0 gate.
 
 ## OQ-14 — Frozen V1 compatibility profile breadth
 
