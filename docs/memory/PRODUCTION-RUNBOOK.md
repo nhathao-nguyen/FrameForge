@@ -14,7 +14,7 @@ and deployment tasks. Never put secrets or presigned URLs in this file.
 
 | Environment | Purpose | Required state |
 |---|---|---|
-| Local/dev | docs and unit/integration development | uv-managed Python, pinned FFmpeg, private disposable PostgreSQL/Redis/MinIO |
+| Local/dev | docs and unit/integration development | pinned Go control-plane toolchain, isolated uv-managed Python ML/V1 environment, pinned FFmpeg, private disposable PostgreSQL/Redis/MinIO |
 | Staging | production-like acceptance | pinned images, private object storage, sandboxed worker, seeded test fixtures |
 | Canary | limited production traffic | feature flag, metrics/alerts, rollback command tested |
 | Production | approved release | all phase evidence, backup/restore drill, owner sign-off and compatibility gate |

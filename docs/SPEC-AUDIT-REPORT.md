@@ -14,6 +14,13 @@ retained in history but superseded by Go Product/control plane, bounded Go media
 isolated Python ML/V1 workloads with language-neutral contracts. OQ-01–OQ-11 remain `OPEN` and
 block only their dependent work.
 
+Post-T000 consistency repair: 2026-08-16. The task ledger now explicitly uses the approved
+Go/Python/Arch matrix and exact T100 layout, T106 is the Go Product API shell, CURRENT-STATE and
+decision/memory mirrors reflect T001 complete and T002 next, and the T001 baseline labels its old
+Python Product/API wording as historical. Remaining matches for Python 3.13 are future ML parity,
+frozen V1/upstream evidence or superseded decision history; no stale V2 Product API assumption
+remains.
+
 ## Critical issues
 
 No unresolved critical contradiction remains between the master plan, domain, PostgreSQL, REST, pipeline, Timeline, events, security, migration and implementation order.

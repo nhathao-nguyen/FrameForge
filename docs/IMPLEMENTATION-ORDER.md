@@ -77,17 +77,20 @@ Every task has the required handoff fields. A dependency marked `OQ-x decided` i
 
 ### T100 — Create approved Go/control-plane and compute package skeleton
 
-- **Goal:** establish web/desktop clients, Go `cmd/` + `internal/` control-plane/media-worker boundaries,
-  isolated Python ML/V1 worker boundaries, `packages/contracts`, `packages/sdk`, `infra` and tests.
-- **Files/modules affected:** new package/layout metadata only; legacy `references/movie-narrator` untouched.
+- **Goal:** establish the approved client/server layout: `apps/web`, `apps/desktop`,
+  `cmd/product-api`, `cmd/media-worker`, `internal/domain`, `internal/application`, `internal/ports`,
+  `internal/adapters`, `internal/transport/http`, `services/ml-worker`, `services/legacy-compat`,
+  `packages/contracts`, `packages/sdk`, `infra` and `tests`.
+- **Files/modules affected:** new package/layout metadata only for the listed boundaries; legacy
+  `references/movie-narrator` untouched.
 - **Dependencies:** T005; OQ-12 decided.
 - **Implementation notes:** Go module path starts at `github.com/nhathao-nguyen/FrameForge`; prefer
   `internal/domain`, `internal/application`, `internal/ports`, `internal/adapters`, `internal/transport/http`.
   Python packages use `nh_media`; frozen code keeps `movie_narrator`. No media/domain implementation.
 - **Tests required:** Go module/test, client/package checks, Python boundary/import checks, forbidden
   dependency checks, language-neutral contract fixtures and V1 baseline still clean.
-- **Definition of Done:** skeleton boundaries prove Go control plane, Go media, Python ML/V1 and clients
-  are replaceable and cannot depend on each other's internals.
+- **Definition of Done:** the exact approved layout exists with boundary tests proving Go control
+  plane, Go media, Python ML/V1 and clients are replaceable and cannot depend on each other's internals.
 
 ### T101 — Add shared identity/time/error contract primitives
 

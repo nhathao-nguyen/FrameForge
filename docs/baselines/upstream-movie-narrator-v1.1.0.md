@@ -65,6 +65,13 @@ At the frozen commit:
   `movie_narrator*` package namespace. V2 must keep that namespace behind the
   legacy adapter rather than exposing it as the new product namespace.
 
+**Historical/supersession note:** the Product/API/core Python 3.13 wording above records the
+pre-amendment OQ-13 context at the time this T001 evidence was created. It is not the current V2
+architecture. The owner superseded OQ-13 on 2026-08-16: V2 Product API/control plane is Go, Go
+media workers are preferred, and Python 3.12 remains isolated to ML/AI and frozen V1 compatibility.
+This note does not change the frozen V1 evidence, commit/tree/tag identity, runtime evidence or
+rollback baseline recorded in this document.
+
 ## Verification performed
 
 Commands run from the NH-Media repository on 2026-08-16:

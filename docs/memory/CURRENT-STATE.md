@@ -30,7 +30,7 @@ repository-host configuration step, not performed by this local-only task.
 ## Gate and phase
 
 - **Specification audit:** `READY` according to [`../SPEC-AUDIT-REPORT.md`](../SPEC-AUDIT-REPORT.md).
-- **Documentation gate:** T000/Phase -1 ratified by owner on 2026-08-16.
+- **Documentation gate:** T000/Phase -1 ratified and amended by owner on 2026-08-16.
 - **Application implementation:** still blocked until T002–T005/Phase 0 evidence passes; then T100
   is eligible because OQ-12 is decided.
 - **Current work:** T000 architecture amendment, documentation/evidence-only; no T001 restart.

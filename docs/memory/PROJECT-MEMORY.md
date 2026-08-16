@@ -86,7 +86,7 @@ must be recorded in [`CHANGELOG.md`](CHANGELOG.md), then repaired before depende
 ## Things agents must not do
 
 Do not implement `apps/`, `services/`, `packages/`, `cmd/`, `internal/`, migrations, runtime/API/
-frontend/desktop/worker behavior, or provider integrations before T001–T005/Phase 0 evidence and the
+frontend/desktop/worker behavior, or provider integrations before the remaining T002–T005/Phase 0 evidence and the
 task prerequisites pass. Do not create `go.mod` during the T000 amendment. Do not merge `main` implicitly,
 push `develop` without owner request, infer OQ recommendations as decisions, expose raw paths,
 secrets or tracebacks, or mutate the frozen V1 reference to make a baseline pass.

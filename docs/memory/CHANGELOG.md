@@ -20,9 +20,9 @@ owner: repository owner / task assignee
 - Added [`../SETUP-PLAN.md`](../SETUP-PLAN.md), [`../PRODUCTION-PLAN.md`](../PRODUCTION-PLAN.md)
   and [`../PRODUCTION-EXECUTION-PROMPT.md`](../PRODUCTION-EXECUTION-PROMPT.md), with multi-pass
   setup certification and production release gates.
-- Recorded owner approval for T000: `nh_media` namespace, Python 3.13 core + temporary 3.12
-  legacy/ML split, full verified V1 compatibility and Tauri 2 desktop client. T001 is now next;
-  application code remains blocked until T001–T005 pass.
+- Historical pre-amendment record: owner approved T000 with `nh_media`, Python 3.13 core + temporary
+  3.12 legacy/ML split, full verified V1 compatibility and Tauri 2 desktop client. This entry is
+  retained for history; the later amendment superseded the Product/API Python assumption.
 - Completed T001 with an immutable upstream baseline for `references/movie-narrator`: exact
   commit/tree/tag/remote/license/runtime/tracked-inventory evidence is in
   [`../baselines/upstream-movie-narrator-v1.1.0.md`](../baselines/upstream-movie-narrator-v1.1.0.md).
