@@ -25,8 +25,8 @@ defaults when a task is authorized.
 | ID | Task | Dependency / status | Evidence | Compatibility / rollback | Next |
 |---|---|---|---|---|---|
 | T000 | Ratify specification decisions | complete — owner approved 2026-08-16 | user approval + docs/spec/memory update | V1 unchanged; docs-only | T001 |
-| T001 | Record immutable upstream baseline manifest | pending — T000 complete | none | preserve frozen V1; rollback image later | T002 |
-| T002 | Build reproducible Arch/uv environment matrix | blocked by T001 | none | Product/core 3.13; frozen legacy/ML 3.12 | T003 |
+| T001 | Record immutable upstream baseline manifest | complete — 2026-08-16 | [`../baselines/upstream-movie-narrator-v1.1.0.md`](../baselines/upstream-movie-narrator-v1.1.0.md); upstream ref/tree/tag/status/inventory checks | frozen V1 source recorded; rollback image remains T005 | T002 |
+| T002 | Build reproducible Arch/uv environment matrix | pending — T001 complete | none | Product/core 3.13; frozen legacy/ML 3.12 | T003 |
 | T003 | Freeze V1 compatibility profile | blocked by T001–T002 | none | all verified V1 CLI/REST surfaces preserved | T004 |
 | T004 | Produce V1 golden media outputs | blocked by T001–T003 | none | golden outputs protect V1 parity | T005 |
 | T005 | Freeze runnable V1 rollback image | blocked by T001–T004 | none | required rollback target; no image yet | T100 |

@@ -33,21 +33,22 @@ repository-host configuration step, not performed by this local-only task.
 - **Documentation gate:** T000/Phase -1 ratified by owner on 2026-08-16.
 - **Application implementation:** still blocked until T001–T005/Phase 0 evidence passes; then T100
   is eligible because OQ-12 is decided.
-- **Current work:** T000 decision recording and transition to V1 baseline, documentation-only.
-- **Next authorized task:** T001 — Record immutable upstream baseline manifest.
+- **Current work:** T001 immutable V1 upstream baseline manifest, documentation/evidence-only.
+- **Next authorized task:** T002 — Build reproducible Arch/uv environment matrix.
 
 ## Open blockers
 
 - OQ-01 through OQ-11 remain `OPEN`; OQ-12–OQ-15 are `DECIDED` on 2026-08-16.
-- T000 owner sign-off is complete; T001–T005 evidence is still missing.
-- Phase 0 evidence does not yet exist in `docs/baselines/`.
+- T000 owner sign-off is complete; T001 is complete; T002–T005 evidence is still missing.
+- The T001 upstream baseline is recorded in [`../baselines/upstream-movie-narrator-v1.1.0.md`](../baselines/upstream-movie-narrator-v1.1.0.md).
 - V1 compatibility profile, golden media outputs and rollback image are not yet produced.
 - No V2 application code, infrastructure runtime, CI gate or production deployment exists.
 
 ## Evidence currently available
 
 - Complete documentation set, consistency matrix and audit report at the baseline commit.
-- Existing upstream/module audit identifies V1 behavior and frozen commit `bc2d276`.
+- Existing upstream/module audit identifies V1 behavior; T001 freezes commit `bc2d276` with
+  commit/tree/tag/license/runtime evidence.
 - This memory foundation and its consistency checker are documentation/evidence tooling only.
 - Setup/production plans now define V0–V10 setup certification, desktop client gates and the full
   phase/release path; no setup or production runtime evidence exists yet.
@@ -55,12 +56,12 @@ repository-host configuration step, not performed by this local-only task.
 ## Handoff
 
 ```text
-Task: T000 — Ratify specification decisions
-Status: complete — owner approved 2026-08-16
-Implemented boundary: ratified namespace/runtime/compatibility/desktop decisions; updated specs, plans and memory
-Tests: git baseline audit; documentation consistency; tools/check_memory.py with plan/OQ/task checks
-Compatibility: no V1 files or contracts changed; desktop is a client-only extension
+Task: T001 — Record immutable upstream baseline manifest
+Status: complete — baseline recorded 2026-08-16
+Implemented boundary: recorded exact V1 commit/tree/tags/remote/license/runtime/inventory evidence in docs/baselines
+Tests: upstream status/ref/tree/inventory/diff checks; documentation consistency; tools/check_memory.py
+Compatibility: no V1 files or contracts changed; frozen source remains behind the legacy adapter
 Security: no secrets, presigned URLs, user data or durable local paths stored
 Open questions: OQ-01–OQ-11 remain OPEN; OQ-12–OQ-15 are DECIDED
-Next task: T001 — Record immutable upstream baseline manifest
+Next task: T002 — Build reproducible Arch/uv environment matrix
 ```

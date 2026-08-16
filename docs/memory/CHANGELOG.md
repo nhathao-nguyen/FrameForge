@@ -23,10 +23,14 @@ owner: repository owner / task assignee
 - Recorded owner approval for T000: `nh_media` namespace, Python 3.13 core + temporary 3.12
   legacy/ML split, full verified V1 compatibility and Tauri 2 desktop client. T001 is now next;
   application code remains blocked until T001–T005 pass.
+- Completed T001 with an immutable upstream baseline for `references/movie-narrator`: exact
+  commit/tree/tag/remote/license/runtime/tracked-inventory evidence is in
+  [`../baselines/upstream-movie-narrator-v1.1.0.md`](../baselines/upstream-movie-narrator-v1.1.0.md).
+  The upstream worktree and index were clean and no V1 file was changed.
 - No application code, V1 source, migration, runtime, API, frontend or worker implementation was
   added.
 
 ## Next update
 
-T000 is now ratified. T001 is the next eligible task; T001–T005/Phase 0 evidence must pass before
-any application task is marked eligible.
+T000 is ratified and T001 is complete. T002 is the next eligible task; T002–T005/Phase 0 evidence
+must pass before any application task is marked eligible.
