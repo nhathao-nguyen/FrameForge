@@ -21,6 +21,11 @@ Python Product/API wording as historical. Remaining matches for Python 3.13 are 
 frozen V1/upstream evidence or superseded decision history; no stale V2 Product API assumption
 remains.
 
+Post-T001 baseline/table repair: 2026-08-16. The T001 runtime section now explicitly identifies
+the former Python Product/API decision as historical and names `D-T000-013-SUPERSEDING` as the
+current owner decision. The requested D-T000-012 and D-T000-013-SUPERSEDING rows are each complete
+six-cell Markdown rows; parser validation passed without changing decision semantics.
+
 ## Critical issues
 
 No unresolved critical contradiction remains between the master plan, domain, PostgreSQL, REST, pipeline, Timeline, events, security, migration and implementation order.

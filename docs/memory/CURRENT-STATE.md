@@ -33,8 +33,10 @@ repository-host configuration step, not performed by this local-only task.
 - **Documentation gate:** T000/Phase -1 ratified and amended by owner on 2026-08-16.
 - **Application implementation:** still blocked until T002–T005/Phase 0 evidence passes; then T100
   is eligible because OQ-12 is decided.
-- **Current work:** T000 architecture amendment, documentation/evidence-only; no T001 restart.
-- **Next authorized task:** T002 — Build reproducible Go/Python/Arch environment matrix, only after this amendment passes consistency review.
+- **Current work:** post-T000/T001 documentation consistency repair, evidence-only; T000 is complete
+  and amended, and T001 is complete with no restart.
+- **Next authorized task:** T002 — Build reproducible Go/Python/Arch environment matrix, only after
+  this repair passes consistency review.
 
 ## Open blockers
 
@@ -61,12 +63,12 @@ repository-host configuration step, not performed by this local-only task.
 ## Handoff
 
 ```text
-Task: T000 amendment — Supersede Product/API runtime decision
-Status: complete — owner amended 2026-08-16
-Implemented boundary: Go control plane, bounded worker topology, isolated Python ML/V1 and language-neutral contracts recorded across normative docs
-Tests: documentation/link/terminology audit; decision-history review; application-source absence check; tools/check_memory.py
+Task: post-T000/T001 consistency repair
+Status: complete — baseline history clarified 2026-08-16
+Implemented boundary: T001 baseline now separates historical Python Product/API wording from the normative Go control-plane topology; decision history remains intact
+Tests: documentation/link/terminology audit; six-cell decision-row parser; stale-string audit; application-source absence check; tools/check_memory.py
 Compatibility: no V1 files or contracts changed; T001 baseline remains valid and was not restarted
 Security: no secrets, presigned URLs, user data or durable local paths stored
 Open questions: OQ-01–OQ-11 remain OPEN; OQ-12–OQ-15 are DECIDED
-Next task: T002 — Build reproducible Go/Python/Arch environment matrix, after amendment acceptance
+Next task: T002 — Build reproducible Go/Python/Arch environment matrix, after repair acceptance
 ```

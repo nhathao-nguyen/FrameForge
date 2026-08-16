@@ -58,19 +58,21 @@ At the frozen commit:
 - `LICENSE` is the GNU Affero General Public License, version 3, and must be
   retained with attribution in any compatible distribution or derivative
   handling covered by the license.
-- The legacy container declares `PYTHON_VERSION=3.12`; this is the frozen
-  legacy/ML runtime for the approved OQ-13 split. Product/API/core uses a
-  separate Python 3.13 lock/image and is not coupled to this environment.
+- The legacy container declares `PYTHON_VERSION=3.12`; this is the frozen V1
+  legacy/ML runtime recorded at the baseline commit.
+- **Historical decision note:** At the time T001 was originally recorded, the
+  then-current OQ-13 decision assigned Python 3.13 to Product/API/core.
+- That decision was subsequently superseded on 2026-08-16 by
+  `D-T000-013-SUPERSEDING`.
+- **Current normative topology:** Product API/control plane is Go; Python 3.12
+  is isolated to ML/AI and frozen V1 compatibility; the V1 runtime/dependency
+  evidence in this baseline remains unchanged.
 - The V1 repository advertises Python `>=3.10` and includes the legacy
   `movie_narrator*` package namespace. V2 must keep that namespace behind the
   legacy adapter rather than exposing it as the new product namespace.
 
-**Historical/supersession note:** the Product/API/core Python 3.13 wording above records the
-pre-amendment OQ-13 context at the time this T001 evidence was created. It is not the current V2
-architecture. The owner superseded OQ-13 on 2026-08-16: V2 Product API/control plane is Go, Go
-media workers are preferred, and Python 3.12 remains isolated to ML/AI and frozen V1 compatibility.
-This note does not change the frozen V1 evidence, commit/tree/tag identity, runtime evidence or
-rollback baseline recorded in this document.
+The historical note above does not change the frozen V1 evidence, commit/tree/tag identity,
+runtime evidence or rollback baseline recorded in this document.
 
 ## Verification performed
 
