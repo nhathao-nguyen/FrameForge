@@ -27,6 +27,12 @@ the former Python Product/API decision into a non-normative historical note and 
 D-T000-013-SUPERSEDING decisions are each represented by one complete six-cell Markdown row;
 parser validation passed without changing decision semantics.
 
+Final documentation consistency repair: 2026-08-16. The current files were checked directly:
+the decision-table parser found every decision row to have six cells, T000 and T001 are complete,
+T002 is pending and not started, OQ-01–OQ-11 remain `OPEN`, and OQ-12–OQ-15 are `DECIDED`. The
+T001 Python 3.13 statement remains only under its explicit non-normative historical heading and
+is superseded by the Go control-plane decision.
+
 ## Critical issues
 
 No unresolved critical contradiction remains between the master plan, domain, PostgreSQL, REST, pipeline, Timeline, events, security, migration and implementation order.
@@ -153,7 +159,8 @@ Residual risks are implementation/test obligations in T224, T313, T600–T602, n
 
 - Phase 0 baseline evidence and the implementation-order gate still prohibit application code.
 - T000 owner ratification/amendment is complete; T001 was already completed before this amendment and
-  was not restarted; T002 is next only after amendment consistency acceptance.
+  was not restarted; T002 is next only after final documentation consistency acceptance and has not
+  started.
 - OQ-12/OQ-13/OQ-14/OQ-15 are decided; OQ-01–OQ-11 continue to block only their dependent tasks.
 - Each later task lists specific OQ and prior-task dependencies; agents must not infer a recommendation as approval.
 - `.agents/skills/` is absent; this is not a blocker because AGENTS routes agents to canonical docs.
@@ -174,6 +181,6 @@ All required scenarios A–H have complete traces in `SPEC-CONSISTENCY-MATRIX.md
 ## Final recommendation
 
 Accept the specification set as **READY**, keep application code blocked, and proceed with T002 only
-after this T000 amendment's documentation/link/consistency evidence passes. T001's immutable upstream
+after this final documentation/link/consistency evidence passes. T001's immutable upstream
 baseline is already recorded and was not restarted. Do not begin Product scaffold/Phase 1 until the
 Go/Python environment matrix, compatibility profile, golden outputs and rollback image are complete.

@@ -31,12 +31,12 @@ repository-host configuration step, not performed by this local-only task.
 
 - **Specification audit:** `READY` according to [`../SPEC-AUDIT-REPORT.md`](../SPEC-AUDIT-REPORT.md).
 - **Documentation gate:** T000/Phase -1 ratified and amended by owner on 2026-08-16.
-- **Application implementation:** still blocked until T002–T005/Phase 0 evidence passes; then T100
-  is eligible because OQ-12 is decided.
-- **Current work:** post-T000/T001 documentation consistency repair, evidence-only; T000 is complete
-  and amended, and T001 is complete with no restart.
+- **Application implementation:** remains blocked through T002–T005/Phase 0 and Gate A evidence;
+  then T100 is eligible because OQ-12 is decided.
+- **Current work:** final documentation consistency repair is complete; T000 is complete and
+  amended, T001 is complete with no restart, and T002 has not started.
 - **Next authorized task:** T002 — Build reproducible Go/Python/Arch environment matrix, only after
-  this repair passes consistency review.
+  final documentation consistency checks pass.
 
 ## Open blockers
 
@@ -63,12 +63,12 @@ repository-host configuration step, not performed by this local-only task.
 ## Handoff
 
 ```text
-Task: post-T000/T001 consistency repair
-Status: complete — baseline history clarified 2026-08-16
-Implemented boundary: T001 baseline now separates historical Python Product/API wording from the normative Go control-plane topology; decision history remains intact
-Tests: documentation/link/terminology audit; six-cell decision-row parser; stale-string audit; application-source absence check; tools/check_memory.py
+Task: final documentation consistency repair
+Status: complete — T000/T001 state and decision-row validation confirmed 2026-08-16
+Implemented boundary: final memory state records T000/T001 complete and T002 next; decision rows remain six-cell single-line Markdown rows; T001 historical Python wording remains non-normative
+Tests: direct six-cell decision-row parser; documentation/link/terminology audit; stale state audit; application-source absence check; tools/check_memory.py
 Compatibility: no V1 files or contracts changed; T001 baseline remains valid and was not restarted
 Security: no secrets, presigned URLs, user data or durable local paths stored
 Open questions: OQ-01–OQ-11 remain OPEN; OQ-12–OQ-15 are DECIDED
-Next task: T002 — Build reproducible Go/Python/Arch environment matrix, after repair acceptance
+Next task: T002 only — Build reproducible Go/Python/Arch environment matrix; not started in this task
 ```
