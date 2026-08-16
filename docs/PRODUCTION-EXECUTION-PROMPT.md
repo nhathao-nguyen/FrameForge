@@ -44,9 +44,10 @@ Luật quyết định:
 - Không coi recommendation trong OPEN-QUESTIONS.md là decision.
 - Nếu task phụ thuộc OQ đang OPEN, dừng phần bị ảnh hưởng, ghi blocker/handoff và không tự chọn
   production default.
-- OQ-15 phải được quyết định trước khi triển khai desktop shell/package. Recommendation Tauri 2
-  không được dùng như decision nếu owner chưa approve.
-- Không viết application code trước khi T000/Phase -1 được owner approve.
+- OQ-15 đã được quyết định là Tauri 2. Giữ capability least-privilege; không bundle Python, FFmpeg,
+  ML/database/Redis/engine/provider secret; signing/update proof vẫn là release gate.
+- Chỉ viết application code khi CURRENT-STATE và DECISIONS xác nhận T000/Phase -1 đã complete;
+  sau đó vẫn phải hoàn thành T001–T005 trước T100.
 
 Quy trình cho mỗi task:
 1. Kiểm tra git branch/status/commit và đọc CURRENT-STATE.

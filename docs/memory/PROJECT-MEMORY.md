@@ -80,7 +80,8 @@ must be recorded in [`CHANGELOG.md`](CHANGELOG.md), then repaired before depende
 ## Things agents must not do
 
 Do not implement `apps/`, `services/`, `packages/`, migrations, runtime/API/frontend/desktop/worker
-behavior, or provider integrations before T000/Phase -1 approval. Do not merge `main` implicitly,
+behavior, or provider integrations before T001–T005/Phase 0 evidence and the task prerequisites
+pass. Do not merge `main` implicitly,
 push `develop` without owner request, infer OQ recommendations as decisions, expose raw paths,
 secrets or tracebacks, or mutate the frozen V1 reference to make a baseline pass.
 

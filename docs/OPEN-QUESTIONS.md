@@ -1,6 +1,9 @@
 # Open Questions
 
-Recommendation is not an approved decision. Owner must replace `OPEN` with a dated decision and update affected specs/tasks before dependent implementation. Architectural invariants already fixed by the master plan are not reopened here.
+Recommendation is not an approved decision. Owner must replace `OPEN` with a dated decision and
+update affected specs/tasks before dependent implementation. `DECIDED` entries below record the
+owner decision and remain subject to their implementation evidence. Architectural invariants already
+fixed by the master plan are not reopened here.
 
 ## OQ-01 — Product identity provider
 
@@ -430,9 +433,15 @@ Cons: generic/collision risk and may not fit publishing.
 
 Option B. Until decided, docs use conceptual `services/engine`; do not create placeholder application package.
 
-**Decision status:** OPEN
+**Decision status:** DECIDED — 2026-08-16
 
-Blocks: first application scaffold task T100. Does not block Phase 0 baseline tasks.
+**Decision owner:** repository owner
+
+**Decision:** Use `nh_media` as the V2 Python/package namespace. Do not use `your_engine`,
+`video_engine` or `frameforge` as the public V2 namespace at this time. Keep the legacy
+`movie_narrator` namespace unchanged.
+
+Blocks: resolved for T100; Phase 0 baseline tasks remain required before application scaffold.
 
 ## OQ-13 — Python version split for legacy ML/container
 
@@ -466,9 +475,15 @@ Cons: contradicts explicit master development recommendation without sufficient 
 
 Option B until Phase 0 dependency/ML matrix proves A. Record separate locks/images and remove split when 3.13 parity passes.
 
-**Decision status:** OPEN
+**Decision status:** DECIDED — 2026-08-16
 
-Blocks: T011 environment lock/image policy; not documentation audit.
+**Decision owner:** repository owner
+
+**Decision:** Product/API/core target Python 3.13. The frozen legacy/ML image temporarily uses
+Python 3.12 with separate locks/images. Merge the runtimes only after Phase 0 proves dependency,
+ML and CUDA parity on Python 3.13.
+
+Blocks: resolved for T002; the separate runtime/lock/image evidence is still required by Phase 0.
 
 ## OQ-14 — Frozen V1 compatibility profile breadth
 
@@ -502,9 +517,16 @@ Cons: highest breakage and conflicts with “keep behavior” absent strong evid
 
 Option A for the frozen baseline unless owner can prove unused surfaces and approve B with a deprecation window. Do not choose C by convenience.
 
-**Decision status:** OPEN
+**Decision status:** DECIDED — 2026-08-16
 
-Blocks: Phase 0 compatibility profile and T360–T362; does not block upstream inventory.
+**Decision owner:** repository owner
+
+**Decision:** Option A. Preserve all verified public V1 CLI/REST behavior for the frozen
+compatibility baseline, including batch, schedule, DLQ and distributed surfaces. Any later
+deprecation/removal requires usage evidence, a compatibility replacement, an announced
+owner-approved deprecation window and a rollback path.
+
+Blocks: resolved for T003/T360–T362; T003 must still produce the executable profile and evidence.
 
 ## OQ-15 — Desktop client shell/runtime
 
@@ -542,7 +564,13 @@ Option A for a lightweight remote-first client, subject to owner approval and a 
 The desktop client must remain a Product API client; it must not embed the engine or become a second
 business backend.
 
-**Decision status:** OPEN
+**Decision status:** DECIDED — 2026-08-16
 
-Blocks: T433–T434 desktop shell/package implementation; does not block Product API contracts, web
-client setup or remote server architecture.
+**Decision owner:** repository owner
+
+**Decision:** Use Tauri 2 for the first-class desktop client. It is a lightweight remote-first
+Product API client and must not bundle Python, FFmpeg, ML runtime, database, Redis, engine or
+provider secrets. Tauri capabilities are least-privilege; signing and update policy require proof
+before production release.
+
+Blocks: resolved for T433–T434; signing/update/permission evidence remains a task acceptance gate.

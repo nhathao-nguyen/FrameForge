@@ -1,6 +1,8 @@
 # Implementation Order
 
-No task below is authorized by the current documentation-only audit. After owner accepts the gate, assign one task/PR at a time. Paths are prospective and must use the namespace approved in OQ-12.
+T000 was ratified by the owner on 2026-08-16. T001–T005 are now the next eligible documentation/
+baseline tasks; application code remains blocked until Gate A/Phase 0 evidence passes. After that,
+assign one task/PR at a time. Paths use the approved `nh_media` namespace.
 
 Every task has the required handoff fields. A dependency marked `OQ-x decided` is a hard block; recommendation is not a decision.
 
@@ -11,9 +13,12 @@ Every task has the required handoff fields. A dependency marked `OQ-x decided` i
 - **Goal:** owner reviews audit and records decisions needed for Phase 0/first scaffold.
 - **Files/modules affected:** docs only: `OPEN-QUESTIONS.md`, affected specs, optional ADRs.
 - **Dependencies:** specification audit complete.
-- **Implementation notes:** preserve master invariants; replace `OPEN` with dated decision/owner; update dependent contract, not only OQ text.
+- **Implementation notes:** preserve master invariants; replace affected `OPEN` entries with dated
+  decision/owner; record `nh_media`, the Python 3.13/3.12 split, all verified V1 surfaces and Tauri
+  2 in dependent contracts, not only OQ text.
 - **Tests required:** link/terminology/consistency checks; confirm no application source diff.
-- **Definition of Done:** Phase -1 acceptance signed; OQ-12/OQ-13 and Phase 0 compatibility policy decisions recorded.
+- **Definition of Done:** Phase -1 acceptance signed; OQ-12/OQ-13/OQ-14/OQ-15 decisions recorded;
+  affected specs, memory and task dependencies updated; no application source diff.
 
 ### T001 — Record immutable upstream baseline manifest
 

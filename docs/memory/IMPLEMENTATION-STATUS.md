@@ -8,13 +8,14 @@ owner: repository owner / task assignee
 
 The normative task definitions, dependencies and definitions of done are in
 [`../IMPLEMENTATION-ORDER.md`](../IMPLEMENTATION-ORDER.md). This ledger intentionally records no
-application implementation: the current documentation-only audit has not authorized any task.
+application implementation: T000 is complete, and only the documentation/baseline tasks T001–T005
+are now eligible. Application implementation remains blocked until Gate A/Phase 0 passes.
 
 ## Status vocabulary
 
 - `pending` — eligible only after listed prerequisites and owner approval.
 - `blocked` — cannot start because a gate or hard OQ dependency is unresolved.
-- `complete` — evidence and handoff are recorded; no task is `complete` below.
+- `complete` — evidence and handoff are recorded.
 
 For every row, `Evidence` is currently `none (documentation-only baseline)`, `Compatibility` is
 `V1 unchanged`, and `Rollback` is `not applicable before implementation` unless the row explicitly
@@ -23,13 +24,13 @@ defaults when a task is authorized.
 
 | ID | Task | Dependency / status | Evidence | Compatibility / rollback | Next |
 |---|---|---|---|---|---|
-| T000 | Ratify specification decisions | audit READY; pending owner approval | none | V1 unchanged; docs-only | T001 |
-| T001 | Record immutable upstream baseline manifest | blocked by T000 | none | preserve frozen V1; rollback image later | T002 |
-| T002 | Build reproducible Arch/uv environment matrix | blocked by T000 and OQ-13 | none | preserve V1 environment; rollback to baseline | T003 |
-| T003 | Freeze V1 compatibility profile | blocked by T001–T002 and OQ-14 | none | frozen profile becomes rollback contract | T004 |
+| T000 | Ratify specification decisions | complete — owner approved 2026-08-16 | user approval + docs/spec/memory update | V1 unchanged; docs-only | T001 |
+| T001 | Record immutable upstream baseline manifest | pending — T000 complete | none | preserve frozen V1; rollback image later | T002 |
+| T002 | Build reproducible Arch/uv environment matrix | blocked by T001 | none | Product/core 3.13; frozen legacy/ML 3.12 | T003 |
+| T003 | Freeze V1 compatibility profile | blocked by T001–T002 | none | all verified V1 CLI/REST surfaces preserved | T004 |
 | T004 | Produce V1 golden media outputs | blocked by T001–T003 | none | golden outputs protect V1 parity | T005 |
 | T005 | Freeze runnable V1 rollback image | blocked by T001–T004 | none | required rollback target; no image yet | T100 |
-| T100 | Create approved package skeleton | blocked by Gate A and OQ-12 | none | V1 remains isolated; rollback to no V2 code | T101 |
+| T100 | Create approved package skeleton | blocked by T005/Gate A; OQ-12 decided | none | V1 remains isolated; rollback to no V2 code | T101 |
 | T101 | Add shared identity/time/error primitives | blocked by T100 | none | contracts must not change V1 surface | T102 |
 | T102 | Add configuration and redaction boundary | blocked by T100 | none | preserve V1 config through adapter | T103 |
 | T103 | Provision PostgreSQL dev service | blocked by T100 | none | no V1 state migration yet | T104 |
@@ -76,8 +77,8 @@ defaults when a task is authorized.
 | T340 | Implement SSE progress stream | blocked by T301 and OQ-04 | none | snapshot/replay compatibility; transport rollback | T341 |
 | T341 | Implement optional WebSocket transport | blocked by T340/OQ-04 | none | SSE remains fallback | T350 |
 | T350 | Implement Job/Run/Step/Render commands | blocked by T230/T300/T330 | none | API state matches DB/events; route rollback | T360 |
-| T360 | Implement V1 REST/CLI compatibility gateway | blocked by T003/T321–T350 and OQ-09/OQ-14 | none | frozen V1 contract and rollback route | T361 |
-| T361 | Implement optional batch/schedule/DLQ compatibility | blocked by T360 and OQ-14 | none | preserve only approved profile; deprecation path | T400 |
+| T360 | Implement V1 REST/CLI compatibility gateway | blocked by T003/T321–T350 and OQ-09; OQ-14 decided | none | frozen V1 contract and rollback route | T361 |
+| T361 | Implement optional batch/schedule/DLQ compatibility | blocked by T360; all verified surfaces are in approved profile | none | preserve approved profile; deprecation path | T400 |
 | T400 | Implement DAG validator/activation gate | blocked by Gate E and OQ-11 | none | V1 ordered adapter remains selectable | T401 |
 | T401 | Implement native node runtime conformance | blocked by T400/T300/T330 | none | every native node has V1 rollback policy | T402 |
 | T402 | Register built-in movie recap V2 graph | blocked by T400/T401 and OQ-11 | none | V1 graph remains available | T410 |
@@ -86,8 +87,8 @@ defaults when a task is authorized.
 | T430 | Build frontend shell/API client | blocked by T350/T410 and OQ-04 | none | UI calls Product API only | T431 |
 | T431 | Build Script review editor | blocked by T231/T410/T430 | none | preserve approved ScriptVersion; undo/version | T432 |
 | T432 | Build Timeline/Scene editor slice | blocked by T233/T234/T420/T430 and OQ-08 | none | user overrides survive AI rerun | T500 |
-| T433 | Build desktop client shell/remote session | blocked by T101/T106/T210/T223/T340/T430 and OQ-15 | none | desktop is API-only; no local engine; rollback to previous client | T434 |
-| T434 | Package/secure desktop release baseline | blocked by T433 and OQ-15 | none | signed build/update rollback required; no secrets in binary | T500 |
+| T433 | Build desktop client shell/remote session | blocked by T101/T106/T210/T223/T340/T430; OQ-15 decided | none | desktop is API-only; no local engine; rollback to previous client | T434 |
+| T434 | Package/secure desktop release baseline | blocked by T433; OQ-15 decided | none | signed build/update rollback required; no secrets in binary | T500 |
 | T500 | Implement provider ports/resolver/conformance | blocked by Gate F and OQ-05 | none | provider-agnostic nodes; revoke/fallback | T510 |
 | T510 | Port LLM Script provider/node | blocked by T500/T231/T401 | none | V1 script fallback and provenance | T511 |
 | T511 | Port TTS/Narration node | blocked by T500/T207/T401 | none | V1 narration fallback; artifact reuse | T512 |

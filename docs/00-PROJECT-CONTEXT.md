@@ -55,8 +55,9 @@ Movie recap chỉ là workflow đầu tiên. Về sau có thể thêm documentar
 9. Timeline là nguồn sự thật của renderer, không phải output trực tiếp của AI.
 10. Worker càng stateless càng tốt; media không tin cậy phải chạy trong sandbox.
 11. Không hard-code provider, model hoặc filesystem path.
-12. Giữ namespace `movie_narrator` trong migration; namespace V2 có thể là `your_engine`/tên dự án sau khi chốt.
-13. Giữ regression test V1 và upstream remote/branch baseline.
+12. Giữ namespace `movie_narrator` trong migration; namespace V2 dùng `nh_media`.
+13. Không dùng `your_engine`, `video_engine` hoặc `frameforge` làm public V2 namespace ở thời điểm này.
+14. Giữ regression test V1 và upstream remote/branch baseline.
 
 ## Ranh giới hệ thống
 

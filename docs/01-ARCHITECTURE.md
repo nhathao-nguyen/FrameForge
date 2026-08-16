@@ -58,7 +58,7 @@ Core domain không import FastAPI, Pydantic HTTP models, Redis client, boto3 hay
 ```text
 apps/
   web/                         # Next.js/React, UI only
-  desktop/                     # Native shell + shared client SDK, no business backend
+  desktop/                     # Tauri 2 shell + shared client SDK, no business backend
   api/                         # FastAPI routes, auth, application services
 services/
   engine/

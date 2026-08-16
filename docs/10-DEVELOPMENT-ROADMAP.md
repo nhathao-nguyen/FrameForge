@@ -34,7 +34,8 @@
 
 **Scope:** establish immutable, executable V1 behavior baseline before Product/V2 code.
 
-**Prerequisites:** Phase -1 accepted; OQ-13 runtime matrix decision or explicit split test plan.
+**Prerequisites:** Phase -1 accepted; OQ-13 Option B runtime split is decided and must be evidenced
+by separate Product/core 3.13 and frozen legacy/ML 3.12 locks/images.
 
 **Deliverables:** recorded upstream remote/peeled tag/commit; immutable baseline branch/tag; uv lock/environment report; FFmpeg build report; frozen compatibility profile (CLI/routes/config/status/outputs); golden sample outputs and test report; license/dependency/security exception inventory.
 

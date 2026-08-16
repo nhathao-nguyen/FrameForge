@@ -7,8 +7,8 @@ owner: repository owner / compatibility owner
 # V1/V2 compatibility matrix
 
 This is a target contract and evidence checklist, not a claim that the baseline has already run.
-The frozen V1 profile must be finalized in T003 after OQ-14 is decided. V1 remains unchanged in
-the reference tree at this stage.
+OQ-14 is decided as Option A. T003 must now finalize the executable profile and evidence for every
+verified V1 CLI/REST surface. V1 remains unchanged in the reference tree at this stage.
 
 | V1 surface/behavior | V2 representation | Adapter/gateway rule | Regression evidence | Removal criteria |
 |---|---|---|---|---|

@@ -15,7 +15,7 @@ MinIO or S3-compatible storage
 Docker or Podman optional for infrastructure/sandbox
 Ollama optional for local LLM/VLM
 Node.js/pnpm (web and shared TypeScript client tooling)
-Desktop shell toolchain selected by the client setup gate (Tauri/Electron/native option)
+Rust stable/pinned targets and Tauri 2 tooling for the desktop client
 ```
 
 Không `pip install` vào Python system của Arch, không dùng PEP 668 override và không ghi dependency vào global site-packages.
@@ -24,7 +24,11 @@ Không `pip install` vào Python system của Arch, không dùng PEP 668 overrid
 
 Master plan chọn `uv + Python 3.13 + project virtualenv` cho development. Upstream V1 `pyproject.toml` khai báo Python 3.10–3.13 và CI test cả bốn version; do đó core V1 phải được baseline trên Python 3.13.
 
-Upstream Dockerfile hiện dùng Python 3.12 có chủ ý vì compatibility wheel của ML stack. Việc container V2/ML giữ 3.12 hay chuyển 3.13 là OQ-13; không silently sửa image trước dependency matrix. Product/API package target 3.13 trừ khi owner quyết định khác.
+Upstream Dockerfile hiện dùng Python 3.12 có chủ ý vì compatibility wheel của ML stack. OQ-13 đã
+được quyết định: Product/API/core dùng Python 3.13; frozen legacy/ML image tạm dùng Python 3.12
+với lock/image riêng. Chỉ hợp nhất sau khi Phase 0 chứng minh dependency/ML/CUDA parity trên 3.13.
+Product/core và frozen legacy/ML phải có lock/report/image metadata riêng; không dùng một lockfile
+chung để che khác biệt runtime.
 
 Expected setup contract sau Phase 0 (lệnh cụ thể sẽ được lock bởi task implementation):
 
@@ -63,9 +67,10 @@ Unit tests có thể dùng fake/LocalQueue/LocalStorage nhưng integration gate 
 
 Web và desktop phải dùng chung API contract/SDK. Desktop remote-server mode không yêu cầu Python,
 FFmpeg, model hoặc database trên máy người dùng; các native capability như file picker/download/
-notification phải nằm sau một adapter nhỏ và có permission review. Desktop framework (Tauri 2,
-Electron hoặc native shell) là một setup decision cần owner chốt trước khi tạo shell production;
-khuyến nghị ban đầu là Tauri 2 nếu yêu cầu là client nhẹ, remote-first và không cần nhúng engine.
+notification phải nằm sau một adapter nhỏ và có permission review. Desktop shell đã được owner
+chốt là Tauri 2. Tauri chỉ là remote-first Product API client nhẹ; không bundle
+Python/FFmpeg/ML/database/Redis/engine/provider secret. Capability phải least-privilege và
+signing/update policy phải có proof trước production.
 
 Client profiles phải kiểm thử ít nhất: server URL config theo environment, login/session, direct
 multipart upload, reconnect event stream, download artifact, safe error display và logout/token

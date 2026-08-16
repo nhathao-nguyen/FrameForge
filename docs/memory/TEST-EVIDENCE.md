@@ -12,7 +12,7 @@ commit, report/artifact location, result, limitation and acceptance criterion it
 | Date | Task/check | Command | Environment/commit | Report or artifact | Result | Limitation / acceptance criterion |
 |---|---|---|---|---|---|---|
 | 2026-08-16 | Git baseline | `git status --short --branch`; `git log -1`; branch/merge-base checks | repository; `6ca438f849a645a6c910d722776dcf448064657a` | terminal evidence; [`CURRENT-STATE.md`](CURRENT-STATE.md) | pass | proves clean source before branch creation, local `develop`, no merge-base with `main` |
-| 2026-08-16 | Documentation audit | existing audit report and consistency matrix review | repository; baseline commit | [`../SPEC-AUDIT-REPORT.md`](../SPEC-AUDIT-REPORT.md) | READY with gate blocked | report explicitly says T000/OQ decisions precede application code |
+| 2026-08-16 | Documentation audit/T000 | existing audit report, owner approval and consistency review | repository; baseline commit | [`../SPEC-AUDIT-REPORT.md`](../SPEC-AUDIT-REPORT.md), OQ/spec/memory diff | pass — T000 ratified | OQ-12–OQ-15 decisions recorded; application code remains blocked until T001–T005 |
 | 2026-08-16 | Memory/plan consistency | `python tools/check_memory.py --max-age 30` | repository; `develop` at baseline commit | this directory; terminal output | pass | checks memory/plan links, OQ mirror (including OQ-15), task coverage/dependencies (including T433/T434), canonical-term duplicates, metadata freshness, branch/commit and sensitive data |
 
 ## Not yet run

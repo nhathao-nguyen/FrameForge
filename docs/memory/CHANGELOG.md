@@ -20,10 +20,13 @@ owner: repository owner / task assignee
 - Added [`../SETUP-PLAN.md`](../SETUP-PLAN.md), [`../PRODUCTION-PLAN.md`](../PRODUCTION-PLAN.md)
   and [`../PRODUCTION-EXECUTION-PROMPT.md`](../PRODUCTION-EXECUTION-PROMPT.md), with multi-pass
   setup certification and production release gates.
+- Recorded owner approval for T000: `nh_media` namespace, Python 3.13 core + temporary 3.12
+  legacy/ML split, full verified V1 compatibility and Tauri 2 desktop client. T001 is now next;
+  application code remains blocked until T001–T005 pass.
 - No application code, V1 source, migration, runtime, API, frontend or worker implementation was
   added.
 
 ## Next update
 
-T000 owner ratification must update the root OQs/specs and this memory before any Phase 0 or
-application task is marked eligible.
+T000 is now ratified. T001 is the next eligible task; T001–T005/Phase 0 evidence must pass before
+any application task is marked eligible.

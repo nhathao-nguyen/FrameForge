@@ -58,9 +58,11 @@ database/Redis/engine ports. Workers can move to a second VPS/GPU host without c
 
 Tasks: T000.
 
-Required decisions include namespace (OQ-12), Python split (OQ-13), frozen V1 compatibility breadth
-(OQ-14), auth/Workspace/queue/provider choices where affected, and desktop shell/runtime (OQ-15).
-Update every affected specification, this plan, memory and implementation order together.
+T000 has now recorded namespace `nh_media` (OQ-12), the Product/core 3.13 plus frozen legacy/ML
+3.12 split (OQ-13), all verified V1 compatibility surfaces (OQ-14) and Tauri 2 desktop runtime
+(OQ-15). Auth/Workspace/queue/provider choices remain required when their dependent tasks begin.
+The ratification update must remain synchronized across every affected specification, this plan,
+memory and implementation order.
 
 Exit evidence: owner sign-off, consistency audit, no undocumented contradiction, explicit list of
 remaining non-blocking OQs, and confirmation that no application code was added early.
@@ -133,7 +135,7 @@ packaging/security baseline.
 Build shared SDK/client reducers first, then web navigation/editor slices and the desktop shell.
 Desktop must support remote login, endpoint configuration, direct upload, Job/event reconnect,
 review, Artifact download and safe logout. Add desktop build/package/sign/update policy only after
-OQ-15 approval; signing keys never enter the repo.
+Tauri 2 decision; signing keys never enter the repo.
 
 Exit evidence: web and desktop both pass authorization, upload, reconnect, optimistic concurrency,
 review, edit→resume→render and role-denial e2e tests. Desktop binaries pass clean build, tamper/update

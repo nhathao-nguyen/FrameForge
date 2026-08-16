@@ -30,18 +30,16 @@ repository-host configuration step, not performed by this local-only task.
 ## Gate and phase
 
 - **Specification audit:** `READY` according to [`../SPEC-AUDIT-REPORT.md`](../SPEC-AUDIT-REPORT.md).
-- **Documentation gate:** not owner-ratified; T000 is still pending.
-- **Application implementation:** blocked by `docs/CODEX-INSTRUCTIONS.md` and
-  [`../IMPLEMENTATION-ORDER.md`](../IMPLEMENTATION-ORDER.md).
-- **Current work:** desktop-aware client/server architecture and setup/production plans,
-  documentation-only.
-- **Next authorized task:** T000 owner ratification; then T001 if the gate is accepted.
+- **Documentation gate:** T000/Phase -1 ratified by owner on 2026-08-16.
+- **Application implementation:** still blocked until T001–T005/Phase 0 evidence passes; then T100
+  is eligible because OQ-12 is decided.
+- **Current work:** T000 decision recording and transition to V1 baseline, documentation-only.
+- **Next authorized task:** T001 — Record immutable upstream baseline manifest.
 
 ## Open blockers
 
-- OQ-01 through OQ-15 remain `OPEN`; recommendations are not decisions. OQ-15 was added for the
-  desktop shell/runtime choice and does not block API/contracts or remote-server architecture.
-- T000 owner sign-off is missing.
+- OQ-01 through OQ-11 remain `OPEN`; OQ-12–OQ-15 are `DECIDED` on 2026-08-16.
+- T000 owner sign-off is complete; T001–T005 evidence is still missing.
 - Phase 0 evidence does not yet exist in `docs/baselines/`.
 - V1 compatibility profile, golden media outputs and rollback image are not yet produced.
 - No V2 application code, infrastructure runtime, CI gate or production deployment exists.
@@ -57,12 +55,12 @@ repository-host configuration step, not performed by this local-only task.
 ## Handoff
 
 ```text
-Task: desktop-aware planning foundation (pre-T000)
-Status: complete locally; owner ratification still required for T000
-Implemented boundary: branch metadata, client/server specification, setup/production plans and memory only
-Tests: git baseline audit; tools/check_memory.py with plan/OQ/task checks
+Task: T000 — Ratify specification decisions
+Status: complete — owner approved 2026-08-16
+Implemented boundary: ratified namespace/runtime/compatibility/desktop decisions; updated specs, plans and memory
+Tests: git baseline audit; documentation consistency; tools/check_memory.py with plan/OQ/task checks
 Compatibility: no V1 files or contracts changed; desktop is a client-only extension
 Security: no secrets, presigned URLs, user data or durable local paths stored
-Open questions: OQ-01–OQ-15 remain OPEN; OQ-15 covers desktop shell/runtime
-Next task: T000 — Ratify specification decisions
+Open questions: OQ-01–OQ-11 remain OPEN; OQ-12–OQ-15 are DECIDED
+Next task: T001 — Record immutable upstream baseline manifest
 ```

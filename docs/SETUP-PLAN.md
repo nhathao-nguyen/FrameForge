@@ -13,9 +13,9 @@ API/FastAPI, Engine, Worker, provider, storage và các service mới, với Pro
 có thể chạy trên một server hoặc VPS riêng. Desktop là client remote-first; nó không nhúng engine,
 database, provider hoặc business state.
 
-**Trạng thái:** chưa được thực thi. Repository hiện chỉ có specification, frozen V1 reference,
-memory và consistency tooling. Không tạo application code cho tới khi documentation gate/T000 được
-owner approve.
+**Trạng thái:** T000 đã được owner approve; setup chưa được thực thi. Repository hiện chỉ có
+specification, frozen V1 reference, memory và consistency tooling. Không tạo application code cho
+tới khi T001–T005/Phase 0 evidence hoàn tất.
 
 Setup chỉ được đánh dấu `complete` khi tất cả verification pass và evidence nằm trong
 `docs/baselines/` hoặc `docs/memory/TEST-EVIDENCE.md`. “Các thư mục đã tạo” không đủ để pass setup.
@@ -41,8 +41,8 @@ Desktop ─HTTPS───┴─> Product API (FastAPI)
 - Client upload large media trực tiếp tới object storage bằng presigned URL.
 - Desktop chỉ dùng native capability tối thiểu: file picker, download/export, notification nếu cần.
 - Server là source of truth; local client cache/draft có thể bị xóa và phải reconstruct được.
-- OQ-15 phải được owner quyết định trước khi chọn desktop shell production. Tauri 2 là recommendation,
-  không phải decision.
+- OQ-15 đã được owner quyết định: desktop shell là Tauri 2. Capability phải least-privilege;
+  signing/update policy vẫn cần proof trước production.
 
 ## 3. Target repository layout
 
@@ -128,7 +128,7 @@ to separate machines. Do not expose worker or engine ports to clients.
 
 | Stage | Scope | Required work | Gate |
 |---|---|---|---|
-| S0 | Ratification | T000; approve client/server requirement, OQ-12/OQ-13/OQ-14 and OQ-15 shell policy | no implementation before approval |
+| S0 | Ratification | T000 complete; client/server requirement and OQ-12/OQ-13/OQ-14/OQ-15 recorded | Phase 0 authorized; application code still blocked |
 | S1 | V1 baseline | T001–T005; immutable upstream manifest, environment, compatibility, golden outputs, rollback image | Gate A pass |
 | S2 | Monorepo skeleton | T100; create package boundaries including `apps/desktop` and `packages/sdk` | import-boundary tests |
 | S3 | Shared contracts/config | T101–T102; opaque IDs, time, revision/ETag, safe errors, config namespaces and redaction | schema/redaction tests |
@@ -185,7 +185,7 @@ limitation, compatibility impact, security review, rollback result and next task
 
 Setup is complete only when:
 
-- T000/T001–T005 and all required OQs for the chosen setup are approved;
+- T000 and all setup-affecting OQs are approved; T001–T005/Phase 0 evidence is complete;
 - all target package boundaries exist and dependency direction tests pass;
 - web and desktop package boundaries compile/import in the selected development profile; full client
   login/upload/reconnect is accepted later by T430/T433;
@@ -209,6 +209,6 @@ Verification: V0–V10 commands, environments and reports
 Compatibility: V1 baseline and legacy adapter unchanged
 Security: client/secret/path/presign/sandbox review
 Migration/rollback: setup rollback and data safety result
-Open questions: unresolved OQ IDs, especially OQ-15
+Open questions: OQ-01–OQ-11 remain unresolved; OQ-12–OQ-15 are decided
 Next task: exact Txxx from IMPLEMENTATION-ORDER.md
 ```

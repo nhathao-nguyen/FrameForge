@@ -4,9 +4,13 @@
 
 **READY**
 
-Meaning: the architecture/specification set is internally consistent and implementation work can be decomposed without inventing architecture. This does **not** authorize application code: T000 owner ratification and each task's Open Question prerequisites still apply.
+Meaning: the architecture/specification set is internally consistent and implementation work can be decomposed without inventing architecture. T000 was owner-ratified on 2026-08-16; application code remains blocked until T001–T005/Phase 0 evidence and each later task's Open Question prerequisites pass.
 
 Audit date: 2026-08-15 (Asia/Ho_Chi_Minh).
+
+T000 ratification update: 2026-08-16 (Asia/Ho_Chi_Minh). OQ-12, OQ-13, OQ-14 and OQ-15 are now
+`DECIDED` with affected specs/tasks updated. OQ-01–OQ-11 remain `OPEN` and block only their
+dependent work.
 
 ## Critical issues
 
@@ -75,21 +79,20 @@ None after remediation. Added dedicated specifications for:
 
 ## Open decisions
 
-The original 14 decisions use the required Question/Why/Options/Pros/Cons/Recommendation/`OPEN`
-format and hard-block only dependent tasks. A later desktop-client scope extension adds OQ-15 in
-the same format; it blocks only desktop shell/package work and does not change the original V2
-server/engine boundaries.
+The original 14 decisions use the required Question/Why/Options/Pros/Cons/Recommendation format;
+OQ-01–OQ-11 remain `OPEN`, while OQ-12–OQ-15 are now dated owner decisions. OQ-15 no longer
+blocks desktop work at the decision level; T433–T434 still require their implementation evidence.
 
-Highest-priority decisions:
+Remaining decisions:
 
-- OQ-12: final V2 package namespace—blocks first application scaffold T100.
-- OQ-13: Python 3.13 vs temporary legacy/ML 3.12 split—blocks reproducible environment T002.
-- OQ-14: breadth of frozen V1 compatibility—blocks compatibility profile T003.
 - OQ-01 and OQ-06: identity and Workspace MVP scope—block auth/ownership schema/API.
 - OQ-03: Redis queue primitive—blocks QueuePort implementation.
 - OQ-05: provider credential ownership/secret backend—blocks provider configuration/real adapters.
 
-Other open choices (Timeline projection/edit transport, event transport, vector storage, legacy ownership, retention, pipeline authoring and desktop shell/runtime) have safe fixed invariants and explicit task gates.
+Resolved for the current gate: OQ-12=`nh_media`, OQ-13=3.13 core plus temporary 3.12 legacy/ML,
+OQ-14=all verified V1 CLI/REST surfaces, and OQ-15=Tauri 2 remote-first desktop client.
+
+Other open choices (Timeline projection/edit transport, event transport, vector storage, legacy ownership, retention and pipeline authoring) have safe fixed invariants and explicit task gates.
 
 ## Upstream assumptions verified
 
@@ -127,9 +130,9 @@ Residual risks are implementation/test obligations in T224, T313, T600–T602, n
 
 ## Implementation blockers
 
-- Current user instruction and documentation gate prohibit application code.
-- T000 owner ratification is required before Phase 0 tasks.
-- OQ-12/OQ-13/OQ-14 must be decided before T100/T002/T003 respectively; OQ-15 must be decided before T433–T434.
+- Phase 0 baseline evidence and the implementation-order gate still prohibit application code.
+- T000 owner ratification is complete; T001 is the next task.
+- OQ-12/OQ-13/OQ-14/OQ-15 are decided; OQ-01–OQ-11 continue to block only their dependent tasks.
 - Each later task lists specific OQ and prior-task dependencies; agents must not infer a recommendation as approval.
 - `.agents/skills/` is absent; this is not a blocker because AGENTS routes agents to canonical docs.
 
@@ -148,4 +151,7 @@ All required scenarios A–H have complete traces in `SPEC-CONSISTENCY-MATRIX.md
 
 ## Final recommendation
 
-Accept the specification set as **READY**, keep application code blocked until T000 decisions are ratified, then begin with T001 (record immutable upstream baseline manifest). Do not begin Product scaffold or Phase 1 before Phase 0 evidence and OQ-12 are complete.
+Accept the specification set as **READY**, proceed with T001 (record immutable upstream baseline
+manifest), and keep application code blocked until T001–T005/Phase 0 evidence passes. Do not begin
+Product scaffold/Phase 1 until the frozen V1 baseline, compatibility profile, golden outputs and
+rollback image are complete.
