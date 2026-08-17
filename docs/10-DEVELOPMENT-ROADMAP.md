@@ -2,221 +2,128 @@
 
 ## 1. Delivery rules
 
-- Phase is a release gate, not one PR. PR-sized tasks are in `IMPLEMENTATION-ORDER.md`.
-- Do not start a phase until prerequisites and prior acceptance evidence pass.
-- Every engine migration has V1 regression, V2 contract, feature-route and rollback evidence.
-- Job/Pipeline/Timeline/provider/storage contracts are versioned; changes update docs/ADR before implementation.
-- No application code is authorized by this document audit itself.
+- NH-Media starts from an empty/new independent implementation.
+- A phase is a gate, not one PR; task detail is in `IMPLEMENTATION-ORDER.md`.
+- No phase starts before prerequisites and acceptance evidence pass.
+- Reference research informs specs/tests only; upstream is absent from runtime/build/deployment.
+- No application code is authorized by this documentation refactor itself.
 
-## 2. Phase -1 — Specification gate
+## 2. Phase 0 — Specification ratification
 
-**Scope:** turn master plan and verified V1 behavior into internally consistent implementation contracts.
+**Scope:** normalize product identity, architecture, upstream policy, capability coverage, contracts,
+task order and open decisions.
 
-**Prerequisites:** master `PROJECT_REBUILD_PLAN.md`; local upstream reference available.
+**Deliverables:** docs 00–14; reference policy/capability/module audits; domain/DB/API/pipeline/
+Timeline/event contracts; implementation order; Local/LAN plan; final audit.
 
-**Deliverables:** docs 00–14, Glossary, module audit, consistency matrix, Open Questions, implementation order, audit report and concise AGENTS.md.
+**Acceptance:** independence assertions pass; every capability has disposition; no upstream runtime,
+adapter, compatibility service, image or import target; links/terms consistent; no application diff.
 
-**Tests/evidence:** terminology search; domain↔DB↔API↔event status matrix; Timeline JSON parse/schema example checks; upstream commit/route/pipeline/module inventory; scenario A–H trace; filesystem check proving no application source edit.
+## 3. Phase 1 — Repository and toolchain foundation
 
-**Acceptance criteria:**
+**Scope:** bootstrap NH-Media packages and reproducible environments without product features.
 
-- all required entities have responsibility/ID/lifecycle/ownership/relations/mutability/persistence;
-- canonical Job/JobStep states match DB, REST and events;
-- every persistent entity maps to table or documented embedding reason;
-- node/provider/storage/worker/timeline contracts are complete;
-- every V1 source module classified with reason/tests/removal criteria;
-- unresolved decisions have options/pros/cons/recommendation/status and dependent tasks are blocked;
-- audit has no critical contradiction with master plan.
+**Deliverables:** `apps/web`, `apps/desktop`, Go API/media-worker boundaries, Python
+`services/ml-worker/nh_media`, contracts/SDK, pinned toolchains, private PostgreSQL/Redis/object
+storage dev profile, API health/error shell and CI.
 
-**Non-goals:** application scaffolding, migrations, Phase 0 execution, source refactor or “temporary prototype”.
+**Acceptance:** dependency boundaries pass; no upstream source/dependency; Go API imports no Python/
+FFmpeg; Tauri needs no server compute; clean setup reproducible.
 
-## 3. Phase 0 — Freeze and reproduce upstream
+## 4. Phase 2 — Domain, persistence, storage and Job foundation
 
-**Scope:** establish immutable, executable V1 behavior baseline before Product/V2 code.
+**Scope:** implement NH-Media-native aggregates, migrations, uploads, events and worker protocol.
 
-**Prerequisites:** Phase -1 accepted; the superseding OQ-13 Go-control-plane topology is decided and
-must be evidenced by a pinned Go toolchain plus isolated Python 3.12 ML/V1 locks/images. Any later
-Python 3.13 ML image requires dependency/ML/CUDA parity evidence.
+**Deliverables:** Workspace/Project/Asset/Artifact/Workflow/Pipeline/Job/Script/Timeline/Render tables;
+StoragePort; multipart upload/probe/quarantine; outbox/Redis QueuePort; leases/checkpoints/retry/DLQ;
+versioned worker contracts and fake-node conformance.
 
-**Deliverables:** recorded upstream remote/peeled tag/commit; immutable baseline branch/tag; uv lock/environment report; FFmpeg build report; frozen compatibility profile (CLI/routes/config/status/outputs); golden sample outputs and test report; license/dependency/security exception inventory.
+**Acceptance:** state vocabulary agrees across DB/API/events; bytes bypass API; workers are bounded;
+crash/retry/idempotency tests pass; no paths/secrets cross boundaries.
 
-**Tests/evidence:** pinned Go toolchain; isolated Python ML/V1 matrix; upstream full unit/integration/security commands; CLI create/config/start/pause/resume; Go Product API tasks/cancel/result/artifacts plus selected batch/schedule/DLQ routes; scene/match/TTS/ASR/render real-media sample; SHA-256 artifact manifest.
+## 5. Phase 3 — First independent vertical slice
 
-**Acceptance criteria:**
-
-- clean environment reproduces V1 or each environment-specific blocker is owner-approved;
-- baseline commit and outputs are immutable/reviewable;
-- compatibility profile distinguishes preserved/deprecated behavior;
-- rollback can run frozen V1 image/environment;
-- no V1 behavior changed to make baseline pass.
-
-**Non-goals:** new Product API, V2 abstractions, output-quality improvement or upstream rewrite.
-
-## 4. Phase 1 — Product foundation
-
-**Scope:** repository/package boundaries and local infrastructure, without media pipeline implementation.
-
-**Prerequisites:** Phase 0; OQ-01/OQ-06/OQ-12 decisions needed by auth/ownership/namespace tasks.
-
-**Deliverables:** minimal monorepo skeleton; Go module/control-plane configuration and secret boundary; Go `/api/v1` shell; PostgreSQL/Redis/MinIO dev stack; request/correlation IDs; safe error envelope; health/readiness; language-neutral worker/engine port seams; bounded Go media and isolated Python ML/V1 worker boundaries only when task order reaches them.
-
-**Tests/evidence:** import/dependency-boundary tests; clean infra start/stop; health/readiness dependency failure tests; config/secret redaction; API auth seam/error/OpenAPI smoke; V1 suite still runs unchanged.
-
-**Acceptance criteria:**
-
-- Go product backend cannot import V1/Python internals except a language-neutral worker/compatibility boundary;
-- compute workers have no user/billing/HTTP dependency;
-- local infra is reproducible, private/default-safe and version-pinned;
-- Go API shell exposes no media upload body/engine key/secret and does not execute long-running compute inline;
-- no Kubernetes or premature capability-pool fan-out beyond the required Go media and isolated Python ML/V1 boundaries.
-
-**Non-goals:** full DB schema, Project CRUD, actual Job execution, Timeline editor or V1 node port.
-
-## 5. Phase 2 — Product domain, persistence and upload
-
-**Scope:** implement metadata aggregates, storage and large-file ingest before engine execution.
-
-**Prerequisites:** Phase 1; OQ-02/OQ-05/OQ-06/OQ-08/OQ-10 decisions for affected tasks.
-
-**Deliverables:** schema/migrations/repositories for Workflow/Pipeline/Project/Asset/Artifact/Script/Timeline/ProviderConfiguration/RenderProfile; Local/S3/MinIO StoragePort; presigned multipart upload; validation/probe boundary; CRUD/versioning/idempotency/outbox foundations.
-
-**Tests/evidence:** clean/upgrade migration tests; FK/check/index inventory; storage conformance; traversal/symlink/presign ACL; multipart complete/abort/expiry/idempotency; MIME/checksum/probe/quarantine; Script/Timeline optimistic version tests; cross-owner negative tests.
-
-**Acceptance criteria:**
-
-- DB matches `03`; no binary media stored in PostgreSQL;
-- Browser uploads directly to object storage and Asset is `ready` only after validation;
-- Asset/Artifact semantics and references are unambiguous;
-- ScriptVersion/TimelineVersion immutable and no lost update;
-- API/domain/event responses contain no durable local path.
-
-**Non-goals:** full V1 pipeline execution, editor UI, GPU workers, AI provider implementation or final renderer.
-
-## 6. Phase 3 — Legacy vertical slice through V2 control plane
-
-**Scope:** execute frozen V1 end-to-end behind VideoEngine while V2 owns Job/PipelineRun/JobStep/events/checkpoints/artifacts.
-
-**Prerequisites:** Phase 2; OQ-03/OQ-04/OQ-09 and worker-state transport/security decisions.
-
-**Deliverables:** canonical Go state transition service; DB outbox/Redis queue; bounded Go media
-worker plus isolated Python ML/V1 worker contracts and sandbox executor; lease/heartbeat/reconcile;
-VideoEngine + LegacyMovieNarratorAdapter; status/progress/artifact mapping; pause/resume/partial/
-cancel/retry/DLQ; SSE and optional WebSocket; legacy REST/CLI gateway.
-
-**Tests/evidence:** duplicate delivery/competing workers; process death after each V1 step; stale checkpoint/input; cancel/kill/drain; event ordering/replay/reset; exact V1 soft/hard/strict/status/output aliases; full Browser/API→queue→worker→V1→Artifact trace.
-
-**Acceptance criteria:**
-
-- V1 sample runs as Product Job without path/secret leak;
-- Job/Run/Step DB, REST and events always agree;
-- `start_from`, `stop_after`, pause/review distinction and resume work without node-specific hacks;
-- worker death resumes first incomplete compatible node and does not duplicate Artifact;
-- compatibility clients pass frozen profile and rollback route remains usable.
-
-**Non-goals:** porting all V1 nodes, additional capability-pool fan-out, collaborative editor or changing output quality.
-
-## 7. Phase 4 — V2 pipeline and studio backend
-
-**Scope:** establish native DAG/node contracts and editable Script/Timeline/Scene/Character backend while execution can still call V1 nodes.
-
-**Prerequisites:** Phase 3; OQ-02/OQ-08/OQ-11.
-
-**Deliverables:** DAG validator/scheduler; typed JobContext/NodeResult; node policy registry; built-in movie recap V2 definition; Script/Timeline/review commands; Scene/Character APIs; canonical Timeline validator/compiler boundary; proposal/user-override merge rules.
-
-**Tests/evidence:** cycle/schema/capability/dependency failure; all node lifecycle/retry/timeout/manual gate paths; partial graph boundaries; Timeline schema/cross-ref/negative corpus; version conflict/approval/reject; user override preserved across AI proposal rerun.
-
-**Acceptance criteria:**
-
-- every activated node has full contract from `05`;
-- automatic and studio modes use same graph plus declared review policy;
-- TimelineVersion is renderer decision input even if rendering remains V1-adapted;
-- changing Script/Timeline invalidates only dependency descendants;
-- no Product API endpoint exposes V1 implementation details.
-
-**Non-goals:** full frontend editor polish, multimodal quality claims, all providers or final multi-output renderer.
-
-## 8. Phase 5 — Studio frontend and review workflow
-
-**Scope:** user-facing project/script/scene/subtitle/voice/timeline review over Product API only,
-through both web browser and desktop client.
-
-**Prerequisites:** Phase 4; primary progress transport and edit command format decided.
-
-**Deliverables:** shared client SDK/contracts; web project dashboard; desktop shell; upload/status;
-Script editor/version review; Scene/Character browser; match/Clip override; subtitle/voice controls;
-Timeline editor; render panel; SSE reconnect/snapshot reducer; desktop packaging/security baseline.
-
-**Tests/evidence:** browser and desktop authorization; reload/reconnect/retention-gap; optimistic
-conflict; undo/version creation; review approve/reject; accessibility/basic responsive behavior;
-desktop native permission/token redaction; no secret/direct provider/engine calls; e2e edit→resume→render
-from both clients.
-
-**Acceptance criteria:**
-
-- user generates Script, pauses, edits exact version and resumes deterministically;
-- user replaces a Clip and rerenders without rerunning unrelated AI;
-- AI rerun cannot overwrite user-origin edit silently;
-- browser never receives engine/provider/storage credentials beyond scoped presigned URLs;
-- persisted state survives tab/browser loss.
-- desktop app restart preserves only safe local draft/session behavior while server Job state remains durable.
-
-**Non-goals:** real-time multi-user collaboration/CRDT, billing, mobile-native app or public plugin marketplace.
-
-## 9. Phase 6 — AI intelligence and provider ports
-
-**Scope:** port/upgrade Script/TTS/ASR/Scene/VLM/Embedding/Character/Matching nodes one at a time.
-
-**Prerequisites:** Phase 4; provider credential/vector decisions; Phase 0 corpora/golden metrics.
-
-**Deliverables:** typed provider adapters/resolver; Narration; ASR/alignment; scene captions; text/visual embeddings; Character appearances; multimodal scorer; diversity/quality filters; coverage feedback creating proposal versions.
-
-**Tests/evidence:** provider conformance/fake/local/approved remote paths; timeout/rate-limit/auth/content/fallback; model/provenance/cache fingerprint; scene/character corpus; deterministic scoring components; quality comparison against V1; privacy/redaction/egress.
-
-**Acceptance criteria:**
-
-- pipeline contains no provider-specific branch outside adapters;
-- provider outage behavior follows declared retry/fallback/soft-hard policy;
-- matching outputs trace component scores and exact features/provider versions;
-- Character confirmation and approved ScriptVersion survive reruns;
-- every migrated node can route back to V1 until removal gate.
-
-**Non-goals:** promise of a specific commercial provider, unsupported face-recognition use, fully autonomous rewrite of approved content or V1 wholesale removal.
-
-## 10. Phase 7 — Timeline renderer, multi-output and production hardening
-
-**Scope:** native rendering from Timeline/Profile, three output families, then security/operations/migration readiness.
-
-**Prerequisites:** Phase 5–6 required nodes; retention/security/deployment decisions; V1 renderer baseline.
-
-**Deliverables:** Timeline compiler; reviewed FFmpeg/media process port; 16:9, 9:16, 1:1 profiles; profile-specific reframe; narration/BGM/SFX/subtitle mix; render QA/dedupe; sandbox/resource/egress controls; observability/backups/restore/drain; legacy import/deprecation runbook.
-
-**Tests/evidence:** three profiles from one Timeline; no upstream AI calls on profile-only rerender; codecs/dimensions/loudness/subtitles/safe area; timeout/cancel/process-tree; malicious media/security suite; load/failure drills; DB/object restore inventory; legacy import/checksum/rollback.
-
-**Acceptance criteria:**
-
-- renderer makes no scene-match decision outside Timeline;
-- intermediate artifacts are reused safely across outputs;
-- untrusted media impact is contained and render worker has no unnecessary secrets;
-- backup/restore and worker/provider/storage failure scenarios are demonstrated;
-- compatibility removal only follows module removal criteria and announced window.
-
-**Non-goals:** mandatory Kubernetes, premature microservices, billing/subscription or removing all legacy code merely because V2 renders successfully.
-
-## 11. Phase exit evidence template
-
-Every phase stores:
+**Scope:** prove NH-Media itself works before implementing the full video workflow.
 
 ```text
-Phase / date / owner
-Prerequisites satisfied
-Deliverables and versions
-Commands/tests and reports
-Acceptance criteria evidence
-Security/compatibility review
-Migration/rollback
-Known limitations/open questions
-Explicit non-goals unchanged
-Decision: pass | fail
+web or desktop request
+→ Go Product API
+→ persistent Job/JobStep/outbox
+→ Redis delivery + worker lease
+→ Go media worker independently probes source and generates thumbnail/proxy
+→ Artifact stage/verify/commit
+→ durable completion event
+→ client displays/downloads result
 ```
 
-Compile success is not phase acceptance; behavior, state consistency, artifact durability, security boundary and rollback must be demonstrated.
+**Acceptance:** works on Local/LAN, survives client disconnect and worker restart, uses no upstream
+runtime/build/import/data directory, and returns safe native Product API resources.
+
+## 6. Phase 4 — Native pipeline and studio foundations
+
+**Scope:** establish Pipeline DAG, review/versioning and Timeline-driven render boundary.
+
+**Deliverables:** graph validator/runtime; built-in movie-recap graph; Script/Scene/Analysis/
+Narration/Timeline APIs; durable reviews; `build_timeline`; web and desktop project/review slices.
+
+**Acceptance:** automatic/studio modes use declared policies; user versions survive rerun; renderer
+input is exact TimelineVersion; candidate-group domain is representable even if evaluation is deferred.
+
+## 7. Phase 5 — Core media/AI capability implementation
+
+**Scope:** independently implement one capability at a time.
+
+**Deliverables:** provider ports; research/script; TTS/Narration; ASR/alignment; scene detection;
+scene analysis; subtitle/translation; match proposals; Timeline compiler; audio mix; render/QA/export.
+
+**Method per capability:** research → behavior spec → NH-Media interface → implementation → unit/
+integration/real-media tests → optional reference comparison → acceptance.
+
+**Acceptance:** each node has provenance, timeout/retry/checkpoint/idempotency policy; providers stay
+behind adapters; a complete recap renders from NH-Media-owned code only.
+
+## 8. Phase 6 — Intelligence and multi-output improvements
+
+**Scope:** add quality/intelligence beyond the initial reference feature set.
+
+**Deliverables:** GenerationCandidate/EvaluationResult/SelectionPolicy; multimodal embeddings;
+Character/Appearance; coverage feedback; ReferenceStyleAnalysis; auto-reframe; 16:9/9:16/1:1 reuse;
+advanced subtitle/audio quality.
+
+**Acceptance:** candidate selection is auditable; reference style contains abstract metrics, not
+copied footage; profile-only renders do not rerun unrelated AI; quality benchmarks pass.
+
+## 9. Phase 7 — Local/LAN release and operations
+
+**Scope:** production-like single-server/LAN validation without requiring a VPS.
+
+**Deliverables:** reproducible LAN server profile; private data services; auth; multi-client flows;
+worker drain/recovery; backups/restores; Artifact inventory; observability; signed staging desktop.
+
+**Acceptance:** remote web/Tauri clients, persistence, restart, recovery, security and restore drills
+pass on LAN; upstream absence is proven in images/packages/dependency graphs.
+
+## 10. Phase 8 — Internet production and later capabilities
+
+**Scope:** public ingress/deployment after functional architecture is proven.
+
+**Deliverables:** public TLS/DNS/CDN as needed, canary, production SLO/alerts, release rollback;
+later scheduling, batch, distributed workers, semantic search, OCR/tracking/inpainting/removal where
+approved.
+
+**Acceptance:** public threat controls, canary and restore/rollback pass; every production-affecting
+decision is approved. Kubernetes remains optional and evidence-driven.
+
+## 11. Phase evidence
+
+```text
+Phase/date/owner
+Prerequisites
+Deliverables/versions
+Commands/tests/reports
+Acceptance evidence
+Independence scan
+Security/data review
+Known limitations/open decisions
+Decision: pass | fail
+```

@@ -1,137 +1,127 @@
-# 14 — Development Environment (Arch Linux)
+# 14 — Development Environment
 
 ## 1. Reproducibility goals
 
-Development target là Arch Linux nhưng project không phụ thuộc system Python packages. Required toolchain:
+Primary documented development target is Arch Linux; Local/LAN deployment may also be exercised on
+other supported hosts. Required toolchain:
 
 ```text
 Git
-Go toolchain pinned by T002 (current supported stable release at execution time)
-uv (only for Python compute/legacy environments)
-Python 3.12 managed by uv for ML/CUDA and frozen V1 where required
-FFmpeg/ffprobe (pinned/tested version recorded in baseline)
+pinned supported Go toolchain
+uv for isolated Python worker environments
+Python version selected by the ML/provider dependency matrix
+FFmpeg/ffprobe pinned and probed
 PostgreSQL
 Redis
-MinIO or S3-compatible storage
-Docker or Podman optional for infrastructure/sandbox
-Ollama optional for local LLM/VLM
-Node.js/pnpm (web and shared TypeScript client tooling)
-Rust stable/pinned targets and Tauri 2 tooling for the desktop client
+MinIO or another S3-compatible store
+Node.js/pnpm for web/SDK
+Rust + Tauri 2 tooling for desktop
+Docker or Podman when needed for infrastructure/sandbox
 ```
 
-Không `pip install` vào Python system của Arch, không dùng PEP 668 override và không ghi dependency vào global site-packages.
+Do not install ML dependencies into Arch system Python or bypass PEP 668.
 
-## 2. Language and runtime policy
+## 2. Runtime policy
 
-Product API/control plane là Go và không phụ thuộc Python runtime. T002 phải chọn một Go release
-stable được hỗ trợ tại thời điểm thực hiện, pin trong toolchain/environment/CI và kiểm tra version
-trong clean-room evidence. Không để CI/production tự trôi theo `latest`.
+- Product API/control plane is Go and does not depend on Python.
+- Go module path is `github.com/nhathao-nguyen/NH-Media`.
+- Python is isolated to `services/ml-worker/nh_media`; target Python 3.13 where the selected
+  ML/provider stack supports it, and pin a separate lower version only with dependency/parity
+  evidence. Do not assume one version for every CUDA/model stack.
+- Go, Python, web and desktop share versioned JSON/Protobuf/schema contracts, not implementation
+  classes or ORM objects.
+- No upstream checkout or `movie_narrator` package is installed by standard setup.
 
-Python chỉ dành cho isolated ML/AI workers và frozen V1 compatibility workloads. Upstream Dockerfile
-dùng Python 3.12 có chủ ý vì compatibility wheel của ML stack; V2 ML bắt đầu ở 3.12 với lock/image
-riêng. Chỉ chuyển V2 ML image lên 3.13 sau khi dependency/ML/CUDA parity được chứng minh. Frozen V1
-runtime/dependencies không bị thay đổi để phù hợp với Product API.
-
-Go, Python, web và desktop không import implementation nội bộ của nhau. Job/event/worker/artifact/
-error contracts là versioned JSON/Protobuf/schema envelopes; không dùng pickle, gob, ORM objects,
-Pydantic internals hoặc in-process Python embedding làm durable contract.
-
-Expected setup contract sau Phase 0 (lệnh cụ thể sẽ được lock bởi task implementation):
+Expected bootstrap contract after implementation:
 
 ```text
-go version (pinned toolchain)
+go version
 go test ./...
-uv python install 3.12
-uv sync --frozen (ML/V1 environment only)
-uv run python --version
-uv run pytest ... (ML/V1 compatibility scope)
+uv sync --frozen --project services/ml-worker
+uv run --project services/ml-worker python --version
+uv run --project services/ml-worker pytest
+ffmpeg -version
+ffprobe -version
 ```
 
-Lockfile là required source; dependency change phải update lock và CI evidence.
+Exact versions and lock hashes are selected by T002 and stored in clean-room evidence.
 
-## 3. FFmpeg policy
+## 3. FFmpeg
 
-- `ffmpeg` và `ffprobe` phải cùng tested release/build; lưu output version/config trong baseline report.
-- Development có thể dùng Arch package; CI/container pin image/package snapshot để reproducible.
-- Production không nhận executable path từ project `.env`/payload.
-- Upstream `MN_FFMPEG_BIN` compatibility chỉ hoạt động trong legacy/local mode hoặc explicit allowlist.
-- Test phải cover codec/probe/render features thật sự dùng, không chỉ `ffmpeg -version`.
+- FFmpeg/ffprobe use the same tested release/build.
+- Development package use is allowed; CI/images pin a reproducible source.
+- Product/project config cannot choose an arbitrary executable.
+- Tests cover actual codecs, filters, probe and render behaviors, not only version output.
 
-## 4. Infrastructure modes
+## 4. Infrastructure profiles
 
-### Native Arch
+### Local development
 
-PostgreSQL, Redis và MinIO có thể chạy native dưới local-only bind với non-default credentials. Dữ liệu dev đặt ở task-specific directories/volumes, không dùng repository root làm mutable database volume.
+PostgreSQL, Redis and object storage may run native or in pinned containers with private/local
+binding and non-default credentials. Mutable data uses task-specific volumes outside repository root.
 
-### Containerized infrastructure
+### Local/LAN production-like
 
-Docker Compose hoặc Podman Compose có thể chạy PostgreSQL/Redis/MinIO. Pin image versions, health checks và private network. Không bắt buộc containerize editor/API trong Phase 0.
+One LAN server runs API, data services and workers; separate machines run web/Tauri clients. This
+profile proves endpoint configuration, authentication, upload, Job replay, Artifact download,
+worker recovery and server-authoritative state without requiring public DNS/VPS.
 
-### Local adapters
+### Internet production
 
-Unit tests có thể dùng fake/LocalQueue/LocalStorage nhưng Go integration gate phải chạy PostgreSQL +
-Redis + S3-compatible adapter để tránh chỉ chứng minh in-memory path. Worker protocol tests phải
-chạy language-neutral fixtures against both Go and Python implementations when each exists.
+Public TLS/DNS/CDN/ingress and canary are a later deployment profile. They must not be prerequisites
+for functional development.
 
-### Web and desktop clients
+## 5. Clients
 
-Web và desktop phải dùng chung API contract/SDK. Desktop remote-server mode không yêu cầu Python,
-FFmpeg, model hoặc database trên máy người dùng; các native capability như file picker/download/
-notification phải nằm sau một adapter nhỏ và có permission review. Desktop shell đã được owner
-chốt là Tauri 2. Tauri chỉ là remote-first Product API client nhẹ; không bundle
-Python/FFmpeg/ML/database/Redis/engine/provider secret. Capability phải least-privilege và
-signing/update policy phải có proof trước production.
+Web and desktop use one SDK/contract set. Tauri remote mode does not require Python, FFmpeg, models,
+PostgreSQL or Redis on the client. Native capabilities are minimal and permission-reviewed. Desktop
+signing keys and secrets stay outside the repository.
 
-Client profiles phải kiểm thử ít nhất: server URL config theo environment, login/session, direct
-multipart upload, reconnect event stream, download artifact, safe error display và logout/token
-revocation. Không commit desktop signing key hoặc local secret.
+Client test profiles cover server URL configuration, login/session, multipart upload, event
+reconnect, Artifact download, safe errors and logout/revocation.
 
-## 5. Optional ML/local providers
+## 6. Optional providers/models
 
-- Ollama là optional provider adapter; absence không làm API/core test fail.
-- WhisperX/faster-whisper/FunASR, PySceneDetect/OpenCV và GPU extras ở dependency groups riêng.
-- GPU/CUDA/ROCm matrix phải tách khỏi CPU baseline; không buộc mọi developer tải model lớn.
-- Model downloads/cache đặt ngoài repo và phải có checksum/version metadata khi dùng golden tests.
+- Local/remote providers are optional adapters; absence does not fail core control-plane tests.
+- ASR/VLM/scene/GPU extras live in separate dependency groups/images.
+- GPU/CUDA/ROCm evidence is separate from CPU baseline.
+- Model caches live outside repo and record model/version/checksum provenance for test fixtures.
 
-## 6. Environment and secrets
+## 7. Secrets and configuration
 
-- Commit `.env.example` chỉ chứa placeholder/non-secret defaults; `.env` local không commit.
-- Không trust `.env` từ imported Project/V1 output.
-- Product config, legacy compatibility config và worker sandbox config là namespaces riêng.
-- Dev credentials không dùng default production-known values; MinIO `minioadmin` chỉ có thể xuất hiện trong explicit disposable example và phải có warning, recommendation là random local secret.
-- Redaction tests kiểm tra logs/events/checkpoints.
+- `.env.example` contains placeholders only; local `.env` is not committed.
+- Imported Project data cannot override executable or secret policy.
+- Product, media worker, ML worker and provider configuration use separate namespaces.
+- Logs/events/checkpoints pass redaction tests.
 
-## 7. Phase 0 verification matrix
+## 8. Verification matrix
 
 | Check | Required evidence |
 |---|---|
-| Git baseline | remote URL, local HEAD, remote main, tag object/peeled commit, dirty status |
-| Language runtimes | pinned Go version/toolchain; Python 3.12 ML/V1 lock/image; any later 3.13 ML parity evidence |
-| Dependencies | lock hash, install command, optional-group matrix |
-| FFmpeg | version/build flags, ffprobe, required codec/filter checks |
-| V1 unit | upstream test command/result and coverage gate |
-| V1 integration | media/FFmpeg/PySceneDetect path and sample artifacts |
-| CLI | `mn --help`, `mn version`, create/config/resume behavior |
-| Product API | Go `/api/v1` serve/submit/status/cancel/result/artifact/auth behavior |
-| Storage | Local + S3/MinIO conformance/security tests |
-| Containers | non-root UID, health/readiness, mounted paths, CPU/GPU variant |
+| Git | branch/commit/dirty status and intended diff |
+| Independence | no upstream source/submodule/import/package/image/route in build graph |
+| Go | pinned version, module path and clean test |
+| Python | isolated `nh_media` lock/image and dependency groups |
+| FFmpeg | version/build flags plus required codecs/filters |
+| Contracts | same fixtures pass Go/Python/client validators |
+| Storage | Local and S3-compatible conformance/security |
+| Infrastructure | private services, health, restart and clean bootstrap |
+| Local/LAN | remote client upload → Job → worker → Artifact → result |
+| Desktop | thin-client package, permissions and no bundled server compute |
 
-If a check cannot pass on Arch, baseline report records exact blocker; không thay expectation bằng unverified claim.
+## 9. CI
 
-## 8. CI expectations
+- Go format/vet/test/static/security on pinned toolchain;
+- Python lint/type/unit/security in isolated `nh_media` scope;
+- PostgreSQL migration bootstrap;
+- Redis duplicate/reclaim tests;
+- storage contract tests;
+- Timeline schema positive/negative corpus;
+- Product API/OpenAPI contract tests;
+- subprocess, upload/path and secret security checks;
+- pinned FFmpeg integration smoke;
+- dependency/image/SBOM/license review;
+- independence scan proving upstream is absent from product dependency and artifact graphs.
 
-V2 CI tối thiểu:
-
-- Go format/vet/test/static/security checks on pinned toolchain;
-- Python lint/type/unit/security only in isolated ML/V1 scopes;
-- compatibility tests against V1 baseline;
-- PostgreSQL migration clean bootstrap;
-- Redis queue duplicate/reclaim tests;
-- Local/S3-compatible storage contract tests;
-- Timeline JSON Schema examples/negative corpus;
-- API contract/OpenAPI compatibility;
-- security checks for subprocess, dependencies, path/upload and secrets;
-- integration smoke with pinned FFmpeg;
-- optional ML/GPU jobs không được che lỗi core nhưng có status rõ.
-
-Upstream CI hiện test Python 3.10–3.13, coverage 90% trên 3.11, separate integration/media/plugin/security jobs. Bandit config bỏ qua B404/B603 và `pip-audit` đang ignore một nhóm Pillow advisories do MoviePy constraint; V2 không copy các exception này mà thiếu ticket, scope và expiry.
+Recorded upstream CI/dependency behavior is research evidence only; NH-Media does not copy advisory
+exceptions without its own scoped ticket, owner and expiry.

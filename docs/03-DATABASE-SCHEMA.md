@@ -7,7 +7,8 @@
 - Primary key dùng `uuid`; tên dùng `snake_case`; timestamp dùng UTC `timestamptz`.
 - Bảng mutable có `created_at`, `updated_at`; aggregate mutable có `revision bigint NOT NULL DEFAULT 1`.
 - Soft delete chỉ dùng cho resource product cần restore/audit: Project, Asset, Script, Timeline, ProviderConfiguration; field `deleted_at` nullable.
-- Status dùng `text` + named `CHECK` constraint theo canonical states trong `02-DOMAIN-MODEL.md`. Không dùng synonym `processing`, `executing`, `success`, `succeeded`, `waiting_review` hoặc `dead` trong V2.
+- Status dùng `text` + named `CHECK` constraint theo canonical states trong `02-DOMAIN-MODEL.md`.
+  Không dùng synonym `processing`, `executing`, `success`, `succeeded`, `waiting_review` hoặc `dead`.
 - JSONB chỉ dùng cho versioned document, validated snapshot, provider-specific metadata hoặc fields không cần join/filter thường xuyên.
 - FK audit/history dùng `ON DELETE RESTRICT`; child lifecycle thuần dùng `CASCADE`. Migration đã apply không được sửa.
 - Mọi unique constraint trên soft-deleted resource cần partial index `WHERE deleted_at IS NULL` khi phù hợp.
@@ -108,13 +109,13 @@ Sau khi Artifact original commit, transaction tạo relation `variant_kind='orig
 
 ### `jobs`
 
-`id uuid PK`, `project_id uuid FK projects`, `workflow_id uuid FK workflows`, `pipeline_id uuid FK pipelines`, `kind text CHECK (kind IN ('pipeline','render','asset_probe','migration'))`, `mode text CHECK (mode IN ('automatic','studio','preview'))`, `status text CHECK (status IN ('created','queued','running','paused','waiting_for_review','retrying','cancelling','completed','failed','dead_lettered','cancelled'))`, `requested_by uuid NULL FK users`, `supersedes_job_id uuid NULL FK jobs`, `command jsonb NOT NULL`, `input_snapshot jsonb NOT NULL`, `pipeline_snapshot jsonb NOT NULL`, `provider_bindings_snapshot jsonb NOT NULL DEFAULT '{}'`, `start_from text`, `stop_after text`, `priority smallint CHECK (priority BETWEEN 0 AND 20)`, `max_runs integer CHECK (max_runs > 0)`, `current_run_number integer NOT NULL DEFAULT 0`, `current_pipeline_run_id uuid NULL`, `progress_percent numeric(5,2) CHECK (progress_percent BETWEEN 0 AND 100)`, `current_node_key text`, `cancel_requested_at`, `error_code`, `error_message`, `correlation_id`, `created_at`, `queued_at`, `started_at`, `completed_at`, `updated_at`.
+`id uuid PK`, `project_id uuid FK projects`, `workflow_id uuid FK workflows`, `pipeline_id uuid FK pipelines`, `kind text CHECK (kind IN ('pipeline','render','asset_probe','analysis','export'))`, `mode text CHECK (mode IN ('automatic','studio','preview'))`, `status text CHECK (status IN ('created','queued','running','paused','waiting_for_review','retrying','cancelling','completed','failed','dead_lettered','cancelled'))`, `requested_by uuid NULL FK users`, `supersedes_job_id uuid NULL FK jobs`, `command jsonb NOT NULL`, `input_snapshot jsonb NOT NULL`, `pipeline_snapshot jsonb NOT NULL`, `provider_bindings_snapshot jsonb NOT NULL DEFAULT '{}'`, `start_from text`, `stop_after text`, `priority smallint CHECK (priority BETWEEN 0 AND 20)`, `max_runs integer CHECK (max_runs > 0)`, `current_run_number integer NOT NULL DEFAULT 0`, `current_pipeline_run_id uuid NULL`, `progress_percent numeric(5,2) CHECK (progress_percent BETWEEN 0 AND 100)`, `current_node_key text`, `cancel_requested_at`, `error_code`, `error_message`, `correlation_id`, `created_at`, `queued_at`, `started_at`, `completed_at`, `updated_at`.
 
 Indexes: `(project_id,created_at DESC)`, `(status,priority DESC,created_at)`, `(correlation_id)`, `(supersedes_job_id)`. Command/snapshots immutable after insert. FK `current_pipeline_run_id → pipeline_runs.id` được thêm sau `pipeline_runs`, với guard run thuộc cùng Job.
 
 ### `pipeline_runs`
 
-`id uuid PK`, `job_id uuid FK jobs ON DELETE CASCADE`, `pipeline_id uuid FK pipelines`, `run_number integer CHECK (run_number > 0)`, `status text CHECK (status IN ('created','queued','running','paused','waiting_for_review','completed','failed','cancelled'))`, `engine_kind text CHECK (engine_kind IN ('legacy','v2'))`, `engine_version text NOT NULL`, `contract_version text NOT NULL`, `input_snapshot jsonb NOT NULL`, `config_snapshot jsonb NOT NULL`, `resume_checkpoint_id uuid NULL`, `failure_category text`, `error_code`, `error_message`, `created_at`, `queued_at`, `started_at`, `completed_at`, `updated_at`.
+`id uuid PK`, `job_id uuid FK jobs ON DELETE CASCADE`, `pipeline_id uuid FK pipelines`, `run_number integer CHECK (run_number > 0)`, `status text CHECK (status IN ('created','queued','running','paused','waiting_for_review','completed','failed','cancelled'))`, `executor_kind text CHECK (executor_kind IN ('go_media','python_ml','system'))`, `executor_version text NOT NULL`, `contract_version text NOT NULL`, `input_snapshot jsonb NOT NULL`, `config_snapshot jsonb NOT NULL`, `resume_checkpoint_id uuid NULL`, `failure_category text`, `error_code`, `error_message`, `created_at`, `queued_at`, `started_at`, `completed_at`, `updated_at`.
 
 Indexes: unique `(job_id,run_number)`, `(job_id,status)`, `(status,queued_at)`, partial unique `(job_id) WHERE status IN ('queued','running','paused','waiting_for_review')`.
 
@@ -214,7 +215,28 @@ Indexes: `(timeline_version_id,render_profile_id,request_hash)`, unique `(timeli
 
 `render_id uuid FK renders`, `artifact_id uuid FK artifacts`, `role text CHECK (role IN ('video','audio','subtitle','thumbnail','qa_report','metadata'))`, `is_canonical boolean`, `created_at`; PK `(render_id,artifact_id,role)`, unique `(render_id,role) WHERE is_canonical`, index `(artifact_id)`.
 
-## 8. Provider execution, events and idempotency
+## 8. Analysis and candidate evaluation
+
+### `analyses`
+
+`id uuid PK`, `project_id uuid FK projects`, `kind text NOT NULL`, `status text CHECK (status IN
+('created','running','completed','failed','cancelled'))`, `input_refs jsonb NOT NULL`,
+`schema_version text NOT NULL`, `result jsonb`, `result_artifact_id uuid NULL FK artifacts`,
+`producer_job_step_id uuid NULL FK job_steps`, `provenance jsonb NOT NULL`, `error_code text`,
+`created_at`, `updated_at`, `completed_at`.
+
+Indexes: `(project_id,kind,created_at DESC)`, `(producer_job_step_id)`. `kind=reference_style` stores
+abstract metrics and never copied source footage as its semantic result.
+
+Candidate tables are introduced when candidate workflows are enabled:
+
+- `candidate_selection_policies`: versioned immutable active policy documents.
+- `generation_candidates`: candidate group, producer JobStep, resource/Artifact ref, status and rank.
+- `evaluation_results`: candidate, evaluator/policy/model snapshot, component scores and evidence ref.
+
+These tables use Project ownership and immutable terminal results. They do not add Job state aliases.
+
+## 9. Provider execution, events and idempotency
 
 ### `provider_runs`
 
@@ -238,7 +260,7 @@ Indexes: `(status,available_at)`, `(aggregate_type,aggregate_id)`. Payload dùng
 
 `workspace_id uuid FK workspaces`, `key text`, `request_hash char(64)`, `response_status smallint`, `response_body jsonb`, `resource_type text`, `resource_id uuid`, `expires_at`, `created_at`, `updated_at`; PK `(workspace_id,key)`, index `(expires_at)`.
 
-## 9. Cross-table constraints
+## 10. Cross-table constraints
 
 1. Mọi repository query product scope qua Workspace/Project; authorization không dựa vào ID trong request body.
 2. `pipelines.workflow_id`, `jobs.workflow_id` và `jobs.pipeline_id` phải cùng lineage.
@@ -251,7 +273,7 @@ Indexes: `(status,available_at)`, `(aggregate_type,aggregate_id)`. Payload dùng
 9. JSONB được validate tại API boundary và worker boundary bằng versioned JSON Schema; DB `CHECK` bảo vệ invariant đơn giản.
 10. PostgreSQL migration tests phải xác minh mọi FK, check, partial unique index và clean bootstrap.
 
-## 10. Intentionally non-tabular objects
+## 11. Intentionally non-tabular objects
 
 | Object | Persistence decision | Reason |
 |---|---|---|
@@ -260,9 +282,10 @@ Indexes: `(status,available_at)`, `(aggregate_type,aggregate_id)`. Payload dùng
 | Embedding vectors | Artifact hoặc future vector-store port; DB giữ Artifact ref/model metadata. | Không biến PostgreSQL thành blob store; pgvector quyết định sau benchmark/OQ-07. |
 | Media bytes/checkpoint payload | Object storage Artifact. | Kích thước lớn, cần checksum/version/lifecycle. |
 
-## 11. Retention and migration
+## 12. Retention and external imports
 
-- Legacy `tasks.json` là file JSON index; upstream hiện tại không dùng SQLite làm product task store.
-- `RUNNING` V1 không có live worker/lease không được import thành V2 `running`; import thành migration evidence và quyết định retry/recover qua command mới.
-- Legacy path chỉ dùng trong private importer workspace; copy → checksum/probe → Artifact commit → switch ref → retention. Không expose path qua API/event.
-- DB record audit giữ theo retention policy ngay cả khi blob `expired|deleted`; sweeper không xóa blob đang được active Job/checkpoint bảo vệ.
+- External/user media imports use the same staged upload, checksum, probe and Artifact commit path.
+- Research fixtures are not product state unless explicitly authorized as Project data.
+- DB audit records follow retention policy even when a blob becomes `expired|deleted`; sweepers do
+  not delete blobs protected by active Jobs, checkpoints or approved/current versions.
+- No upstream task database, status or raw path is mapped into NH-Media product state.

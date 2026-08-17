@@ -1,15 +1,11 @@
-# Phase 0 baselines
+# Research provenance records
 
-This directory contains reproducible evidence for the frozen V1 compatibility
-baseline and the environments that will be used before V2 application code is
-implemented.
+This directory contains immutable evidence about external material inspected during architecture
+research. A record is not a runtime baseline, compatibility target, rollback image or dependency.
 
-Baseline records are snapshots, not a replacement for the upstream source.
-Each record must include the exact upstream commit, tree, tag/ref evidence,
-license/attribution evidence, verification commands and known limitations.
-Do not edit `references/movie-narrator` as part of a baseline task.
+Current record:
 
-Current records:
+- [`upstream-movie-narrator-v1.1.0.md`](upstream-movie-narrator-v1.1.0.md) — source identity and
+  license/runtime observations used by the reference policy and capability matrix.
 
-- [`upstream-movie-narrator-v1.1.0.md`](upstream-movie-narrator-v1.1.0.md) — T001
-  immutable upstream snapshot for the frozen legacy/reference repository.
+Normal NH-Media build, test, runtime and deployment must succeed without a local upstream checkout.

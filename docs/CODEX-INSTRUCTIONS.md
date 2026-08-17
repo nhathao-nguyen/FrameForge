@@ -1,118 +1,99 @@
 # Codex Instructions
 
-## 1. Vai trò
+## 1. Role and source order
 
-Codex làm việc trên hệ thống AI Video Production Engine theo bộ tài liệu trong thư mục `docs/`. `PROJECT_REBUILD_PLAN.md` là master context; bộ technical specification này là bản triển khai có cấu trúc. Khi có khác biệt, không tự đổi quyết định kiến trúc; chỉ owner amendment có ngày/owner mới được supersede quyết định và phải giữ decision history, cập nhật toàn bộ affected docs rồi mới cho phép phần implementation bị ảnh hưởng.
+Codex works on NH-Media using the specifications in `docs/`. Read in this order:
 
-## 2. Documentation-first gate
+1. current user instruction and dated owner decisions;
+2. `PROJECT_REBUILD_PLAN.md` and canonical master context;
+3. `GLOSSARY.md`, `00`–`14`, upstream-reference policy and capability matrix;
+4. `OPEN-QUESTIONS.md` and `IMPLEMENTATION-ORDER.md`;
+5. upstream audit/provenance only when researching a capability.
 
-Cho tới khi Phase -1 trong `10-DEVELOPMENT-ROADMAP.md` được owner approve:
+Never infer product architecture from upstream source.
 
-- không viết application code;
-- không tạo migration/runtime/API/frontend/worker implementation;
-- chỉ được đọc, phân tích, cập nhật documentation và consistency evidence;
-- không dùng “prototype tạm” làm lý do bỏ qua gate.
+## 2. Documentation gate
 
-Sau gate, coding agent vẫn phải làm task theo [`IMPLEMENTATION-ORDER.md`](IMPLEMENTATION-ORDER.md), từng task một, không nhảy phase nếu prerequisite chưa pass.
+Until the owner accepts the specification gate:
 
-## 3. Source of truth and scope
+- do not write application code, migrations, service/client/worker scaffolding or runtime config;
+- only analyze/update documentation, evidence and documentation validation tooling;
+- do not use a prototype as a reason to bypass the gate.
 
-Ưu tiên đọc theo thứ tự:
+After approval, perform one ordered task at a time with its explicit prerequisites.
 
-1. user request và quyết định mới đã được approve;
-2. root `PROJECT_REBUILD_PLAN.md` pointer and its canonical full document;
-3. `GLOSSARY.md`, `00`–`14` và các ADR/open questions đã chốt;
-4. `UPSTREAM-MODULE-AUDIT.md` và `references/movie-narrator/` cho V1 behavior/compatibility;
-5. implementation hiện tại.
+## 3. Independence rule
 
-Không lấy assumption trong code V1 làm kiến trúc V2. V1 là legacy/reference; behavior cần preserve phải được ghi trong compatibility contract và regression test.
+NH-Media is independently authored. Movie Narrator is research/reference-only.
+
+Do not:
+
+- fork, wrap, embed, import or execute upstream;
+- create a legacy adapter, compatibility API/CLI, worker or rollback image;
+- vendor/submodule upstream into product/release paths;
+- copy implementation modules blindly;
+- require upstream in normal CI, build or deployment.
+
+Use the capability matrix classification and turn research into NH-Media behavior specs, interfaces,
+tests and code. Optional comparisons use recorded observations or a separate research environment.
 
 ## 4. Boundary rules
 
-- Go Product API/control plane sở hữu user/workspace/project/job/database/auth; không phụ thuộc Python runtime hoặc media compute.
-- Go media worker sở hữu orchestration của FFmpeg/media I/O; Python ML worker sở hữu PyTorch/CUDA/model workloads; frozen V1 compatibility workload giữ `movie_narrator`.
-- Engine/compute boundary sở hữu media/AI/pipeline/timeline compilation; không biết HTTP/session/billing.
-- Worker chỉ execute lease và báo progress/checkpoint; không giữ business state duy nhất.
-- Frontend không gọi engine/provider trực tiếp, không giữ secret.
-- Storage access qua Asset/Artifact refs; không đưa absolute path vào API/domain event.
-- Job/JobStep state dùng nguyên canonical vocabulary trong `GLOSSARY.md`; compatibility adapter là nơi duy nhất map `Task/pending/dead/success` của V1.
-- Go/Python/web/desktop chỉ giao tiếp qua versioned language-neutral contracts/envelopes. Không leak Go structs, Python/Pydantic classes, ORM models, pickle/gob hoặc framework types.
+- Go Product API owns identity, authorization, Workspace, Project, Asset, Job and database.
+- Go media workers own FFmpeg/media orchestration; Python `nh_media` workers own AI/ML.
+- Workers have no user/billing/session logic and do not own durable product state.
+- Frontends call Product API only and hold no provider/server secret.
+- Asset/Artifact refs cross boundaries; LocalHandles remain executor-scoped.
+- Job/JobStep states use `GLOSSARY.md` exactly.
+- Go/Python/client contracts are versioned and language-neutral.
+- Product API never executes long-running media/ML work inline.
 
-## 5. Coding rules sau khi được phép implement
+## 5. Coding rules after approval
 
-1. Dùng interface/port trước implementation và dependency injection cho provider/storage/queue.
-2. Giữ `movie_narrator` namespace và public contract trong migration.
-3. Một V2 module phải có test và compatibility mapping trước khi route production.
-4. Không rewrite nhiều module V1 trong một thay đổi không có parity plan.
-5. Node phải idempotent, checkpointable, observable và provider-agnostic.
-6. Timeline là nguồn sự thật của renderer; AI chỉ tạo proposal.
-7. Artifact có ID/checksum/type/producer; không truyền raw path giữa components.
-8. Mọi state transition phải validate và emit audit/progress event.
-9. Mọi API mutation có authorization, validation, idempotency hoặc optimistic concurrency phù hợp.
-10. Không hard-code model, provider, filesystem path hoặc executable production.
-11. Không `shell=True`; subprocess qua wrapper được review.
-12. Không auto-load plugin không tin cậy.
-13. Secrets không vào logs/events/checkpoints/LLM prompts không cần thiết.
-14. Product API không chạy long-running compute inline; worker concurrency, resource admission, lease, cancellation, retry và idempotency luôn bounded/explicit.
+1. Use ports/contracts before adapters.
+2. Use `github.com/nhathao-nguyen/NH-Media` for Go and `nh_media` for Python.
+3. Keep TimelineVersion renderer-authoritative and user overrides immutable/versioned.
+4. Make nodes idempotent, checkpointable, observable and provider-neutral.
+5. Snapshot provider/model/input/pipeline revisions.
+6. Validate every state transition and emit durable audit/progress events.
+7. Enforce authorization, idempotency or optimistic concurrency on mutations.
+8. Do not hard-code providers, paths or production executables.
+9. Never use `shell=True` or auto-load untrusted extensions.
+10. Redact secrets, paths, expiring URLs and tracebacks.
+11. Bound worker concurrency, resources, leases, timeout, retry and cancellation.
 
-## 6. Migration rules
+## 6. Decision protocol
 
-- Luôn giữ đường rollback về `LegacyMovieNarratorAdapter`.
-- Không xóa output/DB/blob legacy trong migration một bước; copy → verify → switch → retention.
-- Không mutate approved Script/Timeline; tạo version mới.
-- Job snapshot pipeline/provider/input revision tại start; không silently chạy bằng version mới.
-- V1 soft-step semantics và short aliases phải được test.
+If a task depends on an OPEN decision, stop only that dependent work, document context/options/
+trade-offs and continue unrelated authorized work. A recommendation is not approval.
 
-## 7. Open question rule
+## 7. Required verification
 
-Nếu gặp decision chưa được chốt hoặc mâu thuẫn:
+Report files/boundary changed, tests run, independence impact, security review, data/rollback impact
+and open questions. Documentation work must state that no application code changed. Every
+implementation/release task runs an independence scan for upstream imports/dependencies/artifacts.
 
-1. dừng implementation của phần phụ thuộc;
-2. ghi vào `OPEN-QUESTIONS.md` với context, 2–3 options, trade-off, recommendation;
-3. không tạo default behavior production chỉ vì dễ implement;
-4. khi owner chốt, cập nhật docs liên quan và implementation task.
+## 8. Prohibited shortcuts
 
-Recommendation trong `OPEN-QUESTIONS.md` không được coi là decision đã approve.
+- application code before the documentation gate;
+- direct media upload through Product API;
+- Redis or worker disk as sole truth;
+- authorization bypass for internal routes;
+- arbitrary FFmpeg arguments/executable from user input;
+- unbounded goroutine/worker per request;
+- upstream source/runtime used as a temporary shortcut;
+- unsupported legal conclusions about external source.
 
-## 8. Required verification per change
-
-Agent phải báo:
-
-- files changed và boundary/module;
-- test/validation đã chạy;
-- compatibility impact;
-- migration/rollback impact;
-- security/secret/path review;
-- open question mới (nếu có).
-
-Nếu task chỉ là documentation, xác nhận application code không bị thay đổi. Nếu task là migration, test cả old contract và new contract.
-
-## 9. Prohibited shortcuts
-
-- viết code trước documentation gate;
-- sửa trực tiếp master plan để làm implementation “khớp”;
-- bỏ qua authorization vì endpoint nội bộ;
-- upload video qua API request body;
-- lấy Redis làm source of truth duy nhất;
-- coi worker memory/local disk là durable checkpoint;
-- retry mọi exception;
-- expose traceback/path/API key;
-- xóa upstream license/attribution;
-- thay đổi behavior legacy mà không có feature flag/compatibility test.
-- biến migration Go/Python thành big-bang rewrite hoặc gộp với cleanup không liên quan;
-- tạo `go.mod`, app skeleton, worker skeleton hoặc API code trong amendment T000 này.
-
-## 10. Handoff format
-
-Mỗi coding task hoàn thành bằng một handoff ngắn:
+## 9. Handoff
 
 ```text
 Task: Txxx
 Status: complete/blocked
 Implemented boundary: ...
 Tests: ...
-Compatibility: ...
+Independence: ...
 Security: ...
+Data/rollback: ...
 Open questions: ...
 Next task: ...
 ```

@@ -1,44 +1,32 @@
 # 13 — Worker Architecture
 
-## 1. Initial versus scale-out topology
-
-Initial architecture (Phase 1–3):
+## 1. Initial topology
 
 ```text
 Go Product API / trusted orchestration
             ↓ durable outbox
          Redis queue
-            ↓ versioned worker contract
-   bounded worker replicas
-     ├─ Go media worker (FFmpeg/I/O)
-     ├─ Python ML worker (`nh_media`)
-     ├─ frozen V1 compatibility worker (`movie_narrator`)
-     └─ disposable node executor
+            ↓ versioned worker contracts
+       bounded worker replicas
+         ├─ Go media worker → FFmpeg/I/O
+         ├─ Python ML worker → nh_media/models
+         └─ disposable node executors
 ```
 
-Ban đầu có thể chạy một deployment profile với Go media worker và Python ML/V1 worker riêng, nhưng
-mỗi worker có bounded concurrency và capability declaration. Không yêu cầu Kubernetes hoặc
-distributed scheduler phức tạp. Product API không execute compute inline.
-
-Scale-out chỉ sau benchmark:
-
-```text
-capability queues
-  ├─ ai     → AI workers
-  ├─ ml     → GPU/ML workers
-  └─ render → Render workers
-```
-
-Pipeline contract, JobStep state và event contract không đổi khi tách pool.
+There is no upstream or compatibility worker. Initial deployment may run one instance of each
+worker class on the same LAN server. Every class has bounded concurrency and advertised capability.
+Product API never executes compute inline.
 
 ## 2. Trust boundary
 
-Worker gồm hai trust levels:
+- **Controller:** trusted service code with queue credential and a scoped execution-state identity.
+  It claims leases, resolves manifests, launches executors, heartbeats and reports results.
+- **Executor sandbox:** handles untrusted media/model work. It receives only declared input files,
+  output staging location, cancellation and the exact provider credential required for the node.
 
-- **Controller**: trusted Go service code, có queue credential và execution-state service identity giới hạn. Controller claim lease, resolve manifests, launch executor, heartbeat và report result.
-- **Executor sandbox**: xử lý untrusted media/node. Chỉ nhận input files/manifest, output staging location, cancellation channel và đúng provider credential nếu cần. Không có product DB, broad Redis, user session, billing hoặc unrelated provider secrets.
-
-Trusted orchestration là owner của transition. Controller không được `UPDATE jobs` tùy ý; mọi report đi qua guarded `ExecutionStatePort` để validate current state, lease token và expected revision. Baseline adapter của port dùng Go application transition service + PostgreSQL repository với một DB role giới hạn cho controller; nếu sau này chuyển sang internal HTTP/gRPC, contract/state machine không đổi. Media executor không bao giờ nhận DB role đó.
+Trusted orchestration owns transitions. A worker report goes through `ExecutionStatePort`, which
+validates current state, lease token, attempt and revision. Executors have no broad Product DB,
+Redis, user/session, billing or unrelated provider credentials.
 
 ## 3. Queue message and claim
 
@@ -52,44 +40,44 @@ Trusted orchestration là owner của transition. Controller không được `UP
   "node_key":"detect_scenes",
   "attempt":1,
   "priority":5,
-  "available_at":"2026-08-15T10:00:00Z",
-  "enqueued_at":"2026-08-15T10:00:00Z"
+  "available_at":"2026-08-17T10:00:00Z",
+  "enqueued_at":"2026-08-17T10:00:00Z"
 }
 ```
 
-Không chứa bytes, local path, plaintext secret, user token hoặc mutable full context. Controller load exact snapshots sau successful atomic claim.
+Messages contain no media bytes, local paths, plaintext secret, user token or mutable full context.
 
-Claim protocol:
+Claim sequence:
 
-1. Consume message at-least-once.
+1. Consume at least once.
 2. Call `claim(job_step_id, attempt, worker_id, expected_status=queued)`.
-3. Orchestrator atomically creates/updates attempt `running`, lease token hash/expiry và `node.started` event.
-4. Duplicate/stale message không claim được thì ack/drop sau state inspection.
-5. Controller materialize inputs, route tới worker Go/Python theo capability, launch executor và heartbeat dưới lease token.
+3. Orchestrator atomically records `running`, lease hash/expiry and `node.started`.
+4. Duplicate/stale messages fail claim and are acknowledged after state inspection.
+5. Controller loads exact snapshots, verifies capability and launches the executor.
 
-## 4. Lease, heartbeat and progress
+## 4. Lease and progress
 
-- Lease duration runtime-configured; heartbeat interval nhỏ hơn một phần ba lease.
-- Heartbeat độc lập với frame/provider progress.
-- Progress được throttle/coalesce nhưng không vượt 0–100; terminal commit không phụ thuộc event fan-out.
-- Lease token opaque, scoped one attempt, không log.
-- Reconciler xử lý expired lease: inspect output commit/checkpoint, mark attempt failed `worker_lost`, rồi JobStep `retrying` hoặc terminal theo policy.
-- Hai attempt không được cùng promote canonical output; storage/DB precondition bảo vệ split-brain.
+- Heartbeat interval is less than one third of lease duration.
+- Heartbeat is independent from media/provider progress.
+- Progress is throttled/coalesced and bounded 0–100.
+- Lease tokens are opaque, attempt-scoped and never logged.
+- Reconciler checks committed evidence before classifying expired work as `worker_lost`.
+- Storage and DB preconditions prevent two attempts from committing the same canonical output.
 
 ## 5. Executor lifecycle
 
 ```text
 prepare isolated workspace
-  → materialize/checksum declared inputs
-  → resolve only required provider binding
-  → execute node with timeout/cancel token
-  → validate declared outputs
-  → stage outputs and return manifest
-  → controller commits through orchestration
-  → terminate process tree and clean workspace
+→ materialize and checksum declared Artifact inputs
+→ resolve only required provider binding
+→ execute node with timeout/cancellation
+→ validate declared outputs
+→ stage output manifests
+→ controller commits via trusted orchestration
+→ terminate process tree and clean workspace
 ```
 
-Go/Python worker result contract:
+Worker result:
 
 ```text
 outcome: completed | skipped | waiting_for_review | paused | failed | cancelled
@@ -99,68 +87,62 @@ progress_summary, warnings, metrics, provider_usage
 error {code, category, retryable, safe_message}?
 ```
 
-Worker không phát trực tiếp browser event và không quyết định Job aggregate terminal state.
+Workers do not emit browser events directly or decide aggregate terminal state.
 
 ## 6. Resource and sandbox policy
 
-Mỗi node definition khai báo execution class và resource requirements. Controller enforce:
+Controller enforces per node:
 
-- non-root UID/GID, no-new-privileges, read-only root;
+- non-root, no-new-privileges and read-only root;
 - isolated writable temp/output mounts;
-- CPU, RAM, GPU, disk, PID and wall-time quota;
-- process-group kill khi timeout/cancel;
-- deny host/Docker socket và workspace root mount;
-- network deny-by-default; allow exact object storage/provider endpoints;
-- pinned FFmpeg and dependencies; no project-level executable override in production;
-- subprocess argv list only, never `shell=True`;
-- redacted stdout/stderr size limits.
+- CPU/RAM/GPU/disk/PID/wall-time limits;
+- process-group kill on timeout/cancel;
+- no host/Docker socket or repository-root mount;
+- network deny-by-default with exact storage/provider allowlist;
+- pinned FFmpeg/dependencies and no project executable override;
+- subprocess argv lists only, never `shell=True`;
+- bounded/redacted stdout/stderr.
 
-Production plugin/custom executable disabled unless allowlisted and isolated under stricter profile.
+Extensions/custom executables are disabled unless reviewed, allowlisted and isolated.
 
 ## 7. Cancellation, pause and review
 
-- Cancel sets Job `cancelling`; controller forwards token; long node checks at documented safe points.
-- Nếu graceful timeout hết, controller kills executor tree, reconciles staged output và confirms `cancelled` only after cleanup policy.
-- Pause chỉ thành công tại checkpoint-safe boundary. Node không checkpointable hoàn tất current atomic unit hoặc trả capability error theo policy.
-- `stop_after` marks completed target, commits checkpoint, sets run/job `paused`; không gọi đây là review.
-- Human gate commits proposal/checkpoint, sets step/run/job `waiting_for_review`; browser disconnect không ảnh hưởng.
-- Approval/rejection là Product API command có actor/audit, không là worker message tùy ý.
+- Cancel moves Job to `cancelling`, forwards a token, then confirms terminal state after cleanup.
+- Pause succeeds only at a declared checkpoint-safe boundary.
+- `stop_after` completes the target, commits a checkpoint and pauses the run/job.
+- Human review commits proposal/checkpoint and sets `waiting_for_review`; browser disconnect has no
+  effect.
+- Approval/rejection is an authorized Product API command, not an arbitrary worker message.
 
 ## 8. Statelessness and recovery
 
-Durable state nằm ở PostgreSQL/object storage. Redis message, controller memory, executor temp disk và local cache đều reconstructable.
+Durable state is in PostgreSQL/object storage. Redis messages, controller memory, executor temp
+disk and caches are reconstructable.
 
-Worker restart flow:
+Recovery:
 
-1. active attempts ngừng heartbeat;
-2. reconciler chờ lease expiry, không assume failure ngay;
-3. verify committed checkpoint/output;
-4. retry same JobStep attempt+1 từ first non-committed boundary;
-5. idempotency fingerprint reuse committed artifacts;
-6. no retry khi input/pipeline/provider snapshot stale hoặc security failure.
+1. heartbeat stops;
+2. reconciler waits for lease expiry;
+3. committed checkpoints/outputs are verified;
+4. first incomplete compatible JobStep is scheduled with a new attempt;
+5. exact input fingerprints reuse compatible committed Artifacts;
+6. stale/security failures do not auto-retry.
 
-V1 adapter maps V1 checkpoint JSON/path context to this protocol; V1 process crash behavior không được xem là đủ reliability cho product path.
+## 9. Capability routing and distribution
 
-## 9. Capability routing evolution
+Workers advertise `probe`, `ai`, `ml`, `media`, `render` and resource limits. Scheduler routes by
+capability, not workflow name. Later multi-host pools retain the same state/event/Artifact contract.
+Render pools receive no LLM/TTS secrets. A complex distributed scheduler is deferred until a
+single-host Local/LAN profile passes reliability and load evidence.
 
-Baseline worker advertises installed capabilities (`probe`, `ai`, `ml`, `media`, `render`) and resource limits. Scheduler chỉ queue node cho compatible worker. Khi scale:
+## 10. Acceptance
 
-- route by execution class/capability, not hard-coded workflow;
-- retain one shared state machine and conformance suite;
-- provider/network secrets scoped to AI/ML pool;
-- Render pool receives no LLM/TTS credentials;
-- fallback to local render/distributed behavior phải là explicit node policy.
-
-Upstream `cloud/distributed.py` là best-effort remote render dispatch với local fallback, không phải shared durable scheduler và input sharing còn deployment-specific. Không dùng nó làm bằng chứng rằng V1 đã có production distributed queue.
-
-## 10. Worker acceptance tests
-
-- duplicate delivery and competing workers cannot duplicate canonical commit;
-- expired lease resumes from valid checkpoint;
-- worker death between TTS and scene detection resumes at first incomplete node;
-- cancel/timeout kills process tree and cleans staged output;
-- executor cannot access DB/Redis/unrelated secret/host path;
-- oversized/malicious media is contained by quotas and quarantine flow;
-- one bounded Go media worker plus isolated Python compatibility/ML worker runs the baseline pipeline;
-- moving a capability between Go/Python workers runs the same contract/event contract without migration;
-- graceful drain rejects claims, lets bounded attempts finish, then reconciles remainder.
+- competing workers cannot duplicate a canonical commit;
+- expired leases resume from valid checkpoints;
+- worker death resumes the first incomplete node;
+- cancel/timeout kills the process tree and reconciles staged output;
+- executor cannot access DB/Redis/unrelated secrets/host paths;
+- malicious media remains contained;
+- bounded Go and Python workers complete the independent NH-Media vertical slice;
+- moving a capability across worker hosts preserves the same contracts;
+- release scans find no `movie_narrator` import, service, image or execution path.

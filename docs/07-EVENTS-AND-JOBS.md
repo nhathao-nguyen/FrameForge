@@ -59,19 +59,8 @@ retrying | completed | skipped | failed | cancelled | blocked
 
 `02-DOMAIN-MODEL.md` owns transitions. REST response, PostgreSQL `status`, event payload `from_status/to_status` and frontend reducer must use these exact strings.
 
-V1 mapping exists only at compatibility boundary:
-
-| V1 TaskStatus | V2 projection |
-|---|---|
-| `pending` | `created|queued|paused|waiting_for_review` projected according to frozen compatibility policy |
-| `running` | `running|cancelling` |
-| `retrying` | `retrying` |
-| `completed` | `completed` |
-| `failed` | `failed` |
-| `cancelled` | `cancelled` |
-| `dead` | `dead_lettered` |
-
-V1 `PipelineStatus success` maps to V2 JobStep `completed`; `disabled|skipped` maps `skipped`; `failed` maps `failed` or a `skipped` soft-degradation only when V1 metadata proves that semantics.
+Upstream task/status names are research observations only. They are not accepted by Product API,
+stored in PostgreSQL, emitted in events or mapped by a compatibility gateway.
 
 ## 4. Lease protocol
 
@@ -280,7 +269,7 @@ Client:
 
 Server control messages:
 
-```json
+```jsonl
 {"type":"subscribed","job_id":"job_01","from_sequence":27}
 {"type":"snapshot_required","reason":"retention_gap","snapshot_url":"/api/v1/.../jobs/job_01"}
 {"type":"error","code":"FORBIDDEN","message":"..."}

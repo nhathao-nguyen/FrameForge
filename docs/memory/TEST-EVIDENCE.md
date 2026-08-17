@@ -1,43 +1,20 @@
 ---
-last_verified: 2026-08-16
-source: ../SPEC-AUDIT-REPORT.md; ../10-DEVELOPMENT-ROADMAP.md; ../IMPLEMENTATION-ORDER.md; git metadata
+last_verified: 2026-08-17
+source: ../SPEC-AUDIT-REPORT.md; ../IMPLEMENTATION-ORDER.md; git metadata
 owner: task assignee / release owner
 ---
 
 # Test evidence
 
-Evidence is append-only by task where practical. A row must identify the command, environment,
-commit, report/artifact location, result, limitation and acceptance criterion it proves.
+Evidence is append-only where practical and must state limitations.
 
-| Date | Task/check | Command | Environment/commit | Report or artifact | Result | Limitation / acceptance criterion |
-|---|---|---|---|---|---|---|
-| 2026-08-16 | Git baseline | `git status --short --branch`; `git log -1`; branch/merge-base checks | repository; `6ca438f849a645a6c910d722776dcf448064657a` | terminal evidence; [`CURRENT-STATE.md`](CURRENT-STATE.md) | pass | proves clean source before branch creation, local `develop`, no merge-base with `main` |
-| 2026-08-16 | Documentation audit/T000 (historical pre-amendment record) | existing audit report, owner approval and consistency review | repository; baseline commit | [`../SPEC-AUDIT-REPORT.md`](../SPEC-AUDIT-REPORT.md), OQ/spec/memory diff | pass — initial T000 ratification | Historical evidence; subsequent amendment superseded OQ-13 and T001 was completed before the amendment. Application code remains blocked through T002–T005. |
-| 2026-08-16 | Memory/plan consistency | `python tools/check_memory.py --max-age 30` | repository; `develop` at baseline commit | this directory; terminal output | pass | checks memory/plan links, OQ mirror (including OQ-15), task coverage/dependencies (including T433/T434), canonical-term duplicates, metadata freshness, branch/commit and sensitive data |
-| 2026-08-16 | Upstream immutable baseline/T001 | `git -C references/movie-narrator status --short --branch`; `show-ref --tags`; `rev-parse HEAD^{tree}`; `ls-files`; `diff --quiet`; `ls-remote` | frozen reference checkout; HEAD `bc2d276cf477fe3ce1a16f9679dcb1d2978e3a74` | [`../baselines/upstream-movie-narrator-v1.1.0.md`](../baselines/upstream-movie-narrator-v1.1.0.md) | pass — snapshot recorded | proves source identity, tag/remote agreement, clean V1 worktree and inventory; does not yet prove behavioral parity or golden output |
-| 2026-08-16 | T000 architecture amendment | documentation diff review; `rg` language-topology audit; no-application-source check; `python tools/check_memory.py --max-age 0` | repository; `develop`; amendment commit `104740be7763965757129aee7e239c5a72bd3c41` | affected docs, [`DECISIONS.md`](DECISIONS.md), [`CURRENT-STATE.md`](CURRENT-STATE.md) | pass — superseding owner decision recorded | confirms Go control plane, bounded worker flow, isolated Python ML/V1 and language-neutral contracts; no T001 restart and no application code |
-| 2026-08-16 | Post-T000 consistency repair | T100↔SETUP layout check; full documentation link check; stale-string audit; `python tools/check_memory.py --max-age 0`; `git diff --check` | repository; `develop`; repair commit `23b132504985b795ae42df213f6aa3f76d811cdc` | [`../IMPLEMENTATION-ORDER.md`](../IMPLEMENTATION-ORDER.md), [`../SPEC-AUDIT-REPORT.md`](../SPEC-AUDIT-REPORT.md), T001 baseline note | pass — no stale V2 Product API assumption remains | retained Python 3.13 matches are future ML parity or historical/superseded evidence; T001 unchanged and T002 not started |
-| 2026-08-16 | Post-T001 baseline/table consistency repair | baseline historical-note review; six-cell decision-row parser; full documentation link check; stale-marker audit; `python tools/check_memory.py --max-age 0`; `git diff --check` | repository; `develop`; repair commit `47bef1ed50baebe3f34bab8d8b10461cc61d38e5` | [`../baselines/upstream-movie-narrator-v1.1.0.md`](../baselines/upstream-movie-narrator-v1.1.0.md), [`DECISIONS.md`](DECISIONS.md), [`../SPEC-AUDIT-REPORT.md`](../SPEC-AUDIT-REPORT.md) | pass — historical V1 evidence and current Go topology are explicitly separated; target decision rows parse as complete | no decision semantics changed; no application code or reference checkout changes; T002 not started |
-| 2026-08-16 | Public documentation repair | compact single-line decision-row rewrite; historical/non-normative baseline section review; six-cell decision-row parser; full documentation link check; stale-marker audit; `python tools/check_memory.py --max-age 0`; `git diff --check` | repository; `develop`; repair commit `36ef343a2631580732ff8f4331bcf03b7ccf127c` | [`DECISIONS.md`](DECISIONS.md), [`../baselines/upstream-movie-narrator-v1.1.0.md`](../baselines/upstream-movie-narrator-v1.1.0.md), [`../SPEC-AUDIT-REPORT.md`](../SPEC-AUDIT-REPORT.md) | pass — each target decision is one physical complete six-cell row; Python 3.13 is explicitly historical and superseded by the Go control plane | no application code or reference checkout changes; T002 not started |
-| 2026-08-16 | Final documentation consistency repair | direct six-cell decision-row parser; CURRENT-STATE state assertions; SPEC-AUDIT reconciliation assertions; baseline historical-topology check; language-topology/stale-state audit; full documentation link check; `python tools/check_memory.py --max-age 0`; `git diff --check` | repository; `develop`; repair commit `b274caee21be68aa91ded78c8a52b71dbd7f88c5` | [`DECISIONS.md`](DECISIONS.md), [`CURRENT-STATE.md`](CURRENT-STATE.md), [`../SPEC-AUDIT-REPORT.md`](../SPEC-AUDIT-REPORT.md), [`../baselines/upstream-movie-narrator-v1.1.0.md`](../baselines/upstream-movie-narrator-v1.1.0.md) | pass — T000/T001 complete, T002 not started, decision rows have six cells, current Go/Python topology is consistent, and historical Python wording is non-normative | no application code, frozen V1 or reference checkout changes; T002 remains next authorized task |
+| Date | Task/check | Command/evidence | Environment/commit | Result | Limitation |
+|---|---|---|---|---|---|
+| 2026-08-16 | Upstream research provenance | recorded git identity/tag/tree/inventory inspection | external checkout at `bc2d276cf477fe3ce1a16f9679dcb1d2978e3a74` | pass at inspection time | not reverified; not runtime/parity/rollback evidence |
+| 2026-08-17 | Starting repository boundary | branch/status/HEAD inspection | `docs/architecture-spec` at `1cab87bbfd2801aa552948f8e8f8db9b3e2ffb0c` | clean before refactor | proves starting state only |
+| 2026-08-17 | T000 documentation consistency | `python tools/check_memory.py --max-age 0` | current working tree | pass: 12 memory files, 15 OQs, 81 tasks; all internal links, Markdown tables and JSON/JSONL fences valid | documentation structure only; no runtime behavior |
+| 2026-08-17 | Capability/terminology audit | repository-wide `rg` classifications plus matrix class counts | current working tree | pass: 25 REIMPLEMENT, 6 ADOPT-CONCEPT, 11 IMPROVE, 1 REFERENCE, 10 DEFER, 3 IGNORE; remaining legacy/version terms are negative, provenance or generic native concepts | semantic review, not a source-license opinion |
+| 2026-08-17 | Change hygiene | `git diff --check`; trailing-whitespace and secret-assignment scans; status/file-boundary/reference-tree checks | current working tree on `docs/architecture-spec` | pass: docs plus validator only; no vendored upstream tree or application source | Git reports expected LF-to-CRLF working-copy warnings only; no commit/push/merge performed |
 
-## Not yet run
-
-The following are deliberately not claimed: full V1 tests, sample-media/golden outputs, Go/Python/
-FFmpeg matrix, rollback image, migrations, API/worker/frontend tests, malicious-media suite, backup
-restore, load/failure drills or production canary. They are owned by T002–T605 in the order
-specified by the roadmap and remain blocked by the documentation gate or open decisions.
-
-## Evidence format for future tasks
-
-```text
-Task: Txxx
-Status: complete/blocked
-Implemented boundary: ...
-Tests: command + environment + commit + report/artifact
-Compatibility: old contract and mapping result
-Security: controls and scan result
-Migration/rollback: forward, downgrade/rollback and data safety
-Open questions: IDs or none
-Next task: Txxx
-```
+No toolchain matrix, fixture/golden behavior, runtime, API/worker/client, malicious-media, load,
+backup/restore, Local/LAN or public production evidence is claimed.

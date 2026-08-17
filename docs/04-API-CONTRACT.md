@@ -8,7 +8,8 @@
 - Mutable aggregate response có `revision` và `ETag: "<revision-or-content-hash>"`; write yêu cầu `If-Match` khi specified.
 - Create/command endpoints marked idempotent require `Idempotency-Key`. Same key + same request returns stored response; same key + different hash returns `409 IDEMPOTENCY_CONFLICT`.
 - Response không chứa local path, storage credential, provider secret, traceback hoặc raw queue implementation.
-- Job/JobStep status dùng canonical states ở `02-DOMAIN-MODEL.md`; V2 không trả `processing`, `executing`, `succeeded`, `waiting_review` hoặc `dead`.
+- Job/JobStep status dùng canonical states ở `02-DOMAIN-MODEL.md`; NH-Media không trả
+  `processing`, `executing`, `succeeded`, `waiting_review` hoặc `dead`.
 - Delete Project/Asset/Script/Timeline/ProviderConfiguration là soft-delete/command; Artifact physical deletion không public direct action.
 
 ### Client compatibility
@@ -294,6 +295,20 @@ ProviderConfiguration product API (admin/owner scope, subject to OQ-05):
 
 Pipeline authoring mutation không public trong baseline; built-in version activation follows OQ-11/admin tooling.
 
+### Analyses and candidates
+
+- `POST /projects/{id}/analyses` creates a typed analysis Job from exact Asset/Artifact refs.
+- `GET /projects/{id}/analyses?kind=&status=` lists Project-scoped results and provenance.
+- `GET /projects/{id}/analyses/{analysis_id}` returns typed result metadata and Artifact refs.
+- `POST /projects/{id}/candidate-groups` requests multiple GenerationCandidates when the selected
+  Workflow/Policy supports it; this endpoint is later-phase and must not be simulated with one
+  overwritten result.
+- `GET /projects/{id}/candidate-groups/{group_id}` returns candidates, EvaluationResults and the
+  audited selection. Selection never mutates candidate payloads.
+
+`ReferenceStyleAnalysis` accepts a user-authorized reference Asset and returns abstract metrics. It
+does not expose copied footage or an upstream workflow name.
+
 ## 10. Event transports
 
 - SSE canonical endpoint là nested Job stream ở mục 7.
@@ -301,23 +316,7 @@ Pipeline authoring mutation không public trong baseline; built-in version activ
 - State-changing commands luôn REST; WebSocket client không được emit domain event.
 - Snapshot is REST state, event stream is ordered change feed. Disconnect không đổi Job state.
 
-## 11. Legacy compatibility surface
-
-Compatibility gateway preserves V1 endpoint shape while mapping to product domain:
-
-| V1 route | Mapping |
-|---|---|
-| `POST /tasks` | Resolve legacy ownership mapping, create V2 Job/PipelineRun, accept `format` alias. |
-| `GET /tasks`, `GET /tasks/{id}` | Map canonical status to V1 `pending|running|retrying|completed|failed|cancelled|dead`. New V2 review/pause states use documented compatibility projection, not leak silently. |
-| `DELETE /tasks/{id}` | Job cancel command. |
-| `GET /tasks/{id}/result` | Render/Artifact legacy shape. |
-| `GET /tasks/{id}/artifacts`, `/download/{filename}` | Artifact roles mapped to safe legacy filenames. |
-| `/health`, `/ready`, `/info`, `/metrics`, `/openapi.json` | Preserve verified V1 semantics/versioning at compatibility listener. |
-| batch/schedule/DLQ routes | Preserve only if listed in frozen compatibility profile; otherwise explicit `BREAKING CHANGE`/deprecation. |
-
-V1 `X-API-Key` is compatibility/internal credential, never browser product auth. V1 route details are frozen in `UPSTREAM-MODULE-AUDIT.md` and migration contract.
-
-## 12. API contract tests
+## 11. Independence and API contract tests
 
 - OpenAPI schema snapshots and request/response examples;
 - Project/Asset/ScriptVersion/TimelineVersion CRUD + ETag conflict;
@@ -328,4 +327,6 @@ V1 `X-API-Key` is compatibility/internal credential, never browser product auth.
 - cursor stability;
 - cross-workspace 404/403 policy and signed URL ACL;
 - secret/path/traceback redaction;
-- compatibility V1 fixtures and explicit breaking-change list.
+- analysis/candidate authorization, versioning and provenance;
+- dependency/package/route scan proving no Movie Narrator CLI, REST, import or compatibility route;
+- web and desktop clients complete the same native Product API flows.

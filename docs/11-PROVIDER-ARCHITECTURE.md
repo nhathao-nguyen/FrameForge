@@ -97,7 +97,8 @@ TTSResponse
 
 Provider returns produced bytes/stream to Artifact commit layer, not a public filesystem identity. Engine probes duration, commits Artifact, creates Narration and optional timing Artifact. Cache key includes contract version, adapter/version, model, voice snapshot, normalized text, style/rate/pitch/audio settings.
 
-Upstream Edge-TTS adapter chỉ hợp lệ local/test/personal theo security policy; production commercial cần provider được owner/legal approve.
+An independently integrated Edge-TTS adapter is limited to local/test/personal use by security and
+provider policy; commercial production requires an approved provider and license/terms review.
 
 ## 6. ASR port
 
@@ -197,4 +198,5 @@ Mỗi adapter phải chạy cùng provider conformance suite:
 - unsupported capability;
 - fallback integration ở node layer, không trong business API.
 
-Upstream registry/TTS/Vision/ASR disposition được ghi ở `UPSTREAM-MODULE-AUDIT.md`.
+Reference-informed provider capability dispositions are recorded in
+`UPSTREAM-CAPABILITY-MATRIX.md`; implementations remain independently authored.

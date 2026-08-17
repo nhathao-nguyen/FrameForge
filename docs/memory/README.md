@@ -1,56 +1,46 @@
 ---
-last_verified: 2026-08-16
+last_verified: 2026-08-17
 source: AGENTS.md; docs/CODEX-INSTRUCTIONS.md; docs/10-DEVELOPMENT-ROADMAP.md
-owner: repository owner / T000 ratifier
+owner: repository owner / task assignee
 ---
 
 # Project memory
 
-This directory is the repository's short operational memory. It records the current state,
-approved operating decisions, task handoffs, compatibility obligations, production controls and
-test evidence. The detailed architecture remains in `docs/00`–`docs/14`, the master context and
-the topic specifications.
+This directory is a concise operational index for the independent NH-Media project. Normative
+architecture remains in the master context and `docs/00`–`docs/14`; memory cannot override it.
 
 ## Reading order
 
-1. [`PROJECT-MEMORY.md`](PROJECT-MEMORY.md) — scope, boundaries and invariants.
-2. [`CURRENT-STATE.md`](CURRENT-STATE.md) — branch, gate and active handoff.
-3. [`DECISIONS.md`](DECISIONS.md) — approved decisions only.
-4. [`IMPLEMENTATION-STATUS.md`](IMPLEMENTATION-STATUS.md) — T000–T605 ledger.
-5. [`../SETUP-PLAN.md`](../SETUP-PLAN.md) — setup gate and V0–V10 verification.
-6. [`../PRODUCTION-PLAN.md`](../PRODUCTION-PLAN.md) — full phase/release plan.
-7. The task-specific normative specification and [`../OPEN-QUESTIONS.md`](../OPEN-QUESTIONS.md).
+1. [`PROJECT-MEMORY.md`](PROJECT-MEMORY.md)
+2. [`CURRENT-STATE.md`](CURRENT-STATE.md)
+3. [`DECISIONS.md`](DECISIONS.md)
+4. [`IMPLEMENTATION-STATUS.md`](IMPLEMENTATION-STATUS.md)
+5. [`../OPEN-QUESTIONS.md`](../OPEN-QUESTIONS.md)
+6. The task-specific normative specification.
+
+Run `python tools/check_memory.py --max-age 0` after changing specifications or memory.
 
 ## Operating rules
 
-- Memory is versioned with the repository and updated in the same PR as the related change.
-- A memory entry has `last_verified`, `source` and `owner` metadata.
-- `OPEN` recommendations are not decisions. A decision must update the OQ, affected specs and
-  implementation task before dependent work starts.
-- Memory never contains secrets, tokens, presigned URLs, user data or durable local filesystem
-  paths.
-- Run the documentation-only consistency check with:
-
-  `python tools/check_memory.py`
-
-- If the checker reports stale state, refresh the relevant evidence rather than suppressing the
-  check.
+- Update related memory/evidence in the same change.
+- Never store secrets, presigned URLs, user data or durable local paths here.
+- An OPEN recommendation is not an approved choice.
+- Movie Narrator facts are research provenance only; memory must not turn them into an operational
+  dependency, compatibility contract or rollback target.
+- Record commands as evidence only after they run.
 
 ## Files
 
 | File | Purpose |
 |---|---|
-| [`PROJECT-MEMORY.md`](PROJECT-MEMORY.md) | Product intent, boundaries, invariants and task intake. |
-| [`CURRENT-STATE.md`](CURRENT-STATE.md) | Branch/commit baseline, gate, active work and blockers. |
-| [`ARCHITECTURE-MAP.md`](ARCHITECTURE-MAP.md) | Runtime flow, ownership, trust and dependency map. |
-| [`DECISIONS.md`](DECISIONS.md) | Approved memory/operating decisions; never OQ recommendations. |
-| [`OPEN-QUESTIONS.md`](OPEN-QUESTIONS.md) | Synchronized OQ-01–OQ-15 status and blocking tasks. |
-| [`IMPLEMENTATION-STATUS.md`](IMPLEMENTATION-STATUS.md) | Task ledger and handoff fields for T000–T605. |
-| [`COMPATIBILITY-MATRIX.md`](COMPATIBILITY-MATRIX.md) | V1 surface, adapter mapping and removal criteria. |
-| [`PRODUCTION-RUNBOOK.md`](PRODUCTION-RUNBOOK.md) | Deployment, recovery, rollback and release gates. |
-| [`SECURITY-CONTROLS.md`](SECURITY-CONTROLS.md) | Security control inventory and evidence status. |
-| [`TEST-EVIDENCE.md`](TEST-EVIDENCE.md) | Commands, environments, results and limitations. |
-| [`CHANGELOG.md`](CHANGELOG.md) | Memory-only change history and handoff notes. |
-| [`../SETUP-PLAN.md`](../SETUP-PLAN.md) | Client/server foundation setup and certification passes. |
-| [`../PRODUCTION-PLAN.md`](../PRODUCTION-PLAN.md) | End-to-end implementation and production release gates. |
-| [`../PRODUCTION-EXECUTION-PROMPT.md`](../PRODUCTION-EXECUTION-PROMPT.md) | Copy/paste operating prompt for future execution agents. |
+| [`PROJECT-MEMORY.md`](PROJECT-MEMORY.md) | Product intent and invariants. |
+| [`CURRENT-STATE.md`](CURRENT-STATE.md) | Branch, gate, active task and blockers. |
+| [`ARCHITECTURE-MAP.md`](ARCHITECTURE-MAP.md) | Ownership, flow and trust map. |
+| [`DECISIONS.md`](DECISIONS.md) | Approved decisions. |
+| [`OPEN-QUESTIONS.md`](OPEN-QUESTIONS.md) | Synchronized OQ status. |
+| [`IMPLEMENTATION-STATUS.md`](IMPLEMENTATION-STATUS.md) | T000–T605 ledger. |
+| [`COMPATIBILITY-MATRIX.md`](COMPATIBILITY-MATRIX.md) | Historical filename; records absence of an upstream compatibility surface. |
+| [`PRODUCTION-RUNBOOK.md`](PRODUCTION-RUNBOOK.md) | Planned Local/LAN and later production operations. |
+| [`SECURITY-CONTROLS.md`](SECURITY-CONTROLS.md) | Control inventory. |
+| [`TEST-EVIDENCE.md`](TEST-EVIDENCE.md) | Commands and limitations. |
+| [`CHANGELOG.md`](CHANGELOG.md) | Memory change history. |

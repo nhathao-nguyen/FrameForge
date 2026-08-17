@@ -1,585 +1,241 @@
 # Open Questions
 
-Recommendation is not an approved decision. Owner must replace `OPEN` with a dated decision and
-update affected specs/tasks before dependent implementation. `DECIDED` entries below record the
-owner decision and remain subject to their implementation evidence. Architectural invariants already
-fixed by the master plan are not reopened here.
+Recommendations are not decisions. An OPEN question blocks only tasks listed in that section.
+Owner-confirmed architecture is recorded under `RESOLVED BY THIS ARCHITECTURE` and must not be
+reopened during implementation without a new dated owner decision.
+
+## OWNER DECISION REQUIRED
 
 ## OQ-01 — Product identity provider
 
-**Question**
+**Category:** OWNER DECISION REQUIRED
 
-Which authentication/session mechanism will Product API and Next.js use?
+**Question:** Which authentication/session mechanism will Product API and Next.js/Tauri use?
 
-**Why it matters**
+**Why:** It fixes token/session validation, local bootstrap, CSRF/CORS and identity dependencies.
 
-It fixes token/session validation, `users.external_subject`, local development, API keys, CSRF/CORS and Phase 1 package dependencies.
+**Options:** A) external OIDC only; B) product-owned password/session; C) OIDC authentication plus
+local authorization/API keys.
 
-**Option A — External OIDC only**
-
-Pros: small password/security surface; standard JWT/OIDC; supports managed or self-hosted IdP.
-
-Cons: local/offline setup and account linking depend on IdP behavior; still needs local authorization records.
-
-**Option B — Product-owned email/password/session**
-
-Pros: full UX/control and offline independence.
-
-Cons: largest security/operations scope (password reset, MFA, session revocation, abuse); not core media value.
-
-**Option C — OIDC identity + local authorization/API keys**
-
-Pros: delegates authentication while Product owns Workspace membership/roles/API integration; clear boundary.
-
-Cons: two identity layers must synchronize subject/email and dev bootstrap.
-
-**Recommendation**
-
-Option C. Select concrete IdP and claims before auth middleware/repository tasks.
+**Recommendation:** C, with a concrete IdP/claims contract selected before auth implementation.
 
 **Decision status:** OPEN
 
-Blocks: T110, T120, T210.
+Blocks: T106 auth middleware, T201, T210, T430.
+
+## OQ-05 — Provider credential ownership and secret backend
+
+**Category:** OWNER DECISION REQUIRED
+
+**Question:** Are credentials system-, Workspace- or User-owned, and which secret backend supplies
+scoped references?
+
+**Why:** Authorization, cost attribution, rotation, local use and worker secret scope depend on it.
+
+**Options:** A) system credentials; B) Workspace credentials in a secret manager; C) user BYOK.
+
+**Recommendation:** B for product deployment plus explicit system/local configuration for a
+single-user Local/LAN profile. Never plaintext PostgreSQL storage.
+
+**Decision status:** OPEN
+
+Blocks: T102 real secrets, T203, T235, T500.
+
+## OQ-06 — Workspace scope in MVP
+
+**Category:** OWNER DECISION REQUIRED
+
+**Question:** Workspace-first RBAC or single-user bootstrap with Workspace-shaped repositories?
+
+**Why:** Ownership must not be retrofitted after data and API behavior exist.
+
+**Options:** A) implicit single Workspace; B) Workspace-first schema/RBAC with one-Workspace
+bootstrap; C) organization hierarchy now.
+
+**Recommendation:** B; do not add organization/billing yet.
+
+**Decision status:** OPEN
+
+Blocks: T201, T210 and authorization-dependent resources.
+
+## OQ-10 — Retention/privacy defaults
+
+**Category:** OWNER DECISION REQUIRED
+
+**Question:** What retention applies to source media, intermediates, checkpoints, renders, provider
+content and logs?
+
+**Why:** Replay, storage cost, privacy and backup depend on it.
+
+**Options:** A) retain until explicit delete; B) class-based Workspace policy; C) auto-delete source
+after output.
+
+**Recommendation:** B; source/final outputs retained by default, short TTL only for unprotected
+staging/temp/log classes.
+
+**Decision status:** OPEN
+
+Blocks: T602 and production deletion policy; does not block immutable Artifact design.
+
+## IMPLEMENTATION DECISION
 
 ## OQ-02 — Timeline read projections
 
-**Question**
+**Category:** IMPLEMENTATION DECISION
 
-Should Phase 2 create normalized Track/Clip read projections in addition to canonical immutable TimelineVersion JSONB?
+**Question:** Add normalized Track/Clip read projections in Phase 2?
 
-**Why it matters**
+**Options:** A) JSONB only; B) rebuildable PostgreSQL projection; C) external/search projection later.
 
-Canonical source is already JSONB; projection timing affects migrations, query/editor complexity and consistency jobs.
-
-**Option A — JSONB only initially**
-
-Pros: one source of truth; smallest migration and atomic edit surface; enough for project-scoped editor load.
-
-Cons: cross-timeline Clip analytics/filter queries are less efficient.
-
-**Option B — Build rebuildable projection immediately**
-
-Pros: fast server-side Clip/Track queries and analytics.
-
-Cons: extra tables/indexes/rebuild logic before measured need; risk consumers treat projection as canonical.
-
-**Option C — External/search projection later**
-
-Pros: isolates analytics/search scale from transactional DB.
-
-Cons: additional infrastructure and eventual consistency.
-
-**Recommendation**
-
-Option A in Phase 2; introduce B only after measured query requirement. Renderer always reads canonical document.
+**Recommendation:** A until measured queries justify B. Renderer always reads TimelineVersion.
 
 **Decision status:** OPEN
 
-Blocks: only projection-specific schema task; does not block canonical TimelineVersion table/validator.
+Blocks: projection-specific part of T208 only.
 
-## OQ-03 — Redis work-queue primitive
+## OQ-03 — Redis QueuePort primitive
 
-**Question**
+**Category:** IMPLEMENTATION DECISION
 
-Which Redis primitive/library implements QueuePort for initial V2?
+**Question:** Redis Streams consumer groups or Lists/sorted sets for initial QueuePort?
 
-**Why it matters**
+**Options:** A) Streams; B) Lists + sorted sets; C) broker framework.
 
-Ack, pending reclaim, delayed retry, priority and operational tooling differ; PostgreSQL/outbox remains source of truth regardless.
-
-**Option A — Redis Streams consumer groups**
-
-Pros: ack/pending/claim/replay primitives fit at-least-once; observable without a large framework.
-
-Cons: delayed retry/priority need explicit design; consumer-group operations must be implemented carefully.
-
-**Option B — Redis Lists + sorted sets + Pub/Sub**
-
-Pros: simple work pop and explicit delayed/priority queues.
-
-Cons: reclaim/atomicity scripts are custom; live Pub/Sub has no durability (DB replay still required).
-
-**Option C — RQ/Celery/other broker framework**
-
-Pros: mature retry/scheduling/worker tooling.
-
-Cons: framework state semantics can conflict with Job/JobStep truth; larger dependency/abstraction leakage.
-
-**Recommendation**
-
-Option A behind QueuePort, with PostgreSQL lease/outbox authoritative and a focused reclaim/load prototype in the queue task—not before Phase 0.
+**Recommendation:** A behind QueuePort, with PostgreSQL lease/outbox authoritative.
 
 **Decision status:** OPEN
 
 Blocks: T310–T312.
 
-## OQ-04 — Primary browser progress transport
+## OQ-04 — Primary progress transport
 
-**Question**
+**Category:** IMPLEMENTATION DECISION
 
-Should frontend use SSE or WebSocket as the primary progress transport?
+**Question:** SSE or WebSocket as the primary client progress transport?
 
-**Why it matters**
+**Options:** A) SSE primary, WebSocket optional; B) WebSocket primary; C) polling MVP.
 
-It affects gateway timeouts, auth refresh, SDK/reconnect implementation and load tests. Event envelope/replay semantics are already shared.
-
-**Option A — SSE primary, WebSocket optional**
-
-Pros: native server→browser model, simple Last-Event-ID/proxy behavior, lower protocol complexity.
-
-Cons: bidirectional future features need REST/another channel; some gateways need streaming config.
-
-**Option B — WebSocket primary, SSE fallback**
-
-Pros: bidirectional extensibility and one long-lived socket.
-
-Cons: more connection/auth/reconnect/load-balancer complexity; invites state commands over socket.
-
-**Option C — REST polling MVP**
-
-Pros: operationally simplest.
-
-Cons: violates requested live progress quality, higher polling load, slower review updates.
-
-**Recommendation**
-
-Option A. Keep commands on REST and implement WebSocket only as same-envelope compatibility/future transport.
+**Recommendation:** A; commands remain REST and both transports share one envelope/replay service.
 
 **Decision status:** OPEN
 
-Blocks: T340 frontend transport choice; durable event API is not blocked.
-
-## OQ-05 — Provider credential ownership and secret backend
-
-**Question**
-
-Are provider credentials system-, Workspace-, or User-owned, and which secret backend supplies `credential_ref`?
-
-**Why it matters**
-
-It controls authorization, cost attribution, key rotation, worker secret scope, local/offline behavior and ProviderConfiguration API.
-
-**Option A — System credentials only**
-
-Pros: simplest MVP/operations; centralized provider policy.
-
-Cons: poor tenant isolation/cost ownership; all users share quota and risk.
-
-**Option B — Workspace credentials in secret manager**
-
-Pros: clean team policy/cost boundary; admin-managed; worker can receive scoped reference.
-
-Cons: requires secret-manager integration and rotation UX.
-
-**Option C — User BYOK credentials**
-
-Pros: per-user cost/privacy choice.
-
-Cons: most complex permissions/revocation/support; Jobs become sensitive to membership/user deletion.
-
-**Recommendation**
-
-Option B for product deployment plus system/local config for single-user offline mode. Select concrete secret backend before write API; never store plaintext in PostgreSQL.
-
-**Decision status:** OPEN
-
-Blocks: T112, T217, T500 and production provider configuration endpoints.
-
-## OQ-06 — Workspace scope in MVP
-
-**Question**
-
-Will MVP enforce Workspace-first ownership or run a single-user bootstrap while retaining Workspace-shaped repositories?
-
-**Why it matters**
-
-Master plan does not prioritize multi-tenant, but adding ownership later risks cross-project leakage and schema rewrite.
-
-**Option A — Single implicit Workspace/user**
-
-Pros: simplest UX/local setup; no team management UI.
-
-Cons: authorization assumptions can leak into queries; migration to teams needs care.
-
-**Option B — Workspace-first data/RBAC, single Workspace bootstrap allowed**
-
-Pros: tenant scope is structural from day one; local mode stays simple through bootstrap.
-
-Cons: auth/membership code appears earlier than immediate single-user need.
-
-**Option C — Organization → Workspace → Project hierarchy now**
-
-Pros: enterprise hierarchy ready.
-
-Cons: conflicts with “do not over-engineer/billing/multi-tenant early”; largest scope.
-
-**Recommendation**
-
-Option B, without organization/billing. Repositories always require Workspace context; local setup seeds one Workspace.
-
-**Decision status:** OPEN
-
-Blocks: T120, T200–T210 and legacy ownership mapping.
-
-## OQ-07 — Persistent embedding storage
-
-**Question**
-
-Where should persistent text/image embeddings live in Phase 6?
-
-**Why it matters**
-
-It affects model-version invalidation, matching latency, backup, query pattern and dependency footprint.
-
-**Option A — Artifact blobs + metadata/index manifest**
-
-Pros: follows storage abstraction; simple backup/version/checksum; no DB extension initially.
-
-Cons: nearest-neighbor queries require loading/building local index.
-
-**Option B — PostgreSQL pgvector**
-
-Pros: transactional metadata/vector queries; familiar operations at moderate scale.
-
-Cons: adds extension/index tuning and DB storage/load; multimodal/model partitions need design.
-
-**Option C — External vector service**
-
-Pros: specialized scale/search features.
-
-Cons: extra service/cost/consistency/privacy; premature without benchmarks.
-
-**Recommendation**
-
-Option A until Phase 6 benchmarks demonstrate B; do not choose C without workload evidence.
-
-**Decision status:** OPEN
-
-Blocks: persistent index implementation in T523; does not block provider port or Artifact schema.
+Blocks: T340 and client transport choice; durable events are not blocked.
 
 ## OQ-08 — Timeline edit transport
 
-**Question**
+**Category:** IMPLEMENTATION DECISION
 
-How does frontend submit a new TimelineVersion?
+**Question:** JSON Patch, full replacement or domain edit commands?
 
-**Why it matters**
+**Options:** A) RFC 6902; B) full document; C) domain commands plus full import/replace.
 
-It determines conflict UX, audit diff, command validation, undo/redo and payload size; immutable versioning/If-Match is already fixed.
-
-**Option A — RFC 6902 JSON Patch**
-
-Pros: standard, compact and generic.
-
-Cons: array-index operations are fragile; semantic intent may be hard to audit.
-
-**Option B — Full document replacement**
-
-Pros: simplest validation and client state model.
-
-Cons: larger payload/diff and less semantic audit; still needs conflict handling.
-
-**Option C — Domain edit commands**
-
-Pros: clear intent/invariants/audit (`MoveClip`, `ReplaceSource`, `SplitClip`).
-
-Cons: more API surface and frontend/server command parity; import still needs full document path.
-
-**Recommendation**
-
-Option C for editor actions plus Option B for import/replace; avoid generic array-index patch as primary. Prototype command set from actual editor operations before freezing API.
+**Recommendation:** C, with B for import/replace; avoid array-index patch as primary editor API.
 
 **Decision status:** OPEN
 
-Blocks: T421/T530 and Timeline editor mutation client.
+Blocks: T233, T432.
 
-## OQ-09 — Legacy Task ownership mapping
+## DEPLOYMENT DECISION
 
-**Question**
+No deployment decision blocks Local/LAN functional development. Public DNS, TLS termination,
+CDN, managed services, target OS matrix and canary traffic policy are selected in T605 after T603
+Local/LAN certification. They are intentionally not converted into premature service choices here.
 
-How does a V1 `/tasks` request without Project/Workspace identity map into Product domain?
+## LATER-PHASE DECISION
 
-**Why it matters**
+## OQ-07 — Persistent embedding storage
 
-Compatibility must not create unowned data or let an engine API key bypass product authorization.
+**Category:** LATER-PHASE DECISION
 
-**Option A — One temporary Project per Task**
+**Question:** Artifact index, pgvector or external vector service?
 
-Pros: deterministic isolation/history; easy cleanup policy.
+**Options:** A) Artifact + index manifest; B) PostgreSQL pgvector; C) external vector service.
 
-Cons: project clutter and weaker grouping for repeat client.
+**Recommendation:** A until T523 benchmarks justify B; C requires separate scale/privacy evidence.
 
-**Option B — Authenticated API key/user has configured default Project**
+**Decision status:** DEFERRED
 
-Pros: coherent history/assets; natural for long-lived client.
-
-Cons: needs provisioning and collision/concurrency policy.
-
-**Option C — Compatibility namespace outside Project until import**
-
-Pros: closest to V1 and minimal immediate product records.
-
-Cons: splits source of truth and hides Artifacts/Jobs from product UI.
-
-**Recommendation**
-
-Option B for provisioned clients, fallback A for local/import-only profile. Never default C.
-
-**Decision status:** OPEN
-
-Blocks: T360/T361 and legacy data importer.
-
-## OQ-10 — Retention/privacy defaults
-
-**Question**
-
-What default retention applies to source media, intermediate Artifacts, checkpoints, renders, provider content and logs?
-
-**Why it matters**
-
-Replay/resume, storage cost, privacy/legal obligations and backup all depend on it.
-
-**Option A — Retain everything until user delete**
-
-Pros: maximum reproducibility; simple reference policy.
-
-Cons: highest cost/privacy exposure; temp/log accumulation.
-
-**Option B — Class-based Workspace policy**
-
-Pros: source/renders can be durable while temp/proxy/checkpoint/log have bounded TTL; configurable.
-
-Cons: needs reference-aware sweeper and understandable UX.
-
-**Option C — Privacy-first auto-delete source after output**
-
-Pros: minimizes sensitive source retention/cost.
-
-Cons: prevents rerender/resume unless user pins; surprising and destructive if default.
-
-**Recommendation**
-
-Option B. Keep source/final renders until explicit delete by default; short TTL only for staging/temp/log and expired checkpoints after protection checks.
-
-**Decision status:** OPEN
-
-Blocks: T224/T610 and production policy; does not block immutable Artifact model.
+Blocks: persistent index choice in T523 only.
 
 ## OQ-11 — Pipeline authoring scope
 
-**Question**
+**Category:** LATER-PHASE DECISION
 
-Who can author/activate Pipeline definitions in the initial product?
+**Question:** Built-in only, admin declarative graphs or user code?
 
-**Why it matters**
+**Options:** A) built-in versioned Pipelines; B) admin-authored declarative graphs; C) user code.
 
-Public graph/node/plugin authoring greatly expands validation, security and UI surface.
+**Recommendation:** A through the native pipeline release; evaluate B later. C is not a public
+default because arbitrary code violates the trust boundary.
 
-**Option A — Built-in versioned Pipelines only**
+**Decision status:** DEFERRED
 
-Pros: controlled contracts/security; enough for movie recap strangler.
+Blocks: public/admin authoring APIs. T202/T400 may implement built-in-only definitions.
 
-Cons: no user custom workflow initially.
+## RESOLVED BY THIS ARCHITECTURE
 
-**Option B — Admin-authored declarative graph**
+## OQ-09 — Upstream task ownership mapping
 
-Pros: flexibility without arbitrary code if node registry fixed.
+**Category:** RESOLVED BY THIS ARCHITECTURE
 
-Cons: needs activation UI/API, schema migration and stronger graph/resource validation.
+**Decision:** No mapping exists. NH-Media does not expose an upstream task/CLI/REST compatibility
+surface or import upstream runtime state. External user media uses native Project/Asset upload.
 
-**Option C — User Python/plugin nodes**
+**Decision status:** DECIDED — 2026-08-17
 
-Pros: maximal extension.
+**Owner:** repository owner
 
-Cons: arbitrary code, supply-chain and secret/sandbox risk; conflicts with production plugin rule.
+Blocks: none.
 
-**Recommendation**
+## OQ-12 — Product and package namespace
 
-Option A through Phase 4; evaluate B after built-in DAG/runtime is stable. C is trusted-deployment-only, never public default.
+**Category:** RESOLVED BY THIS ARCHITECTURE
 
-**Decision status:** OPEN
+**Decision:** Product is NH-Media. Python namespace is `nh_media`. Go module starts at
+`github.com/nhathao-nguyen/NH-Media`. `movie_narrator` appears only in upstream research/provenance.
 
-Blocks: pipeline mutation/admin API; built-in Pipeline implementation can proceed after owner confirms A.
+**Decision status:** DECIDED — 2026-08-17
 
-## OQ-12 — V2 package/product namespace
+**Owner:** repository owner
 
-**Question**
-
-What stable package/import namespace should new code use?
-
-**Why it matters**
-
-It affects repository layout, imports, publishing, SDK names and long-lived adapter boundaries. Legacy namespace must remain unchanged.
-
-**Option A — Temporary `your_engine`**
-
-Pros: matches master placeholder.
-
-Cons: guaranteed later rename/churn; easy to leak placeholder publicly.
-
-**Option B — Final product namespace after naming decision**
-
-Pros: stable public imports/packages.
-
-Cons: blocks scaffold until naming owner decides.
-
-**Option C — Neutral internal `video_engine` package**
-
-Pros: descriptive and product-name independent.
-
-Cons: generic/collision risk and may not fit publishing.
-
-**Recommendation**
-
-Option B. Until decided, docs use the language-neutral compute/worker boundary; do not create a
-placeholder application package or infer a queue technology.
-
-**Decision status:** DECIDED — 2026-08-16
-
-**Decision owner:** repository owner
-
-**Decision:** Use `nh_media` as the V2 Python/package namespace. Do not use `your_engine`,
-`video_engine` or `frameforge` as the public V2 namespace at this time. Keep the legacy
-`movie_narrator` namespace unchanged. Go control-plane code uses normal Go module/package
-conventions with initial module path `github.com/nhathao-nguyen/FrameForge`, prefers internal
-domain-oriented packages and does not expose a generic public `frameforge` package. Contracts shared
-with Go are language-neutral and must not depend on Python package naming.
-
-Blocks: resolved for T100; Phase 0 baseline tasks remain required before application scaffold.
+Blocks: none.
 
 ## OQ-13 — Runtime/language topology
 
-**Question**
+**Category:** RESOLVED BY THIS ARCHITECTURE
 
-Which implementation language and runtime boundaries apply to the V2 Product API/control plane,
-media workers, ML/AI workers and frozen V1 compatibility workloads?
+**Decision:** Go Product API/control plane; bounded Go media workers; isolated Python `nh_media`
+ML/AI workers; versioned language-neutral contracts; no Python/FFmpeg/ML inline in Product API.
 
-**Historical decision — SUPERSEDED — 2026-08-16**
+**Decision status:** DECIDED — 2026-08-17
 
-The earlier T000 decision recorded Product/API/core in Python 3.13 and frozen legacy/ML in Python
-3.12. It remains in decision history as `D-T000-013`, but it is no longer normative and must not
-be used to select the Product API implementation.
+**Owner:** repository owner
 
-**Current owner decision — SUPERSEDING — 2026-08-16**
+Blocks: none for topology; T002 still selects exact versions.
 
-1. V2 Product API/control plane is Go and must not depend on Python. It owns HTTP, auth/authorization
-   integration, Workspace/Project/Asset/Job orchestration, PostgreSQL repositories, Redis
-   coordination/queue adapter, object-storage orchestration, scheduling, progress/events and
-   rate/resource admission control.
-2. Pin a currently supported stable Go release in T002/environment/CI/production; no floating
-   `latest` toolchain is allowed. Initial module path is `github.com/nhathao-nguyen/FrameForge`
-   unless validation finds a concrete repository/module blocker. Prefer internal domain-oriented Go
-   packages; do not create a global public `frameforge` package.
-3. Prefer Go for V2 media-only workers responsible for input/download, FFmpeg subprocess
-   orchestration, progress parsing, output validation and Artifact upload. FFmpeg remains the native
-   codec/media process; Go does not reimplement codecs.
-4. Python is isolated to ML/AI compute workers and frozen V1 compatibility workloads. Start ML at
-   Python 3.12 where required by the verified ML/CUDA matrix; move V2 ML to 3.13 only after parity
-   evidence. Frozen V1 runtime/dependencies remain unchanged for compatibility and rollback.
-5. Go and Python communicate only through versioned language-neutral JSON/Protobuf/schema envelopes.
-   Durable/public contracts must not use pickle, gob, framework model serialization, in-process
-   Python embedding or shared ORM objects.
-6. Implementation language is replaceable. API/schema/event/state-machine/worker/artifact/error
-   semantics remain language-neutral; a Go/Python/Rust change is not permission to redesign those
-   boundaries.
-7. Product API must never run long-running rendering, FFmpeg, transcription, ML inference or other
-   expensive compute inline in an HTTP request. Use durable Job transaction → outbox/queue → bounded
-   worker → execution → Artifact commit → durable result/state update, with explicit limits,
-   lease/timeout, cancellation, retry/idempotency and progress.
+## OQ-14 — Upstream relationship
 
-**Decision status:** DECIDED — SUPERSEDING OWNER DECISION — 2026-08-16
+**Category:** RESOLVED BY THIS ARCHITECTURE
 
-**Decision owner:** repository owner
+**Decision:** Movie Narrator is research/reference-only. No runtime, build, deployment, import,
+compatibility, migration or rollback dependency. Capability research is classified in the dedicated
+matrix and implementations are independently authored.
 
-Blocks: resolved for language topology and T002/T100 planning. OQ-01–OQ-11 still govern their own
-dependent tasks; implementation remains blocked by the Phase 0 gate.
+**Decision status:** DECIDED — 2026-08-17
 
-## OQ-14 — Frozen V1 compatibility profile breadth
+**Owner:** repository owner
 
-**Question**
+Blocks: none.
 
-Must V2 compatibility preserve only core task routes/CLI, or all V1 batch/schedule/DLQ/distributed features?
+## OQ-15 — Desktop runtime
 
-**Why it matters**
+**Category:** RESOLVED BY THIS ARCHITECTURE
 
-Source verification found more public behavior than the initial docs listed. Preserving all may enlarge migration scope; dropping any is a documented breaking change.
+**Decision:** Tauri 2 thin remote-first Product API client. It does not bundle Python, FFmpeg
+processing, ML models/workers, PostgreSQL, Redis or server/provider secrets.
 
-**Option A — Preserve all verified public CLI/REST behavior**
+**Decision status:** DECIDED — 2026-08-17
 
-Pros: strongest backward compatibility; no surprise for existing consumers.
+**Owner:** repository owner
 
-Cons: imports scheduler/batch/distributed scope not central to product.
-
-**Option B — Preserve tasks/results/artifacts/health plus DLQ; deprecate batch/schedule/distributed**
-
-Pros: focuses on likely core clients while retaining reliability behavior.
-
-Cons: requires usage evidence and explicit breaking-change window.
-
-**Option C — Preserve only `mn create` and core task submission/status**
-
-Pros: smallest compatibility implementation.
-
-Cons: highest breakage and conflicts with “keep behavior” absent strong evidence.
-
-**Recommendation**
-
-Option A for the frozen baseline unless owner can prove unused surfaces and approve B with a deprecation window. Do not choose C by convenience.
-
-**Decision status:** DECIDED — 2026-08-16
-
-**Decision owner:** repository owner
-
-**Decision:** Option A. Preserve all verified public V1 CLI/REST behavior for the frozen
-compatibility baseline, including batch, schedule, DLQ and distributed surfaces. Any later
-deprecation/removal requires usage evidence, a compatibility replacement, an announced
-owner-approved deprecation window and a rollback path.
-
-Blocks: resolved for T003/T360–T362; T003 must still produce the executable profile and evidence.
-
-## OQ-15 — Desktop client shell/runtime
-
-**Question**
-
-Which desktop shell should package the first-class remote Product API client?
-
-**Why it matters**
-
-It fixes native permission boundaries, build/signing/update tooling, OS support, local filesystem
-integration and CI runners. It does not change the Product API, Engine, Worker or storage boundary.
-
-**Option A — Tauri 2 with web UI**
-
-Pros: small native footprint, explicit capability permissions, suitable for a remote-first client,
-and avoids bundling Python/FFmpeg/ML runtimes.
-
-Cons: Rust toolchain/native build matrix and plugin review are additional skills/CI requirements.
-
-**Option B — Electron**
-
-Pros: mature web ecosystem and straightforward reuse of the web client.
-
-Cons: larger runtime, broader native surface and stronger hardening/update discipline.
-
-**Option C — Native client per operating system**
-
-Pros: strongest platform integration and native UX.
-
-Cons: highest maintenance cost and duplicated client behavior; does not improve the server boundary.
-
-**Recommendation**
-
-Option A for a lightweight remote-first client, subject to owner approval and a signed-build proof.
-The desktop client must remain a Product API client; it must not embed the engine or become a second
-business backend.
-
-**Decision status:** DECIDED — 2026-08-16
-
-**Decision owner:** repository owner
-
-**Decision:** Use Tauri 2 for the first-class desktop client. It is a lightweight remote-first
-Product API client and must not bundle Python, FFmpeg, ML runtime, database, Redis, engine or
-provider secrets. Tauri capabilities are least-privilege; signing and update policy require proof
-before production release.
-
-Blocks: resolved for T433–T434; signing/update/permission evidence remains a task acceptance gate.
+Blocks: signing/update/permission evidence remains T434, not an architecture decision.

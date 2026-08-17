@@ -27,7 +27,7 @@ nodes: [{key, type, depends_on, input_schema, output_schema,
          execution_class, soft, human_gate, resource_requirements,
          timeout, retry_policy}]
 policies: {strict, checkpoint, artifact_retention, progress_weights}
-compatibility: {legacy_engine_version, contract_version}
+provenance: {nh_media_release, contract_version, optional_reference_observation}
 ```
 
 Validation trước khi activate:
@@ -59,7 +59,8 @@ provider_snapshot
 Rules:
 
 1. Context truyền reference/typed domain data, không truyền absolute path giữa service.
-2. Worker resolve `ArtifactRef` thành file tạm trong sandbox khi adapter cần path.
+2. Worker resolves `ArtifactRef` thành local handle tạm trong executor sandbox khi media/model tool
+   requires a file.
 3. Node không tự ghi DB product ngoài `NodeOutput`/repository port.
 4. Context snapshot serializable sau node; service handles/logger không serialize.
 5. Mọi output phải khai báo semantic type và checksum.
@@ -105,32 +106,29 @@ Input fingerprint = hash của node config + pipeline version + exact input IDs/
 - `strict=true` đổi soft failure thành Job failure.
 - Human gate không phải failure; JobStep chuyển `waiting_for_review` và giữ checkpoint.
 
-## 5. Movie recap baseline graph
+## 5. Independent movie-recap baseline graph
 
-Giữ thứ tự và semantics V1 trong compatibility pipeline:
+The built-in graph is an NH-Media-native workflow. Reference observations informed capability
+coverage, but node names, contracts, state and APIs belong to NH-Media.
 
 ```text
-resolve_video
- → prepare_assets
- → research_plot
- → generate_script
- → export_script_md
- → generate_voice
- → align_audio
- → detect_scenes
- → match_clips
- → mix_bgm
- → translate_subtitles
- → generate_subtitle
- → run_qa_gate
- → render_video
- → validate_deliverable
- → export_clips
+resolve_source_asset → prepare_media_assets
+  ├→ research_metadata → generate_script → review_script
+  ├→ detect_scenes → analyze_scenes
+  └→ extract_transcript
+
+review_script → generate_narration → align_audio
+script + scenes + analysis + alignment → generate_match_candidates
+generate_match_candidates → evaluate_candidates → select_candidate
+selection + narration + subtitle cues → build_timeline → review_timeline
+review_timeline → mix_audio → run_qa_gate → render_timeline
+→ validate_deliverable → export_clips
 ```
 
-V1 currently models 16 steps with hard/soft distinction; V2 must preserve step names and short aliases during migration.
+The earliest vertical slice may use a smaller graph (`resolve_source_asset → generate_thumbnail →
+commit Artifact`) while preserving the same Job/worker contracts. It must not execute upstream.
 
-## 6. V2 node catalog
+## 6. NH-Media node catalog
 
 Policy profiles dùng trong bảng:
 
@@ -149,21 +147,24 @@ Policy profiles dùng trong bảng:
 |---|---|---|---|---|---|
 | `resolve_source_asset` | Asset ID, committed original Artifact | validated source ref + probe Artifact | entry | `P-PROBE` | hard; security/invalid media non-retryable |
 | `prepare_media_assets` | source ref; optional BGM/font/image Assets | normalized proxy/audio/thumb Artifacts | `resolve_source_asset` | `P-MEDIA` | hard for required proxy; optional variants soft |
-| `research_plot` | project/source metadata; optional external title IDs | research JSON Artifact | `resolve_source_asset` | `P-AI` | soft by default, hard in strict pipeline |
-| `generate_script` | research Artifact optional, style/language/duration snapshot | Script + proposed ScriptVersion; export-ready content | `research_plot` or source metadata fallback | `P-AI` | hard; invalid structured script non-retryable after provider budget |
+| `research_metadata` | project/source metadata; optional external title IDs | ResearchAnalysis/Artifact | `resolve_source_asset` | `P-AI` | soft by default, hard in strict pipeline |
+| `generate_script` | research Artifact optional, style/language/duration snapshot | Script + proposed ScriptVersion; export-ready content | `research_metadata` or source metadata fallback | `P-AI` | hard; invalid structured script non-retryable after provider budget |
 | `review_script` | proposed ScriptVersion | approved ScriptVersion ref/review event | `generate_script` | `P-SYSTEM` + `approval_completes_node` | automatic mode completes by policy; studio waits; reject follows declared correction/fail edge |
 | `generate_narration` | exact approved/allowed ScriptVersion; Voice snapshot | Narration + audio Artifact + optional provider timing | `review_script` or `generate_script` in automatic mode | `P-AI` | hard; cache/reuse by exact TTS fingerprint |
 | `align_audio` | narration audio Artifact + ScriptVersion | timing/transcript alignment Artifact | `generate_narration` | `P-ML` | soft fallback to segment timing if declared; hard in strict mode |
 | `detect_scenes` | prepared source video Artifact | Scene records, scene index + thumbnail Artifacts | `prepare_media_assets` | `P-ML` | soft fallback one full-length Scene only if pipeline explicitly allows |
 | `extract_transcript` | prepared source audio Artifact | Transcript Artifact | `prepare_media_assets` | `P-ML` | soft if matching can proceed without dialogue; fallback chain is node config |
-| `caption_scenes` | Scene refs + keyframe Artifacts; optional transcript | caption/entity/action Artifact linked to Scenes | `detect_scenes`; optional `extract_transcript` | `P-AI` | soft per-scene partial result only with missing-item list/provenance |
+| `analyze_scenes` | Scene refs + keyframe Artifacts; optional transcript | Analysis records for caption/entity/action/location/emotion | `detect_scenes`; optional `extract_transcript` | `P-AI` | soft per-scene partial result only with missing-item list/provenance |
 | `detect_characters` | Scene/keyframe Artifacts | Character/Appearance records + embedding/profile Artifacts | `detect_scenes` | `P-ML` | optional/soft; never overwrite user-confirmed identity |
-| `embed_media` | captions/text/keyframes as declared | embedding Artifact + item index/model metadata | `caption_scenes`; optional `generate_script`/`detect_characters` | `P-ML` | optional/soft if matcher has declared lexical fallback |
-| `match_clips` | ScriptVersion, Scenes, alignment; optional transcript/captions/characters/embeddings | match proposal Artifact with score components/provenance | `generate_script`, `detect_scenes`, `align_audio`; optional intelligence nodes | `P-ML` or `P-AI` by implementation | hard if no valid coverage; soft inputs must report degraded scoring |
-| `coverage_feedback` | ScriptVersion + match proposal | coverage report Artifact; optional new ScriptVersion proposal | `match_clips` | `P-AI` | optional/soft; cannot mutate approved ScriptVersion |
+| `embed_media` | captions/text/keyframes as declared | embedding Artifact + item index/model metadata | `analyze_scenes`; optional `generate_script`/`detect_characters` | `P-ML` | optional/soft if matcher has declared lexical fallback |
+| `generate_match_candidates` | ScriptVersion, Scenes, alignment; optional transcript/analysis/characters/embeddings | one or more GenerationCandidates/MatchProposal Artifacts | `generate_script`, `detect_scenes`, `align_audio`; optional intelligence nodes | `P-ML` or `P-AI` | hard if no valid coverage; degraded inputs are explicit |
+| `evaluate_candidates` | candidate group + selection policy snapshot | EvaluationResults with component scores/provenance | `generate_match_candidates` | `P-AI` or `P-SYSTEM` | optional in first workflow; deterministic policy errors are hard |
+| `select_candidate` | candidates + EvaluationResults + user/policy constraints | selected candidate ref and audit record | `evaluate_candidates` or direct single-candidate path | `P-SYSTEM` | must never overwrite candidate payloads or bypass review policy |
+| `coverage_feedback` | ScriptVersion + selected match proposal | coverage report Artifact; optional new ScriptVersion proposal | `select_candidate` | `P-AI` | optional/soft; cannot mutate approved ScriptVersion |
+| `analyze_reference_style` | authorized reference Asset/Scenes/audio/subtitles | ReferenceStyleAnalysis abstract metrics | independent analysis workflow | `P-ML`/`P-AI` | later-phase; never outputs copied footage as style result |
 | `translate_subtitles` | timed script/alignment + target language | translated timed-text Artifact | `align_audio` | `P-AI` | soft when source-language subtitle allowed; hard when target required |
 | `generate_subtitle` | alignment + ScriptVersion + optional translation | subtitle cue data + SRT/VTT/ASS Artifacts | `align_audio`; optional `translate_subtitles` | `P-SYSTEM` | hard when profile requires subtitle, otherwise soft |
-| `build_timeline` | ScriptVersion, match proposal, Narration, subtitle cues, source refs | proposed Timeline + TimelineVersion document | `match_clips`, `generate_narration`, `generate_subtitle` | `P-SYSTEM` | hard; full Timeline schema/cross-ref validation |
+| `build_timeline` | ScriptVersion, selected match proposal, Narration, subtitle cues, source refs | proposed Timeline + TimelineVersion document | `select_candidate`, `generate_narration`, `generate_subtitle` | `P-SYSTEM` | hard; full Timeline schema/cross-ref validation |
 | `review_timeline` | proposed TimelineVersion | approved TimelineVersion ref/review event | `build_timeline` | `P-SYSTEM` + `approval_completes_node` | studio waits; automatic mode applies configured approval policy |
 | `mix_audio` | TimelineVersion audio tracks, Narration/BGM/SFX Artifacts | mixed audio Artifact + loudness report | `build_timeline`; approval requirement follows render mode | `P-MEDIA` | hard for required narration; optional BGM may soft-skip |
 | `run_qa_gate` | TimelineVersion and declared intermediate artifacts | QA report Artifact + pass/warnings | `build_timeline`, `mix_audio` | `P-SYSTEM` | hard/soft thresholds declared; security/integrity fail hard |
@@ -171,7 +172,8 @@ Policy profiles dùng trong bảng:
 | `validate_deliverable` | committed render candidate Artifacts + profile | deliverable QA Artifact and canonicalization decision | `render_timeline` | `P-PROBE` | hard for missing streams/profile violation; warning thresholds explicit |
 | `export_clips` | TimelineVersion or declared clip selection + canonical render/source refs | clip Artifacts + manifest | `validate_deliverable` | `P-RENDER` | optional/soft unless clips requested as required output |
 
-Node aliases preserve V1 names only in compatibility definition. `build_timeline` is the sole bridge from match proposal to renderer source of truth.
+`build_timeline` is the sole bridge from a selected proposal to renderer source of truth. No
+upstream node aliases or compatibility graph are part of NH-Media.
 
 ## 7. Partial execution and checkpoints
 
@@ -179,8 +181,8 @@ Node aliases preserve V1 names only in compatibility definition. `build_timeline
 
 ```json
 {
-  "start_from": "generate_voice",
-  "stop_after": "match_clips",
+  "start_from": "generate_narration",
+  "stop_after": "select_candidate",
   "resume_checkpoint_id": "ckpt_..."
 }
 ```
@@ -264,7 +266,8 @@ AudioOutput:
   provider_request_id, usage/cost, warnings
 ```
 
-Provider chỉ tạo audio; duration probing và cache orchestration ở engine. TTS cache key phải gồm schema version, provider/version, model, voice, text, style prompt và relevant audio settings, tương thích cache V1.
+Provider chỉ tạo audio; duration probing và cache orchestration ở engine. TTS cache key phải gồm
+schema version, provider/version, model, voice, text, style prompt và relevant audio settings.
 
 ### ASRProvider
 
@@ -276,7 +279,8 @@ Transcript:
   language, model, provider_request_id, warnings
 ```
 
-WhisperX, faster-whisper và FunASR là backend có thể wrap; fallback chain phải khai báo trong node policy, không hard-code trong Product API.
+WhisperX, faster-whisper và FunASR are possible independently implemented adapter integrations;
+fallback chain phải khai báo trong node policy, không hard-code trong Product API.
 
 ### EmbeddingProvider
 
@@ -327,17 +331,16 @@ optional preview policy
 
 Renderer compile Timeline → media graph/FFmpeg/MoviePy execution → output Artifact(s) → QA. Profile chỉ thay target constraints (resolution, aspect ratio, codec, bitrate, safe area), không mutate canonical Timeline.
 
-## 11. Legacy adapter mapping
+## 11. Reference-informed implementation boundary
 
-`LegacyMovieNarratorAdapter` phải:
+For a capability identified through upstream research:
 
-1. nhận engine command chứa Asset refs và config;
-2. materialize temporary workspace với allowlisted artifacts;
-3. map `JobContext` sang V1 `Context`/`TaskRequest`;
-4. gọi public surface từ `movie_narrator.contract` trước khi import internal module;
-5. wrap V1 progress/checkpoint/artifact paths thành domain events/artifacts;
-6. migrate output `metadata.json`, `matches.json`, `script.md`, audio/video/subtitle/clips;
-7. scrub local paths và secrets khỏi result;
-8. trả partial output nếu soft step bị skip, nhưng giữ status/degraded metadata.
+1. record the observable purpose and failure/quality expectations;
+2. define an NH-Media domain/interface contract;
+3. implement it independently in the appropriate Go or `nh_media` module;
+4. test the NH-Media contract and security boundary;
+5. optionally compare against recorded reference outputs;
+6. record intentional divergence and acceptance evidence.
 
-V1 engine không được biết PostgreSQL models. Chi tiết phân loại module nằm ở `09-MIGRATION-FROM-UPSTREAM.md`.
+Pipeline activation and normal CI must not import, execute, fetch or materialize Movie Narrator.
+The normative classification is in `UPSTREAM-CAPABILITY-MATRIX.md`.

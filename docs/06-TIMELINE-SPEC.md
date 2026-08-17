@@ -375,14 +375,15 @@ auto_reframe policy, preview/deliverable policy
 
 Profile có thể crop/reframe theo declared transform policy nhưng không đổi Scene/Clip selection. Nếu smart reframe cần AI, kết quả reframe là profile-specific intermediate Artifact fingerprinted từ TimelineVersion + profile; không rerun research/script/matching.
 
-## 7. Migration from V1
+## 7. External and reference-informed imports
 
-- V1 `matches.json` là match proposal, không phải Timeline canonical.
-- Importer resolve every raw path thành Asset/Artifact trước khi tạo Clip.
-- V1 `TimedSegment`/subtitle files map thành narration/subtitle Tracks.
-- V1 BGM/narration/matched clips map exact source ranges khi evidence có; missing provenance tạo imported proposal + warning, không fabricate confidence.
-- `metadata.json` và QA remain Artifacts.
-- Renderer V1 chỉ được gọi qua adapter sau khi compiler materialize exact Timeline decision; không được tự choose match khác.
+- User-imported edit decisions are normalized into Asset/Artifact refs before a Clip is created.
+- Timed text/audio/EDL imports become NH-Media Tracks only after schema and ownership validation.
+- Missing source-range provenance creates an imported proposal plus warning; confidence is never
+  fabricated.
+- Recorded upstream `matches.json`, `metadata.json` or subtitle observations may inform research
+  fixtures, but they are not product contracts and normal rendering never reads them.
+- The renderer compiles exact TimelineVersion decisions and never invokes an upstream implementation.
 
 ## 8. Timeline acceptance tests
 
@@ -390,6 +391,6 @@ Profile có thể crop/reframe theo declared transform policy nhưng không đ�
 - all cross-field/range/source/ownership rules;
 - stable IDs/version/content hash and optimistic conflict;
 - user override survives AI proposal rerun;
-- same TimelineVersion renders 16:9, 9:16 and 1:1 without upstream AI rerun;
+- same TimelineVersion renders 16:9, 9:16 and 1:1 without unrelated AI rerun;
 - changing one Clip invalidates only timeline/profile-dependent artifacts;
 - renderer input trace contains exact TimelineVersion/Profile and no `matches.json` decision dependency.

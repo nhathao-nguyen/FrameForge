@@ -1,103 +1,74 @@
 ---
-last_verified: 2026-08-16
+last_verified: 2026-08-17
 source: ../../PROJECT_REBUILD_PLAN.md; ../00-PROJECT-CONTEXT.md; ../GLOSSARY.md; ../CODEX-INSTRUCTIONS.md
-owner: repository owner / T000 ratifier
+owner: repository owner / task assignee
 ---
 
 # Project memory
 
 ## Product objective
 
-NH-Media is an AI Video Production Engine. Movie Narrator V1 is the frozen reference and legacy
-engine behind a `VideoEngine` adapter. The V2 product owns project state, editable versions,
-authorization, durable jobs, artifacts and user-facing workflows. Movie recap is the first
-workflow, not the long-term product boundary.
+NH-Media is an independent AI video production product. Movie recap is the first workflow, not the
+product boundary. Movie Narrator is external research/reference material only.
 
 ## System boundary
 
-- **Go Product API/control plane** owns identity, Workspace membership/authorization, Project, Asset,
-  Job, database transactions, upload orchestration, idempotency and product events. It does not
-  depend on Python, FFmpeg or ML runtimes.
-- **Compute/Engine plane** owns media/AI execution, pipeline nodes, provider ports, timeline proposals
-  and rendering. Prefer Go for media/FFmpeg workers; isolate Python `nh_media` for ML/AI and
-  `movie_narrator` for frozen V1 compatibility. It has no user, session, billing or UI responsibility.
-- **Worker controller** owns leases, heartbeats, sandbox launch and guarded execution reports; it
-  does not become the durable business-state owner.
-- **Media executor** is disposable and least-privilege. It handles untrusted media in an isolated
-  workspace and receives only declared inputs/capabilities.
-- **Storage** keeps metadata in PostgreSQL, coordination in Redis and large bytes in private
-  S3-compatible/MinIO object storage. API/domain/events use Asset/Artifact references, not paths.
-- **Web/desktop clients** call Product API only. They never call providers/engine directly and
-  never receive broad storage or engine credentials. Desktop is a thin remote-first shell with
-  limited native capabilities, not a second business backend.
+- Go Product API owns identity, authorization, Project, Asset, Job, database transactions,
+  idempotency, uploads and product events. It does not import Python, FFmpeg or ML runtimes.
+- Bounded Go media workers own FFmpeg/media orchestration.
+- Isolated Python workers use the `nh_media` namespace for ML/AI capabilities.
+- PostgreSQL owns durable product state, Redis is delivery/coordination, and private object storage
+  owns large bytes. Contracts use Asset/Artifact refs.
+- Next.js/React web and Tauri 2 desktop are thin Product API clients.
+- Local/LAN is a valid release target; public internet/VPS is a later deployment phase.
 
 ## Non-negotiable invariants
 
-- Application code is blocked until the documentation gate is explicitly owner-approved.
+- Do not add application code before T004 records approval of the documentation gate.
+- No Movie Narrator runtime, build, deployment, import, compatibility, migration or rollback
+  dependency is allowed by the current architecture.
 - `TimelineVersion` is the renderer's sole decision input; AI creates proposals and user overrides
   survive reruns.
-- V1 stays behind `VideoEngine`/`LegacyMovieNarratorAdapter`; no wholesale rewrite or namespace
-  rename is allowed during migration.
-- Job/JobStep states use the canonical vocabulary in [`../GLOSSARY.md`](../GLOSSARY.md).
-- Providers, storage, queue and media execution are ports/adapters; provider branches do not leak
-  into the pipeline.
-- Workers are disposable, checkpoint-aware, retry-aware, idempotent and least-privilege.
-- Queue messages contain IDs/references, never media bytes, secrets, user tokens or local paths.
-- Go↔Python uses only versioned language-neutral JSON/Protobuf/schema envelopes; no pickle, gob, ORM
-  objects, Pydantic internals or in-process Python embedding as durable/public contracts.
-- Product API enqueues bounded asynchronous work; it never executes long-running media/ML inline or
-  creates an unbounded worker/goroutine per request.
-- No `shell=True`, untrusted plugin auto-loading, arbitrary production executable override,
-  traceback/path/secret leakage, or large-media proxying through Product API.
-- Approved ScriptVersion/TimelineVersion is immutable; edits create a new version with concurrency
-  protection.
-- Compatibility removal requires usage evidence, replacement parity, a deprecation window, a
-  migration guide, rollback and owner approval.
+- Candidate generation, evaluation and selection are persisted and provenance-aware.
+- `ReferenceStyleAnalysis` produces abstract traits/evidence; it does not copy reference footage.
+- Workers are disposable, checkpoint/retry/idempotency aware and least-privilege.
+- Product API enqueues bounded asynchronous work and never runs media/ML inline.
+- Go/Python boundaries use versioned language-neutral contracts; no pickle, gob, ORM or framework
+  internals are durable/public payloads.
+- Providers, storage, queue and media processes use ports/adapters.
+- No `shell=True`, arbitrary executable/flag injection, unrestricted plugin auto-loading, secret/
+  traceback/path leakage or large-media proxying through Product API.
 
 ## Source-of-truth order
 
-1. Current user instruction and approved decisions.
-2. Root [`PROJECT_REBUILD_PLAN.md`](../../PROJECT_REBUILD_PLAN.md) and its canonical master context.
-3. [`../GLOSSARY.md`](../GLOSSARY.md), `docs/00`–`docs/14` and approved ADRs.
-4. [`../OPEN-QUESTIONS.md`](../OPEN-QUESTIONS.md) for unresolved choices and hard blocks.
-5. [`../IMPLEMENTATION-ORDER.md`](../IMPLEMENTATION-ORDER.md) for task order and DoD.
-6. [`../UPSTREAM-MODULE-AUDIT.md`](../UPSTREAM-MODULE-AUDIT.md) and frozen
-   [`../../references/movie-narrator`](../../references/movie-narrator) behavior.
-
-Memory is an index and handoff aid. It cannot override a normative specification. Any discrepancy
-must be recorded in [`CHANGELOG.md`](CHANGELOG.md), then repaired before dependent implementation.
+1. Current owner instruction and dated approved decisions.
+2. Root [`PROJECT_REBUILD_PLAN.md`](../../PROJECT_REBUILD_PLAN.md) and canonical master context.
+3. [`../GLOSSARY.md`](../GLOSSARY.md) and `docs/00`–`docs/14`.
+4. [`../OPEN-QUESTIONS.md`](../OPEN-QUESTIONS.md).
+5. [`../IMPLEMENTATION-ORDER.md`](../IMPLEMENTATION-ORDER.md).
+6. [`../UPSTREAM-REFERENCE-POLICY.md`](../UPSTREAM-REFERENCE-POLICY.md), capability matrix and
+   research audit for non-normative upstream evidence.
 
 ## Canonical vocabulary
 
 | Term | Meaning |
 |---|---|
-| `Job` | Product command/aggregate; not a V1 `Task`. |
-| `PipelineRun` | Execution of a versioned pipeline graph. |
-| `PipelineNode` | Definition in a graph; its runtime execution is a `JobStep`. |
-| `Asset` | Product-owned source/registered media resource. |
+| `Job` | Product command/aggregate. |
+| `PipelineRun` | Execution of an immutable pipeline graph snapshot. |
+| `PipelineNode` | Graph definition; runtime execution is a JobStep. |
+| `Asset` | Product-owned input/media resource. |
 | `Artifact` | Immutable produced byte/metadata reference with checksum and provenance. |
-| `ScriptVersion` | Immutable script content version. |
+| `Analysis` | Versioned analytical result and evidence set. |
+| `ReferenceStyleAnalysis` | Abstract style-trait analysis of a user-provided reference Asset. |
+| `GenerationCandidate` | One alternative result produced by a candidate-generating node. |
 | `TimelineVersion` | Immutable canonical EDL decision input for rendering. |
 | `waiting_for_review` | Persisted human gate, not a failure. |
-| `completed` | Canonical successful terminal state; V1 `success` is adapter vocabulary only. |
-| `dead_lettered` | Canonical terminal state after exhausted policy; V1 `dead` maps only in compatibility. |
-| `local path` | Adapter/executor-sandbox detail only; never an API/domain/event identifier. |
+| `completed` | Canonical successful terminal state. |
+| `dead_lettered` | Canonical terminal state after exhausted policy. |
+| `local path` | Executor/storage-adapter detail only. |
 
-## Things agents must not do
+## Task intake
 
-Do not implement `apps/`, `services/`, `packages/`, `cmd/`, `internal/`, migrations, runtime/API/
-frontend/desktop/worker behavior, or provider integrations before the remaining T002–T005/Phase 0 evidence and the
-task prerequisites pass. Do not create `go.mod` during the T000 amendment. Do not merge `main` implicitly,
-push `develop` without owner request, infer OQ recommendations as decisions, expose raw paths,
-secrets or tracebacks, or mutate the frozen V1 reference to make a baseline pass.
-
-## Task intake checklist
-
-1. Read this file, `CURRENT-STATE.md`, `DECISIONS.md` and `IMPLEMENTATION-STATUS.md`.
-2. Locate the task in [`../IMPLEMENTATION-ORDER.md`](../IMPLEMENTATION-ORDER.md) and verify all
-   prerequisite tasks and OQs are approved.
-3. Identify the normative docs, boundary owner, compatibility behavior, security controls and
-   rollback path before editing.
-4. If a decision is open or contradictory, stop the affected implementation and update the root
-   OQ with context/options/trade-offs; do not choose a production default silently.
-5. Complete the task handoff and update relevant memory/evidence in the same change.
+Read the four required memory files, locate the task and dependencies, check relevant OQs, identify
+the owning service/trust boundary, and update evidence/memory in the same change. Stop affected
+implementation when an owner decision is genuinely missing.

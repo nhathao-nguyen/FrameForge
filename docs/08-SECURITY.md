@@ -2,7 +2,8 @@
 
 ## 1. Threat model and trust boundaries
 
-Các input không tin cậy: browser/user text, uploaded media, URL/source metadata, imported V1 job config, LLM/VLM output, plugin package và provider response.
+Các input không tin cậy: browser/user text, uploaded media, URL/source metadata, imported external
+documents, LLM/VLM output, extension package và provider response.
 
 ```text
 Public API boundary
@@ -24,7 +25,7 @@ Product API không chạy FFmpeg/Pillow/ML model nặng trong request thread. Wo
 ## 2. Authentication and authorization
 
 - Web browser và desktop dùng product identity/session hoặc bearer token do auth layer cấp; không
-  dùng Movie Narrator engine key.
+  có upstream engine key hoặc compatibility credential.
 - Mọi request scoped theo `workspace_id`; mọi resource access kiểm tra membership/role và project ownership.
 - Roles baseline: `owner`, `admin`, `editor`, `viewer`.
 - `viewer` chỉ đọc và nhận signed download URL; `editor` sửa content/submit Job; `admin/owner` quản lý member/provider policy.
@@ -74,7 +75,7 @@ Third-party Python plugin là arbitrary code và có thể đọc filesystem/env
 - Plugin registry không auto-enable entry point lạ.
 - Nếu cần plugin, chạy subprocess/container riêng với capability tối thiểu.
 - Plugin không được nhận raw secret; credential access qua scoped provider port.
-- Giữ upstream plugin behavior trong compatibility nhưng không coi plugin V1 là safe mặc định.
+- Upstream plugin behavior remains a research warning only; NH-Media has no compatibility loading mode.
 
 ## 6. Provider and secret handling
 
@@ -108,7 +109,8 @@ Third-party Python plugin là arbitrary code và có thể đọc filesystem/env
 - Presigned URL TTL ngắn, scope exact key/method/content length.
 - MinIO không public với default credential; image pin version.
 - Verify checksum sau upload/download; lifecycle policy cho temp/proxy/artifact.
-- Artifact key normalization phải từ chối absolute/`..`/symlink escape, tương thích guard V1.
+- Artifact key normalization phải từ chối absolute/`..`/symlink escape theo NH-Media storage
+  conformance tests.
 
 ## 8. API/web security
 
@@ -147,11 +149,17 @@ Third-party Python plugin là arbitrary code và có thể đọc filesystem/env
 
 - Pin/lock dependency và container image versions; scan `pip-audit`/Bandit/Ruff/mypy phù hợp.
 - Theo dõi Pillow advisory và MoviePy constraint; không bỏ qua advisory toàn cục mà không có ticket/rationale.
-- Target V2 phải funnel subprocess qua một reviewed execution port/wrapper; migration inventory phải theo dõi mọi V1 callsite cho tới khi port xong.
-- Verify license/attribution upstream AGPL-3.0-or-later; không xóa LICENSE/attribution khi modify/redistribute.
-- CI giữ test matrix/regression V1 và security tests input sanitization.
+- NH-Media funnels subprocesses through one reviewed execution port/wrapper; source review of
+  upstream callsites may inform the threat model but creates no implementation dependency.
+- Record the upstream license identifier and provenance; any use or redistribution requires a
+  separate license review. NH-Media release artifacts contain independently authored source.
+- CI runs NH-Media security/input-sanitization tests and an independence scan; upstream runtime tests
+  are not part of normal CI.
 
-Upstream evidence: current V1 subprocess calls dùng argv list và audit không tìm thấy `shell=True`/`os.system`, nhưng callsites còn phân tán; Bandit CI bỏ qua B404/B603, vì vậy đây chưa phải proof đầy đủ. Upstream plugin loader auto-load Python entry points; production V2 phải disable/allowlist như mục 5. Upstream Docker chạy non-root UID 10001; Compose MinIO optional dùng image `latest`/default credentials trong dev examples và không được copy sang production.
+Research observation: the inspected upstream snapshot used argv-list subprocess calls and the audit
+did not find `shell=True`/`os.system`, but callsites were scattered and Bandit skipped B404/B603;
+this is not proof for NH-Media. The same snapshot auto-loaded Python entry points and used insecure
+development-only MinIO examples. NH-Media independently enforces the controls in this specification.
 
 ### Security verification matrix
 

@@ -2,258 +2,183 @@
 
 ## 1. Architectural shape
 
-Hệ thống bắt đầu là modular monorepo/deployment đơn giản, không tách thành nhiều microservice độc lập ngay. Các boundary logic phải rõ để sau này scale thành worker pool.
+NH-Media begins as a modular monorepo and a small number of deployable processes. Logical
+boundaries are explicit so worker classes can scale independently later.
 
 ```text
-apps/web (browser) ──HTTPS──┐
-apps/desktop ───────HTTPS───┴──> Go Product API/control plane ──SQL──> PostgreSQL
-                         │
-                         ├── Redis: queue, lease, pub/sub
-                         ├── S3/MinIO: presigned upload/download
-                         └── Trusted Orchestrator / EngineGateway
-                                │ versioned worker contract
-                 ┌──────────────┴──────────────┐
-                 ▼                             ▼
-          Go media worker                 Python ML/V1 worker
-          FFmpeg + media I/O               nh_media / movie_narrator
-                 │                             │
-                 └──────────────┬──────────────┘
-                                ▼
-                    disposable execution sandbox
+apps/web ─────HTTPS─────┐
+apps/desktop ─HTTPS─────┴──> Go Product API ──SQL──> PostgreSQL
+                                  │
+                                  ├── Redis: queue/lease/live fan-out
+                                  ├── object storage: uploads/Artifacts
+                                  └── trusted orchestration
+                                         │ versioned worker contracts
+                         ┌───────────────┴───────────────┐
+                         ▼                               ▼
+                  Go media worker                Python ML worker
+                  FFmpeg + media I/O              nh_media + models
+                         └───────────────┬───────────────┘
+                                         ▼
+                              disposable executor sandbox
 ```
 
-## 2. Ownership boundaries
+Movie Narrator has no runtime position in this diagram.
 
-| Boundary | Sở hữu | Không được sở hữu |
+## 2. Ownership
+
+| Boundary | Owns | Must not own |
 |---|---|---|
-| Go Product API/control plane | auth, workspace, project, asset registration, job command, DB transaction, API version | scene matching, TTS call, FFmpeg, provider-specific prompt, Python runtime |
-| Engine | domain-neutral media/AI execution, node contracts, artifact outputs, provider calls | user/session/billing, HTTP response shape, UI state |
-| Worker controller | queue consumption, execution lease, heartbeat, sandbox launch, result report | business authorization, arbitrary product-table mutation, permanent project truth |
-| Media executor sandbox | chạy đúng một node với scoped inputs/capability | DB/Redis credentials, product/user secrets, durable state |
-| Storage | byte durability, metadata persistence, retention/lifecycle | AI decisions, timeline editing semantics |
-| Frontend | view/edit commands, local draft UX, progress presentation | provider secret, direct storage credential, render orchestration |
+| Go Product API | auth integration, authorization, Workspace, Project, Asset, Job, DB transaction, upload, public API/events | FFmpeg, model runtime, provider-specific prompts, Python imports |
+| Trusted orchestration | state transitions, outbox, scheduling, lease validation, result commit | arbitrary media execution or product authorization bypass |
+| Go media worker | media input/output, ffprobe/FFmpeg orchestration, progress, validation, staging | product identity/session, broad DB mutation, ML model ecosystem |
+| Python ML worker | `nh_media` AI/ML nodes and provider adapters requiring Python/model runtimes | HTTP product models, user/billing/session, durable business truth |
+| Executor sandbox | one declared attempt with scoped inputs/capability | broad storage, DB/Redis credentials, host/workspace access |
+| Frontend | view/edit commands, upload, progress and downloads via Product API | provider/worker calls, server secrets, durable product truth |
 
-### Dependency direction
+## 3. Dependency direction
 
 ```text
-web/desktop → packages/sdk + contracts → Go Product API → domain/application ports
-                    ├── repository ports → PostgreSQL
-                    ├── blob ports → object storage
-                    ├── queue ports → Redis
-                    └── engine port → VideoEngine
+web/desktop → packages/sdk + contracts → Product API → domain/application ports
+                                             ├→ PostgreSQL adapter
+                                             ├→ Redis adapter
+                                             ├→ storage adapter
+                                             └→ WorkerDispatchPort
 
-Go control plane → language-neutral contracts / ports → worker protocols
-Go media worker → media/FFmpeg adapters
-Python ML/V1 worker → `nh_media.*` / `movie_narrator.*` adapters
-media executor → worker contract + scoped artifact/provider ports
+Go media worker → language-neutral worker contract → media/FFmpeg adapters
+Python ML worker → language-neutral worker contract → nh_media providers/pipelines
 ```
 
-Core domain không import HTTP framework types, Go transport structs, Python classes, ORM models,
-Redis client, boto3 hay UI code. Adapter/infrastructure là outer layer.
+Core domain does not import transport structs, Python/Pydantic classes, ORM objects, Redis clients,
+S3 SDK objects or UI code. Cross-language boundaries use versioned JSON/Protobuf/schema envelopes.
 
-## 3. Proposed repository layout
+## 4. Repository layout
 
 ```text
 apps/
-  web/                         # Next.js/React, UI only
-  desktop/                     # Tauri 2 shell + shared client SDK, no business backend
-cmd/
-  product-api/                 # Go Product API entrypoint
-  media-worker/                # Go media/FFmpeg worker entrypoint
-internal/
-  domain/                      # job, project, asset and other product aggregates
-  application/                 # commands, orchestration, state transitions
-  ports/                       # storage, queue, worker and provider-neutral ports
-  adapters/postgres/           # Go PostgreSQL adapter
-  adapters/redis/              # Go Redis adapter
-  adapters/storage/            # Go object-storage adapter
-  transport/http/              # versioned Product API transport
+  web/                         # Next.js/React
+  desktop/                     # Tauri 2 thin remote client
 services/
-  ml-worker/                   # Python `nh_media` ML/AI worker, isolated runtime
-  legacy-compat/               # frozen Python `movie_narrator` compatibility boundary
+  api/                         # Go module/service boundary
+  media-worker/                # Go FFmpeg/media worker
+  ml-worker/
+    nh_media/                  # Python AI/ML namespace
 packages/
-  contracts/                   # versioned language-neutral JSON/Protobuf/schema contracts
-  sdk/                         # shared web/desktop Product API client
-  shared/                      # client-side generated/runtime-neutral helpers only
-infra/
+  contracts/                   # language-neutral schemas
+  sdk/                         # shared client SDK
+infrastructure/
+  compose/
   postgres/
   redis/
-  minio/
-  docker/
+  object-storage/
   reverse-proxy/
 tests/
   unit/
   integration/
-  regression/
+  contract/
+  reference-behavior/
   e2e/
 docs/
 tools/
 ```
 
-`movie_narrator` vẫn là legacy namespace/reference trong thời gian migration; không đổi namespace hàng loạt.
+Go may organize entry points under `services/api/cmd` and packages under `services/api/internal`,
+or use root `cmd`/`internal` if the bootstrap task proves that layout clearer. Either choice must
+keep the conceptual service boundaries and module path `github.com/nhathao-nguyen/NH-Media`.
 
-## 4. Runtime flows
+Prohibited production trees include `legacy-compat`, vendored `movie_narrator`, an upstream
+submodule, or a container whose purpose is to execute upstream.
 
-### Project and upload
+## 5. Runtime flows
+
+### Upload
 
 ```text
-POST /projects
-POST /projects/{id}/assets/upload-session
-  → API trả presigned multipart URLs
-Browser hoặc desktop upload trực tiếp object storage
-POST /projects/{id}/assets/{asset_id}/complete
-  → API enqueue probe/ingest job
+client requests upload session
+→ Product API authorizes and presigns
+→ client uploads directly to object storage
+→ Product API completes session and creates validation Job
+→ media worker validates/probes
+→ original Artifact committed; Asset becomes ready
 ```
 
-Video 5–50 GB không đi xuyên qua Go Product API.
+Large video bytes never pass through Product API or Redis.
 
-### Job execution
+### Job
 
 ```text
-API transaction:
-  create jobs + job_steps + outbox event
-  commit
-outbox publisher → Redis queue
-worker claims lease
-  → loads project snapshot and asset/artifact refs
-  → engine.execute()
-  → persists checkpoint/artifact/event
-  → terminal transition
+API transaction: Job + JobSteps + outbox
+→ queue publish
+→ worker claims bounded lease
+→ executor materializes declared Artifact refs
+→ independent NH-Media node executes
+→ output stage/verify/commit
+→ checkpoint + event + state transition
 ```
 
 ### Studio edit
 
-Frontend đọc version hiện tại, gửi `If-Match: <revision>`, API tạo revision mới cho Script/Timeline. Job render tiếp theo tham chiếu exact version, không đọc trạng thái UI tạm thời.
+Clients create new ScriptVersion/TimelineVersion using optimistic concurrency. A review resolution
+selects the exact version for downstream work. Browser/app closure does not affect persisted state.
 
 ### Multi-output
 
-Một project giữ canonical timeline. Mỗi `Render` chọn `timeline_version_id` + `render_profile`; không chạy lại research/script/scene pipeline chỉ vì đổi aspect ratio.
+Renders reference one TimelineVersion plus different RenderProfiles. Profile-only changes rerun only
+profile-dependent media work.
 
-## 5. Deployment modes
+## 6. Deployment profiles
 
-### Development/local — initial architecture
+### Local/LAN production-like
 
-Web dev server và desktop dev shell đều gọi một Go Product API process; phía server có Redis,
-PostgreSQL, MinIO và worker pools với bounded concurrency. Go media worker xử lý FFmpeg/media I/O;
-Python worker chỉ xử lý ML/AI hoặc frozen V1. Worker controller có service identity giới hạn; node
-media chạy trong temp workspace/sandbox và không giữ DB/Redis credential. Interface không đổi giữa
-local và remote.
+One LAN server may run API, PostgreSQL, Redis, object storage and bounded workers. Web and Tauri
+clients may run on other LAN machines. This is the first required end-to-end profile and does not
+require a VPS, public DNS or public certificates.
 
-### Staging/production baseline — bounded language-specific worker classes
+### Internet-facing production
 
-```text
-HTTPS reverse proxy
-  ├→ web static/SSR delivery (hoặc CDN)
-  └→ Go Product API replicas
-  → PostgreSQL
-  → Redis
-  → S3/MinIO private bucket
-  → bounded Go media / Python ML-V1 worker replicas
-```
+Later deployment adds public TLS/reverse proxy, DNS/CDN as needed, managed/private dependencies,
+signed desktop updates, canary and public threat controls. Only Product API/web ingress is public.
 
-Media worker có filesystem tạm riêng, non-root, resource limit và không có product secrets không cần thiết.
+### Scale-out
 
-Desktop client được phân phối riêng cho máy người dùng. Desktop chỉ lưu endpoint cấu hình, session
-được bảo vệ bởi OS credential store và local draft tối thiểu; mọi product state durable, Job và
-Artifact vẫn thuộc server. Không expose API/worker port public ngoài HTTPS Product API.
+Worker queues may later route by capability (`probe`, `ai`, `ml`, `media`, `render`). Pipeline,
+JobStep and event contracts remain identical. Distributed rendering is enabled by durable leases,
+Artifact refs and capability routing; it is not an initial extra service requirement.
 
-Không yêu cầu Kubernetes, GPU scheduler riêng hoặc ba service worker trong Phase 1–3. Scale ngang cùng worker image trước; chỉ route capability tới pool riêng sau benchmark và operational evidence.
+## 7. Reliability
 
-### Future scale-out architecture
+- PostgreSQL is authoritative; Redis messages and worker memory are reconstructable.
+- At-least-once delivery plus idempotent JobStep/Artifact commit.
+- Lease expiry and heartbeat reconciliation.
+- Checkpoints after terminal node outcomes and at declared chunk boundaries.
+- Retry only classified transient errors; fail closed on validation/security/user errors.
+- Cooperative cancellation then bounded process-tree termination.
+- Snapshot + ordered event replay for client reconnect.
+- Bounded concurrency and resource admission for every worker.
 
-Queue routing theo capability:
+## 8. Extension/provider architecture
 
-- `ai`: network-bound, provider credentials cần thiết;
-- `ml`: GPU/Whisper/VLM/embedding;
-- `render`: CPU/GPU + disk I/O;
-- `probe`: media metadata, CPU nhẹ.
-
-Tách pool là deployment concern; pipeline contract không thay đổi.
-
-### Worker trust split
-
-```text
-Public API
-  → trusted orchestration/application service
-      → queue + state transition repository
-      → worker controller (scoped service identity)
-          → disposable media executor (untrusted-input sandbox)
-```
-
-Trusted orchestration là owner duy nhất của Job/JobStep transition. Worker controller gửi claim/heartbeat/progress/result qua execution-state port; media executor chỉ nhận manifest scoped cho một attempt. Cách port được transport bằng internal API hay in-process repository là implementation detail, nhưng media executor không được có broad PostgreSQL, Redis hoặc user credential.
-
-## 6. Engine gateway
-
-Go Product API chỉ gọi language-neutral worker port tương đương:
-
-```text
-VideoEngine
-  create_execution(command) → pipeline_run_id
-  start_execution(pipeline_run_id)
-  pause_execution(pipeline_run_id)
-  resume_execution(pipeline_run_id, checkpoint_ref)
-  cancel_execution(pipeline_run_id)
-  get_status(pipeline_run_id)
-  list_artifacts(pipeline_run_id)
-```
-
-Worker protocol map tới `LegacyMovieNarratorAdapter` trong frozen Python workload hoặc native Go/
-Python V2 compute worker. Gateway chuyển đổi domain command thành language-neutral command và ngược lại.
-
-Worker/engine không trả raw HTTP response và không ghi trực tiếp vào bảng product nếu chạy remote;
-worker/reporting layer gửi result command để Go control plane materialize kết quả.
-
-## 7. Consistency and reliability requirements
-
-- API write có idempotency key cho create job/upload completion.
-- Queue message chỉ chứa ID/reference, không chứa video bytes.
-- Job claim dùng lease có expiry; worker heartbeat gia hạn.
-- Node execution idempotent theo `(pipeline_run_id, job_step_id, input_fingerprint, attempt)`; artifact commit atomic.
-- Checkpoint sau mỗi node completed/skipped và trước human gate.
-- Retry chỉ áp dụng lỗi transient; không retry validation/security/user input.
-- Cancellation cooperative tại node boundary; node media dài phải kiểm tra cancellation giữa các chunk.
-- Mọi event có `event_id`, `occurred_at`, `job_id`, `sequence` và correlation ID.
-- Tất cả provider calls có timeout, retry policy, circuit breaker và redacted logging.
-- Go Product API phải query được status mà không cần worker còn sống.
-- Client reconnect được bằng snapshot + event replay; tab/app đóng không làm mất Job state.
-- Desktop offline chỉ là local draft/import mode; không được mô phỏng server Job state.
-- Product API không execute FFmpeg, render, transcription, ML inference hay long-running media compute
-  inline trong HTTP request lifecycle.
-- Mọi worker có bounded concurrency, CPU/GPU/resource admission, lease/timeout, cancellation,
-  retry/idempotency và observable progress; không tạo một goroutine/worker không giới hạn cho mỗi request.
-
-## 8. Language-neutral boundary and replaceability
-
-- Module path của Go control plane bắt đầu là `github.com/nhathao-nguyen/FrameForge`, nhưng không
-  biến module path thành public domain package naming.
-- Durable/public contracts dùng schema/versioned envelope; tối thiểu có `schema_version`, `job_id`,
-  `job_type` và typed `input`/`result` theo contract.
-- Không dùng Python pickle, Go gob, shared ORM objects, Pydantic internals hoặc in-process Python
-  embedding làm mặc định.
-- API/schema/event/state-machine/worker/artifact/error semantics là language-neutral. Thay Go bằng
-  Python/Rust hoặc ngược lại không được kéo theo redesign boundary.
-- Language migration không gộp với cleanup không liên quan; API/schema/event/state-machine changes
-  là task owner-approved riêng; old implementation giữ lại cho tới khi parity và rollback evidence pass.
-
-Chi tiết provider, storage và worker nằm lần lượt ở `11-PROVIDER-ARCHITECTURE.md`, `12-STORAGE-ARCHITECTURE.md` và `13-WORKER-ARCHITECTURE.md`.
+Providers, storage, queue and media subprocesses are ports. Built-in or reviewed adapters are
+registered explicitly. No arbitrary Python entry-point auto-loading exists. Future extensions use
+versioned capabilities, allowlists and isolation; they never gain implicit product secrets.
 
 ## 9. Observability
 
-Bắt buộc:
+Structured logs, metrics and traces share request/correlation/project/job/run/step IDs. Track queue
+age, lease loss, retries, provider latency/cost, media process duration, Artifact bytes and render
+QA. Logs/events expose no secret, expiring URL, durable local path or traceback.
 
-- structured JSON logs với `request_id`, `correlation_id`, `project_id`, `job_id`, `job_step_id`, `worker_id`;
-- metrics queue depth, lease age, node duration, retry count, provider latency/cost, artifact bytes, render QA;
-- trace boundary API → queue → worker → provider/media subprocess;
-- health/readiness tách biệt; readiness fail khi không nhận job, health vẫn mô tả tình trạng.
+## 10. Upstream reference isolation
 
-Metadata V1 như `metadata.json`, match summary, duration metrics, alignment diagnostics và quality dashboard được lưu như artifact/audit metadata trong migration; không làm API phụ thuộc vào một JSON blob duy nhất.
+Upstream source may be fetched into a disposable research workspace for an explicitly authorized
+comparison. It is excluded from normal checkout requirements, Go/Python dependencies, CI, images,
+desktop packages and deployment manifests. Recorded behavior informs NH-Media-owned specs and
+fixtures only. See `UPSTREAM-REFERENCE-POLICY.md`.
 
-## 10. Non-goals của architecture hiện tại
+## 11. Non-goals
 
-- Không đưa users/subscriptions/billing vào engine.
-- Không bắt buộc Kubernetes.
-- Không chuyển mọi V1 module sang V2 trong một PR.
-- Không để frontend giữ API key của engine/provider.
-- Không để web/desktop client chứa Product DB credential, provider secret hoặc engine credential.
-- Không buộc desktop client cài Python/FFmpeg/ML runtime để dùng remote-server mode.
-- Không coi local filesystem là durable storage.
+- Runtime/API/CLI compatibility with Movie Narrator.
+- A legacy engine adapter, service, image or rollback route.
+- Bundling server compute into Tauri.
+- Kubernetes or many small services before measured need.
+- Public arbitrary-code plugins.
+- Provider/model lock-in.

@@ -116,7 +116,8 @@ Artifact dedupe/reuse chỉ khi semantic role, input fingerprint, schema and che
 
 ### LocalStorage
 
-Dùng cho local/offline/dev và compatibility sandbox. Root phải explicit, không mặc định home/repo root; atomic rename chỉ khi same filesystem. Không coi local storage là durable production multi-replica backend.
+Dùng cho local/offline/dev và executor sandbox. Root phải explicit, không mặc định home/repo root;
+atomic rename chỉ khi same filesystem. Không coi local storage là durable production multi-replica backend.
 
 ### S3Storage
 
@@ -140,18 +141,18 @@ Cache key gồm Artifact ID + object version + checksum. Mỗi attempt có works
 
 Retention defaults còn ở OQ-10; implementation không được tự đặt auto-delete source media.
 
-## 10. Compatibility
+## 10. External tools and research observations
 
-V1 path-based Context được LegacyMovieNarratorAdapter materialize trong sandbox:
+NH-Media workers materialize Artifact refs only inside a lease-scoped sandbox:
 
 ```text
-ArtifactRef → LocalCache.materialize → V1 Path
-V1 output Path → validate/commit Artifact → domain ArtifactRef
+ArtifactRef → LocalCache.materialize → LocalHandle
+tool output LocalHandle → validate/stage/commit → ArtifactRef
 ```
 
-Path chỉ sống trong adapter call. Legacy filenames (`final.mp4`, `script.md`, `matches.json`, subtitles, narration, clips) được giữ như download aliases/Artifact roles, không làm canonical key.
-
-Upstream `LocalArtifactStore` path guards và S3 protocol là candidates PORT; upstream `TaskStorage` JSON không là product database. Chi tiết tại `UPSTREAM-MODULE-AUDIT.md`.
+Local paths never leave that executor boundary. Research observations about upstream path guards or
+S3 concepts may inform NH-Media conformance tests, but upstream classes, JSON stores and filenames
+are not product contracts or implementations.
 
 ## 11. Acceptance tests
 

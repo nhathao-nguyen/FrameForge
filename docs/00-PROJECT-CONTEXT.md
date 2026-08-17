@@ -1,220 +1,137 @@
 # 00 — Project Context
 
-## Trạng thái tài liệu
+## Status and authority
 
-Đây là technical specification chuẩn hóa từ `docs/movie-narrator-rebuild-context/PROJECT_REBUILD_PLAN.md`. Tài liệu này là baseline để review trước khi viết application code. Quyết định kiến trúc đã approve là normative cho tới khi owner ghi một amendment superseding có ngày/owner; lịch sử cũ không bị xóa. Các điểm chưa đủ rõ được ghi tại [`OPEN-QUESTIONS.md`](OPEN-QUESTIONS.md), không được tự suy diễn khi implement.
+This specification implements the owner-confirmed 2026-08-17 direction: NH-Media is an independent
+product; Movie Narrator is research/reference-only. This decision supersedes every prior target
+that required an upstream runtime, adapter, compatibility service, migration path or rollback image.
+Historical research facts remain evidence, not architecture.
 
-## Mục tiêu
+The repository is still in the specification phase. No application code is authorized by this
+documentation change.
 
-Xây một **AI Video Production Engine** có Movie Narrator V1 làm reference implementation và legacy engine, nhưng sản phẩm mới có:
+## Product identity
 
-- backend/frontend tách biệt;
-- có web client và desktop client dùng chung contract/SDK, đều kết nối Product API;
-- project state có thể chỉnh sửa và render lại;
-- pipeline dạng node, có checkpoint, pause/resume, partial execution;
-- Timeline là nguồn sự thật cho renderer;
-- provider abstraction cho LLM, VLM, TTS, ASR, Embedding;
-- worker CPU/GPU tách biệt khi cần;
-- storage abstraction, không truyền filesystem path qua product API;
-- nhiều output format từ cùng một project;
-- backward compatibility trong suốt giai đoạn strangler migration.
+- Product: **NH-Media**.
+- Go module: `github.com/nhathao-nguyen/NH-Media`.
+- Python ML/AI namespace: `nh_media`.
+- `movie_narrator`: upstream research identifier only, never an NH-Media public/runtime namespace.
 
-Movie recap chỉ là workflow đầu tiên. Về sau có thể thêm documentary, shorts, highlights, trailer, commentary, reaction và custom workflow.
+## Goal
 
-## Phạm vi
+Build an independent AI Video Production System with:
 
-### Trong phạm vi
+- web and Tauri 2 desktop clients using one Product API;
+- versioned Projects, Scripts, Timelines and Renders;
+- durable asynchronous pipelines with checkpoint, pause/resume, review and retry;
+- TimelineVersion as renderer source of truth;
+- provider abstractions for LLM, VLM, TTS, ASR and Embedding;
+- bounded Go media workers and isolated Python `nh_media` workers;
+- PostgreSQL metadata, Redis coordination and private object storage;
+- multiple output profiles without rerunning unrelated AI work;
+- future distributed execution without requiring it initially.
 
-- Product backend: project, asset, job, pipeline, artifact, timeline, script, scene, character, render.
-- AI/video engine: phân tích media, tạo script, narration, alignment, scene intelligence, matching, timeline proposal, render.
-- Worker: lấy job, thực thi node, retry/cancel/checkpoint, phát progress.
-- Storage: PostgreSQL cho metadata, Redis cho queue/event coordination, S3-compatible/MinIO cho blob.
-- Clients: project dashboard, script/scene/subtitle/voice/timeline editor và render panel trên
-  web browser và desktop app; cả hai chỉ gọi Product API.
-- Adapter và migration từ Movie Narrator V1.
+Movie recap is the first workflow, not the product boundary.
 
-### Ngoài phạm vi giai đoạn đầu
-
-- billing, subscription, quota thương mại;
-- Kubernetes, microservices quá nhỏ, autoscaling phức tạp;
-- rewrite toàn bộ V1 trước khi có adapter;
-- public plugin marketplace;
-- cam kết provider/model cụ thể ngoài interface;
-- thay đổi license hoặc xóa attribution của upstream.
-
-## Các quyết định kiến trúc bắt buộc giữ
-
-1. Web browser và desktop app không gọi trực tiếp Movie Narrator API, engine, worker hoặc provider.
-2. Product API/control plane là Go; web là Next.js/React; desktop là Tauri 2 shell mỏng dùng chung SDK/contracts.
-3. Client có thể chạy trên máy người dùng; server/API/worker/storage có thể chạy trên VPS riêng.
-4. PostgreSQL là database sản phẩm; Redis là queue/event coordination; S3/MinIO là object storage.
-5. Engine được gọi qua `VideoEngine` interface; implementation đầu tiên là `LegacyMovieNarratorAdapter`.
-6. V2 dùng pipeline node độc lập thay cho chuỗi function cứng.
-7. `Project`, `Asset`, `Job`, `JobStep`, `Artifact`, `Timeline` là nền móng.
-8. AI tạo proposal; user hoặc automation editor có thể override.
-9. Timeline là nguồn sự thật của renderer, không phải output trực tiếp của AI.
-10. Worker càng stateless càng tốt; media không tin cậy phải chạy trong sandbox.
-11. Không hard-code provider, model hoặc filesystem path.
-12. Giữ namespace `movie_narrator` trong migration; Python-side V2 compute/ML dùng `nh_media`.
-13. Go control-plane module dùng `github.com/nhathao-nguyen/FrameForge`; ưu tiên `internal/domain`,
-    `internal/application`, `internal/ports`, `internal/adapters` và `internal/transport/http`,
-    không tạo global public `frameforge` package.
-14. Không dùng `your_engine`, `video_engine` hoặc `frameforge` làm Python public namespace.
-15. Giữ regression test V1 và upstream remote/branch baseline.
-
-## Ngôn ngữ và control-plane/compute-plane topology
-
-Đây là owner decision superseding OQ-13, có hiệu lực từ 2026-08-16:
-
-- Go Product API/control plane sở hữu HTTP, auth/authorization integration, Workspace/Project/Asset/
-  Job orchestration, PostgreSQL repositories, Redis coordination, object-storage orchestration,
-  scheduling, progress/events và admission control. Product API không phụ thuộc Python runtime.
-- Go media worker là lựa chọn mặc định cho download/input, FFmpeg subprocess, progress parsing,
-  output validation và Artifact upload. FFmpeg vẫn là executable native; Go không reimplement codec.
-- Python chỉ ở ML/AI compute workers và frozen V1 compatibility workloads. Python ML bắt đầu ở 3.12
-  theo dependency/ML/CUDA matrix; chỉ chuyển image V2 ML lên 3.13 sau khi parity được chứng minh.
-- Go và Python giao tiếp bằng versioned, language-neutral JSON/Protobuf/schema envelope; không dùng
-  pickle, gob, ORM objects, Pydantic internals hoặc Go structs làm durable/public contract.
-- Implementation language replaceable: API/schema/event/state/worker/artifact/error semantics là
-  boundaries độc lập với Go/Python. Language migration không được trở thành architecture redesign.
-
-Topology chuẩn:
+## System boundary
 
 ```text
-Web / Tauri 2
-      │ versioned Product API + shared contracts/SDK
-      ▼
+Web / Tauri 2 clients
+          │ versioned Product API + shared SDK
+          ▼
 Go Product API / control plane
-      ├── PostgreSQL: durable product state
-      ├── Redis: coordination/queue/event fan-out only
-      └── private object storage: source media/artifacts
-              │ versioned Job/Worker contract
-              ├── Go media worker ───────> FFmpeg
-              ├── Python ML worker ──────> PyTorch/CUDA/models
-              └── frozen V1 compatibility workload (`movie_narrator`)
+  ├── PostgreSQL: durable product and job state
+  ├── Redis: queue, lease and live-event coordination
+  └── object storage: source media and Artifacts
+          │ versioned worker contract
+          ├── Go media worker → FFmpeg/ffprobe
+          └── Python ML worker → nh_media / models
 ```
 
-## Ranh giới hệ thống
-
-```text
-User
-  ├─ HTTPS → Web App (Next.js/React) ───────┐
-  └─ HTTPS → Desktop App (native shell) ────┴─ product auth/session
-                                             ▼
-Go Product API / control plane
-  ├── PostgreSQL: metadata, versions, state, audit
-  ├── Redis: queue, lease, event fan-out
-  └── S3/MinIO: source media, intermediate data, renders
-          │ internal command
-          ▼
-VideoEngine interface
-  ├── LegacyMovieNarratorAdapter → Movie Narrator V1
-  └── V2 Pipeline Runtime → AI / Media / Timeline / Renderer
-          │
-          ▼
-Worker pools (AI/ML/Render)
-```
+There is no upstream runtime branch in this topology.
 
 ### Product backend
 
-Sở hữu identity, workspace/project, authorization, lifecycle metadata, API contract, upload orchestration, idempotency, event API và database transaction. Không chứa thuật toán media/AI.
+Owns identity integration, Workspace/Project authorization, Asset/Artifact registration, Job
+commands, database transactions, uploads, idempotency and public API/events. It does not contain
+media/AI algorithms or execute long work inline.
 
-### AI/video engine
+### Compute workers
 
-Nhận engine command có ID và storage references; xử lý research, script, TTS, ASR, scenes, characters, matching, timeline proposal, audio, subtitle, render và QA. Không biết user, billing, subscription hay UI.
+Own media and AI execution through declared node contracts. Workers have no product user, billing,
+session or UI responsibility. Executors are disposable and least-privilege.
 
-### Worker
+### Web and desktop
 
-Nhận một execution lease, tải input artifact cần thiết, chạy engine node, ghi checkpoint/artifact/event, heartbeat và trả terminal outcome. Worker không sở hữu business state lâu dài.
+Both clients call Product API only. Tauri remains thin and remote-first; it does not bundle Python,
+FFmpeg processing, models, PostgreSQL, Redis, server secrets or worker services.
 
-### Storage
+## Operating profiles
 
-PostgreSQL giữ metadata có cấu trúc và trạng thái; Redis giữ dữ liệu ngắn hạn/coordination; object storage giữ byte lớn. Không dùng raw local path làm API identity.
+### Local/LAN production-like validation
 
-### Web và desktop clients
+A server on the LAN runs API, PostgreSQL, Redis, storage and workers. Other LAN machines use the
+web or desktop client. This is sufficient to prove architecture, jobs, rendering, recovery,
+persistence and multi-client behavior. Lack of a VPS does not block functional implementation.
 
-Web browser và desktop app hiển thị/chỉnh sửa product state qua Product API, subscribe progress qua
-SSE/WebSocket, không gọi provider hoặc worker trực tiếp. Desktop chỉ được cấp quyền native tối
-thiểu (file picker, download/export và notification nếu cần); không chứa Product DB, provider
-secret hoặc engine runtime. Client không là nguồn sự thật của pipeline/timeline.
+### Internet production
 
-## Các mode vận hành
+Public DNS, managed TLS, public ingress, CDN, canary and internet threat hardening are later release
+concerns. Internal services remain private in every profile.
 
-### Automatic mode
+## Core invariants
 
-```text
-Source asset → AI pipeline → timeline → render → artifacts
-```
+1. NH-Media builds, tests, deploys and runs without Movie Narrator.
+2. Product API/control plane is Go and uses `github.com/nhathao-nguyen/NH-Media`.
+3. Python AI/ML code uses `nh_media`; `movie_narrator` is never imported by product code.
+4. Web and desktop never call workers/providers directly.
+5. PostgreSQL is source of durable product state; Redis is not.
+6. Asset/Artifact refs cross boundaries; durable raw paths do not.
+7. TimelineVersion is renderer source of truth; AI proposals never silently replace user edits.
+8. Job/JobStep states use `GLOSSARY.md` exactly.
+9. Go↔Python uses versioned language-neutral contracts.
+10. Worker concurrency, retries, leases, cancellation and resources are bounded.
+11. No `shell=True`, untrusted extension auto-load or secret/path/traceback exposure.
+12. Upstream code, containers and dependency graphs remain outside product/runtime/release packages.
 
-### Studio mode
+## Upstream reference boundary
 
-```text
-Source asset → research/script → human review
-→ voice/alignment → human review
-→ scene/match/timeline → human review
-→ render
-```
+Useful upstream knowledge is retained in:
 
-Mỗi human gate phải là trạng thái persisted của Job/JobStep, không phụ thuộc browser còn mở.
+- [`UPSTREAM-REFERENCE-POLICY.md`](UPSTREAM-REFERENCE-POLICY.md);
+- [`UPSTREAM-CAPABILITY-MATRIX.md`](UPSTREAM-CAPABILITY-MATRIX.md);
+- [`UPSTREAM-MODULE-AUDIT.md`](UPSTREAM-MODULE-AUDIT.md);
+- [`baselines/upstream-movie-narrator-v1.1.0.md`](baselines/upstream-movie-narrator-v1.1.0.md).
 
-### Local/offline mode
+These are research/provenance records. Normal development and CI use NH-Media-owned tests. Optional
+comparison fixtures do not make upstream behavior or implementation a permanent compatibility
+contract.
 
-Có thể chạy local Whisper, local VLM, local LLM, local TTS và FFmpeg; media không rời máy. Go
-Product API/worker protocol vẫn dùng cùng interface, chỉ thay provider và storage backend.
+## Document map
 
-## Nguyên tắc dữ liệu
-
-- Mọi entity dùng opaque ID, không expose đường dẫn vật lý.
-- Byte lớn luôn nằm trong object storage và được tham chiếu bằng `Artifact`/`Asset`.
-- Entity mutable có `revision`/optimistic concurrency; output đã publish là immutable.
-- Pipeline node chỉ đọc input đã khai báo và ghi output artifact/state đã khai báo.
-- Mỗi execution có `pipeline_version`, provider/model snapshot và input fingerprint để tái lập.
-- Event là append-only; trạng thái hiện tại trong PostgreSQL là materialized view của command execution, không thay thế audit event.
-
-## Nguồn tham chiếu
-
-- Master context: `docs/movie-narrator-rebuild-context/PROJECT_REBUILD_PLAN.md`.
-- Upstream/reference: `references/movie-narrator/`.
-- V1 pipeline order: `references/movie-narrator/src/movie_narrator/pipeline/runner.py`.
-- V1 public contract: `references/movie-narrator/src/movie_narrator/contract.py`.
-- V1 task/checkpoint/artifact: `references/movie-narrator/src/movie_narrator/cloud/`.
-- V1 typed models: `references/movie-narrator/src/movie_narrator/models.py` và `cloud/models.py`.
-
-## Bản đồ tài liệu
-
-| File | Nội dung |
+| File | Purpose |
 |---|---|
-| `01-ARCHITECTURE.md` | component boundary, deployment, dependency direction |
-| `02-DOMAIN-MODEL.md` | domain object, lifecycle, state machine |
-| `03-DATABASE-SCHEMA.md` | PostgreSQL tables, fields, relation, index |
-| `04-API-CONTRACT.md` | REST resource contract và error/concurrency rules |
-| `05-PIPELINE-SPEC.md` | DAG runtime, node catalog và execution policies |
-| `06-TIMELINE-SPEC.md` | Timeline JSON schema và validation |
-| `07-EVENTS-AND-JOBS.md` | queue, retry, checkpoint, progress events |
-| `08-SECURITY.md` | trust boundary và production controls |
-| `09-MIGRATION-FROM-UPSTREAM.md` | reuse/adapter/refactor/replace và compatibility |
-| `10-DEVELOPMENT-ROADMAP.md` | phase, deliverable, acceptance criteria |
-| `11-PROVIDER-ARCHITECTURE.md` | LLM/VLM/TTS/ASR/Embedding ports và provider policy |
-| `12-STORAGE-ARCHITECTURE.md` | Asset/Artifact/object storage/local cache/upload |
-| `13-WORKER-ARCHITECTURE.md` | initial worker, sandbox, lease và future pools |
-| `14-DEVELOPMENT-ENVIRONMENT.md` | Arch Linux, uv/Python/FFmpeg/infra reproducibility |
-| `CODEX-INSTRUCTIONS.md` | guardrails cho coding agent |
-| `IMPLEMENTATION-ORDER.md` | task nhỏ, thứ tự giao việc |
-| `OPEN-QUESTIONS.md` | quyết định chưa đủ rõ, options và recommendation |
-| `SETUP-PLAN.md` | setup foundation, client/server profiles và V0–V10 certification |
-| `PRODUCTION-PLAN.md` | phase execution, client delivery, staging/canary/production gates |
-| `PRODUCTION-EXECUTION-PROMPT.md` | prompt vận hành cho agent thực hiện production plan |
-| `GLOSSARY.md` | terminology và canonical status vocabulary |
-| `UPSTREAM-MODULE-AUDIT.md` | source-level V1 disposition/evidence |
-| `SPEC-CONSISTENCY-MATRIX.md` | master/domain/DB/API/event mapping và scenarios A–H |
-| `SPEC-AUDIT-REPORT.md` | kết quả consistency audit và scenarios A–H |
+| `01-ARCHITECTURE.md` | component ownership, dependency direction, deployment |
+| `02-DOMAIN-MODEL.md` | NH-Media-native entities and lifecycle |
+| `03-DATABASE-SCHEMA.md` | PostgreSQL persistence contract |
+| `04-API-CONTRACT.md` | NH-Media-native Product API |
+| `05-PIPELINE-SPEC.md` | DAG and independent node catalog |
+| `06-TIMELINE-SPEC.md` | canonical TimelineVersion contract |
+| `07-EVENTS-AND-JOBS.md` | job states, events, retry, replay |
+| `08-SECURITY.md` | trust boundaries and controls |
+| `09-INDEPENDENT-IMPLEMENTATION-FROM-REFERENCE.md` | reference-to-implementation method |
+| `10-DEVELOPMENT-ROADMAP.md` | phase gates and first vertical slice |
+| `11-PROVIDER-ARCHITECTURE.md` | provider ports and policy |
+| `12-STORAGE-ARCHITECTURE.md` | Asset/Artifact/storage/upload |
+| `13-WORKER-ARCHITECTURE.md` | Go/Python worker protocol and scaling |
+| `14-DEVELOPMENT-ENVIRONMENT.md` | reproducible toolchains and Local/LAN setup |
+| `UPSTREAM-CAPABILITY-MATRIX.md` | capability-level disposition and acceptance |
+| `UPSTREAM-REFERENCE-POLICY.md` | provenance, license and allowed research use |
+| `IMPLEMENTATION-ORDER.md` | task order and definitions of done |
+| `OPEN-QUESTIONS.md` | only genuine unresolved decisions |
 
-## Definition of specification complete
+## Specification completion
 
-Specification có thể được đánh dấu READY khi các contract nhất quán và mọi điểm chưa chốt được ghi rõ/block đúng task. Tuy nhiên, chỉ được bắt đầu application code sau khi:
-
-- toàn bộ file trong bộ tài liệu này tồn tại;
-- các open question của task sắp làm đã được owner chốt;
-- consistency check giữa domain, database, API, pipeline, timeline và event contract pass;
-- task/phase prerequisites trong roadmap được duyệt;
-- agent xác nhận không có code application nào được viết trong giai đoạn documentation-only.
+The spec is ready when independence assertions pass, every meaningful upstream capability has a
+documented disposition, links/terms are consistent, the independent first slice is defined, and
+open choices block only their dependent tasks. Readiness does not mean application code was written.
