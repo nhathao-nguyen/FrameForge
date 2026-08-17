@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:nh-media:timeline:1.0",
+  "title": "NH-Media TimelineVersion",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "timeline_id", "timeline_version_id", "project_id", "version", "duration_sec", "tracks"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "timeline_id": {"type": "string", "minLength": 1},
+    "timeline_version_id": {"type": "string", "minLength": 1},
+    "project_id": {"type": "string", "minLength": 1},
+    "version": {"type": "integer", "minimum": 1},
+    "duration_sec": {"type": "number", "exclusiveMinimum": 0},
+    "tracks": {"type": "array", "minItems": 1, "maxItems": 256, "items": {"$ref": "#/$defs/track"}},
+    "markers": {"type": "array", "maxItems": 10000},
+    "metadata": {"type": "object", "maxProperties": 100}
+  },
+  "$defs": {
+    "track": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "kind", "name", "order", "clips"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1, "maxLength": 128},
+        "kind": {"enum": ["video", "narration", "music", "sfx", "subtitle", "overlay"]},
+        "name": {"type": "string", "maxLength": 200},
+        "order": {"type": "integer"},
+        "clips": {"type": "array", "maxItems": 100000, "items": {"$ref": "#/$defs/clip"}}
+      }
+    },
+    "clip": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "timeline_in_sec", "timeline_out_sec", "source", "origin"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1, "maxLength": 128},
+        "timeline_in_sec": {"type": "number", "minimum": 0},
+        "timeline_out_sec": {"type": "number", "exclusiveMinimum": 0},
+        "source_in_sec": {"type": "number", "minimum": 0},
+        "source_out_sec": {"type": "number", "exclusiveMinimum": 0},
+        "source": {"type": "object", "required": ["type"], "properties": {"type": {"enum": ["asset", "scene", "artifact", "generated", "none"]}}},
+        "origin": {"enum": ["ai", "user", "imported", "system"]},
+        "subtitle": {"type": "object"},
+        "narration": {"type": "object"}
+      }
+    }
+  }
+}

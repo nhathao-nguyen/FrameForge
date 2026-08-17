@@ -11,7 +11,7 @@ owner: repository owner / task assignee
 | Field | Value | Evidence |
 |---|---|---|
 | Working branch | `implementation/bootstrap` | `git branch --show-current` |
-| Baseline commit | `2664057` | `git rev-parse HEAD` before Gate B implementation; branch bootstrap commit |
+| Baseline commit | `2c633865e201d17ae093dcba2df65db6461dd883` | `git rev-parse HEAD`; Gate B foundation commit before this uncommitted Gate C+D change |
 | Tracking branch | `origin/implementation/bootstrap` | `git status --short --branch` |
 | Push/merge action | none performed | task scope |
 
@@ -24,8 +24,12 @@ owner: repository owner / task assignee
 - T003 reference-behavior fixture policy: complete with a policy README and intentionally empty manifest.
 - T004 owner approval/independence certification: complete by 2026-08-17 ratification and final
   documentation consistency evidence; final pre-code certification rerun after T002/T003.
-- Application implementation: Gate B foundation T100–T108 is implemented in the current uncommitted working tree.
-- Next task: T200 migration framework (Gate C), after review/checkpoint of T100–T108.
+- Application implementation: Gate B foundation T100–T108 plus the current uncommitted Gate C+D
+  domain, persistence, storage and native API boundary are present in the working tree.
+- Gate C+D status: T200–T235 implementation and acceptance evidence is green in the current working
+  tree. The API selects the durable PostgreSQL/Product + MinIO path when `NH_MEDIA_DATABASE_URL` is
+  configured; unit tests retain the explicit in-memory backend as a deterministic test adapter.
+- T300 and all later execution/queue work were not started.
 
 ## Current evidence
 
@@ -37,9 +41,23 @@ owner: repository owner / task assignee
 - First deterministic native slice is T321/T322; first Python worker slice is T323.
 - Gate B evidence covers repository boundaries, shared primitives, redaction/config boundaries, private
   PostgreSQL/Redis/MinIO Compose services, Go API shell, health/readiness, CI and independence scans.
+- Gate C+D evidence includes seven PostgreSQL migrations, the checksum/dirty migration runner, scoped SQL
+  repositories, durable hashed sessions, canonical domain state/timeline validation, interchangeable
+  LocalStorage/S3 adapters, artifact commit compensation plus orphan reconciliation, ffprobe validation,
+  and native `/api/v1` Project/Asset/Script/Narration/Timeline/Render/Scene/Analysis/Candidate/Provider
+  resources.
+- Migration runner integration on 2026-08-17: isolated PostgreSQL database applied all seven migrations,
+  repeated successfully with seven clean rows, and `nh_media_app` was denied `CREATE TABLE`; the isolated
+  database was removed after the check. The existing development `nh_media` database was reconciled with
+  seven matching clean checksum markers and successful runner repeats; its named development volume remains.
+- Durable runtime smoke on 2026-08-17: PostgreSQL-backed login survived an API restart using the same
+  hashed `auth_sessions` row; direct multipart PUT to private MinIO returned an ETag, complete created a
+  durable `asset_probe` Job, `asset_uploads.status=completed`, and Asset status `validating`; duplicate
+  Project request replayed the same response with one database row.
 - Local Functional Acceptance is T550; Local/LAN Hardened Acceptance is T603; Internet/VPS
   production is T605.
-- No Gate C domain schema, migration, Job pipeline, QueuePort or media/AI workflow was implemented.
+- No Gate E/T300 state-transition service, QueuePort, or media/AI execution workflow was implemented;
+  the Gate C+D declarative pipeline and upload validation Job intent are intentionally non-executing.
 
 ## Decision status
 
@@ -50,10 +68,12 @@ vendors are later configuration choices.
 ## Handoff
 
 ```text
-Task: T108 CI and independence gates
+Task: Gate C+D — T200–T235
 Status: complete
-Boundary: Gate B repository/service foundation only
-Application code: API shell, contracts, config, client/worker boundaries and private dev infrastructure
+Boundary: Domain, durable persistence, storage, upload/probe boundary and native Product APIs
+  Application code: API shell, contracts, config, client/worker boundaries, Gate C+D domain/persistence/
+  storage/API boundary, and private dev infrastructure
 Upstream relationship: research/reference only; no operational dependency
-Next: T200 migration framework (Gate C)
+Next: start Gate E/T300 only as a separately authorized task; it owns canonical transitions/events and
+  execution orchestration, which were intentionally not implemented here.
 ```

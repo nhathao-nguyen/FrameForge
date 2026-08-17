@@ -1,6 +1,6 @@
 ---
 last_verified: 2026-08-17
-source: ../IMPLEMENTATION-ORDER.md; ../10-DEVELOPMENT-ROADMAP.md; CURRENT-STATE.md
+source: ../IMPLEMENTATION-ORDER.md; ../10-DEVELOPMENT-ROADMAP.md; CURRENT-STATE.md; TEST-EVIDENCE.md
 owner: repository owner / task assignee
 ---
 
@@ -27,28 +27,28 @@ reviewable evidence is recorded.
 | T106 | Go Product API shell | T101–T105 | complete | `/api/v1`, IDs/errors/CORS/bounds, LocalAuth shell, mocked-port tests | T107 |
 | T107 | Health/readiness | T106 | complete | liveness/readiness/diagnostics with dependency-down, timeout and drain tests | T108 |
 | T108 | CI/independence gates | T100-T107 | complete | local verification, CI workflow, negative independence proof, lock/SBOM/secret scans | T200 |
-| T200 | Migration framework | T103, T108 | blocked | none | after dependencies |
-| T201 | Identity/Workspace tables | T200 | blocked | none | after T200 |
-| T202 | Workflow/Pipeline tables | T200 | blocked | none | after T200 |
-| T203 | SecretStore/Provider/RenderProfile tables | T200–T201 | blocked | none | after T201 |
-| T204 | Project/Asset tables | T201–T203 | blocked | none | after T201 |
-| T205 | Execution/review tables | T202, T204 | blocked | none | after dependencies |
-| T206 | Artifact/checkpoint/DLQ tables | T204–T205 | blocked | none | after T205 |
-| T207 | Content/analysis tables | T204–T206 | blocked | none | after dependencies |
-| T208 | Timeline/render/candidate tables | T203, T206–T207 | blocked | none | after dependencies |
-| T209 | Event/outbox/idempotency tables | T201, T205 | blocked | none | after T205 |
-| T210 | Auth/scoped repositories | T106, T201 | blocked | none | after dependencies |
-| T220 | StoragePort/LocalStorage | T101, T206 | blocked | none | after dependencies |
-| T221 | S3/MinIO adapter | T105, T220 | blocked | none | after T220 |
-| T222 | Artifact commit | T209, T220–T221 | blocked | none | after dependencies |
-| T223 | Upload-session API | T204, T210, T221–T222 | blocked | none | after dependencies |
-| T224 | Validation/probe boundary | T205–T206, T222–T223 | blocked | none | after dependencies |
-| T230 | Project/Asset REST | T210, T223–T224 | blocked | none | after dependencies |
-| T231 | Script/Narration APIs | T207, T210 | blocked | none | after dependencies |
-| T232 | Timeline validator | T208 | blocked | none | after T208 |
-| T233 | Timeline/Render REST | T210, T232 | blocked | none | after dependencies |
-| T234 | Scene/Analysis/candidate APIs | T207–T210 | blocked | none | after dependencies |
-| T235 | ProviderConfiguration API | T203, T210 | blocked | none | after dependencies |
+| T200 | Migration framework | T103, T108 | complete | `services/api/internal/persistence/migrations.go`, seven versioned SQL migrations, runner empty/repeat/dirty tests and PostgreSQL apply/repeat/app-role denial | retain checkpoint; Gate C evidence |
+| T201 | Identity/Workspace tables | T200 | complete | `0001_identity.sql`, transactional bootstrap, scoped role repository and PostgreSQL-backed hashed session/revoke/expiry path | later OIDC/API-key policy remains outside initial LocalAuth |
+| T202 | Workflow/Pipeline tables | T200 | complete | `0002_workflows_providers.sql`, `EnsurePipelineDefinition` and active-definition trigger | add broader graph integration corpus later |
+| T203 | SecretStore/Provider/RenderProfile tables | T200–T201 | complete | encrypted SecretStore boundary, `secret_records`, durable Provider/RenderProfile repository paths and redacted API | external KMS/Vault adapter remains deferred by the ratified Local baseline |
+| T204 | Project/Asset tables | T201–T203 | complete | `0003_projects_assets.sql`, scoped SQL Project/Asset/upload repository and native upload metadata API | no large media bytes are stored in PostgreSQL |
+| T205 | Execution/review tables | T202, T204 | complete | `0004_execution.sql` canonical status checks, snapshots, active-run uniqueness and reviews | transition service is explicitly Gate E/T300 |
+| T206 | Artifact/checkpoint/DLQ tables | T204–T205 | complete | artifact/checkpoint/DLQ schema, typed Artifact commit boundary, SQL Artifact metadata repository and orphan reconciliation table | physical orphan sweeper remains a later worker/recovery concern |
+| T207 | Content/analysis tables | T204–T206 | complete | `0005_content_timeline.sql`, durable Script/Narration/Scene/Analysis paths and native provenance boundary | character command APIs remain outside the current T230–T235 route set |
+| T208 | Timeline/render/candidate tables | T203, T206–T207 | complete | timeline/render/candidate schema, validated immutable SQL Timeline/Render/candidate paths and content hash | candidate evaluation execution remains later worker work |
+| T209 | Event/outbox/idempotency tables | T201, T205 | complete | `0006_events_and_idempotency.sql`, append-only trigger and transactional event/outbox method | publisher/state transition remains Gate E |
+| T210 | Auth/scoped repositories | T106, T201 | complete | Principal context, role matrix, SQL workspace scoping, active user/Workspace fail-closed checks, guessed-ID negative test and durable session adapter | API-key scope enforcement beyond schema remains later auth work |
+| T220 | StoragePort/LocalStorage | T101, T206 | complete | typed StoragePort, root/symlink/traversal/range/precondition tests | conformance expansion remains possible |
+| T221 | S3/MinIO adapter | T105, T220 | complete | live opt-in MinIO conformance: staged checksum, promote precondition, range, private presigned download, direct multipart PUT/ETag/complete, expiry and abort | cloud-vendor-specific IAM remains deployment configuration |
+| T222 | Artifact commit | T209, T220–T221 | complete | promote/publish/orphan compensation, duplicate/checksum tests, SQL Artifact metadata and durable reconciliation records | reconciliation worker is later execution work |
+| T223 | Upload-session API | T204, T210, T221–T222 | complete | StoragePort-backed durable initiate/presign/complete/abort, direct MinIO PUT smoke, atomic validating+asset_probe Job insert, restart-safe provider IDs and HTTP idempotency | validation execution remains T224/T300+ boundary |
+| T224 | Validation/probe boundary | T205–T206, T222–T223 | complete | magic/MIME/size/SHA256/ffprobe boundary with oversized/spoofed quarantine tests | add malformed/resource-bomb corpus later |
+| T230 | Project/Asset REST | T210, T223–T224 | complete | native CRUD/upload metadata routes, durable repository wiring, ETag checks, idempotency replay and live upload smoke | Gate E only for Job commands |
+| T231 | Script/Narration APIs | T207, T210 | complete | immutable ScriptVersion approval, approved-version Narration Job boundary and durable repository wiring | Gate E only for execution |
+| T232 | Timeline validator | T208 | complete | JSON Schema, deterministic hash, range/source/security negative corpus | reference resolver integration expands with durable repositories |
+| T233 | Timeline/Render REST | T210, T232 | complete | typed commands, versioning, approval/lock, approved render request and durable Timeline/Render/Profile repository wiring | Gate E only for Render execution |
+| T234 | Scene/Analysis/candidate APIs | T207–T210 | complete | scoped native routes and provenance/reference-style policy boundary | add selection immutability/pagination corpus later |
+| T235 | ProviderConfiguration API | T203, T210 | complete | redacted durable lifecycle, admin checks, plaintext-secret rejection and SQL-scoped provider repository | external secret manager remains deferred |
 | T300 | State transitions | T205, T209 | blocked | none | after dependencies |
 | T301 | Outbox/replay | T209, T300 | blocked | none | after dependencies |
 | T310 | QueuePort | T104, T301 | blocked | none | after dependencies |

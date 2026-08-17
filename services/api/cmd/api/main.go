@@ -2,9 +2,13 @@ package main
 
 import (
 	"context"
+	"database/sql"
+	"fmt"
 	"log"
+	"net/url"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -12,6 +16,9 @@ import (
 	"github.com/nhathao-nguyen/NH-Media/services/api/internal/config"
 	"github.com/nhathao-nguyen/NH-Media/services/api/internal/health"
 	"github.com/nhathao-nguyen/NH-Media/services/api/internal/httpapi"
+	"github.com/nhathao-nguyen/NH-Media/services/api/internal/persistence"
+	"github.com/nhathao-nguyen/NH-Media/services/api/internal/product"
+	"github.com/nhathao-nguyen/NH-Media/services/api/internal/storage"
 )
 
 func main() {
@@ -23,7 +30,50 @@ func main() {
 	if err != nil {
 		log.Fatalf("invalid LocalAuth configuration: %v", err)
 	}
-	server, err := httpapi.NewServer(value, provider, health.NewRegistry(nil, 2*time.Second))
+	backend, err := loadStorage(os.Getenv)
+	if err != nil {
+		log.Fatalf("invalid storage configuration: %v", err)
+	}
+	var productBackend product.Backend = product.NewStoreWithStorage("ws_default", backend)
+	var database *sql.DB
+	if dsn := os.Getenv("NH_MEDIA_DATABASE_URL"); dsn != "" {
+		if backend == nil {
+			log.Fatalf("durable Product API requires NH_STORAGE_ENDPOINT or NH_STORAGE_BACKEND=local")
+		}
+		database, err = persistence.OpenPostgres(context.Background(), dsn)
+		if err != nil {
+			log.Fatalf("open Product database: %v", err)
+		}
+		defer database.Close()
+		sqlStore, storeErr := persistence.NewSQLStore(database)
+		if storeErr != nil {
+			log.Fatalf("initialize Product repository: %v", storeErr)
+		}
+		bootstrap, bootstrapErr := sqlStore.BootstrapLocalInstallation(context.Background(), persistence.BootstrapInput{Username: value.AdminUsername, DisplayName: "NH-Media Local Admin", PasswordHash: auth.CredentialHash(value.AdminPassword), WorkspaceSlug: firstEnv(os.Getenv, "NH_MEDIA_WORKSPACE_SLUG", "default"), WorkspaceName: "NH-Media Default Workspace"})
+		if bootstrapErr != nil {
+			log.Fatalf("bootstrap Product identity: %v", bootstrapErr)
+		}
+		if err := sqlStore.EnsureDefaultWorkflow(context.Background(), bootstrap.UserID); err != nil {
+			log.Fatalf("seed native workflow: %v", err)
+		}
+		if err := provider.ConfigurePrincipal("local-admin", bootstrap.UserID, bootstrap.WorkspaceID, "owner"); err != nil {
+			log.Fatalf("configure durable auth principal: %v", err)
+		}
+		provider.SetPrincipalValidator(func(ctx context.Context, principal auth.Principal) (auth.Principal, error) {
+			role, err := sqlStore.RequireWorkspaceRole(ctx, principal.UserID, principal.WorkspaceID)
+			if err != nil {
+				return auth.Principal{}, err
+			}
+			principal.Role = role
+			return principal, nil
+		})
+		provider.SetSessionStore(sqlStore)
+		productBackend, err = persistence.NewDurableBackend(sqlStore, bootstrap.UserID, bootstrap.WorkspaceID, backend)
+		if err != nil {
+			log.Fatalf("initialize durable Product backend: %v", err)
+		}
+	}
+	server, err := httpapi.NewServerWithBackend(value, provider, health.NewRegistry(nil, 2*time.Second), productBackend, backend)
 	if err != nil {
 		log.Fatalf("invalid API server: %v", err)
 	}
@@ -42,4 +92,51 @@ func main() {
 	if err := server.HTTPServer.Shutdown(ctx); err != nil {
 		log.Printf("API drain failed: %v", err)
 	}
+}
+
+func firstEnv(env func(string) string, name, fallback string) string {
+	if value := strings.TrimSpace(env(name)); value != "" {
+		return value
+	}
+	return fallback
+}
+
+func loadStorage(env func(string) string) (storage.StoragePort, error) {
+	backend := strings.ToLower(strings.TrimSpace(env("NH_STORAGE_BACKEND")))
+	if backend != "" && backend != "local" && backend != "s3" && backend != "minio" {
+		return nil, fmt.Errorf("unsupported NH_STORAGE_BACKEND %q", backend)
+	}
+	if backend == "local" {
+		root := strings.TrimSpace(env("NH_STORAGE_LOCAL_ROOT"))
+		if root == "" {
+			return nil, fmt.Errorf("NH_STORAGE_LOCAL_ROOT is required for local storage")
+		}
+		return storage.NewLocalStorage(root, strings.TrimSpace(env("NH_STORAGE_CACHE_ROOT")))
+	}
+	endpointRaw := strings.TrimSpace(env("NH_STORAGE_ENDPOINT"))
+	if endpointRaw == "" {
+		if backend == "s3" || backend == "minio" {
+			return nil, fmt.Errorf("NH_STORAGE_ENDPOINT is required for %s storage", backend)
+		}
+		return nil, nil
+	}
+	accessKey := strings.TrimSpace(env("NH_STORAGE_ACCESS_KEY"))
+	secretKey := strings.TrimSpace(env("NH_STORAGE_SECRET_KEY"))
+	bucket := strings.TrimSpace(env("NH_STORAGE_BUCKET"))
+	if accessKey == "" || secretKey == "" || bucket == "" {
+		return nil, fmt.Errorf("NH_STORAGE_ACCESS_KEY, NH_STORAGE_SECRET_KEY and NH_STORAGE_BUCKET are required")
+	}
+	parsed, err := url.Parse(endpointRaw)
+	if err != nil {
+		return nil, fmt.Errorf("NH_STORAGE_ENDPOINT: %w", err)
+	}
+	endpoint := parsed.Host
+	secure := parsed.Scheme == "https"
+	if endpoint == "" {
+		endpoint = parsed.Path
+	}
+	if endpoint == "" {
+		return nil, fmt.Errorf("NH_STORAGE_ENDPOINT has no host")
+	}
+	return storage.NewS3Storage(endpoint, accessKey, secretKey, bucket, secure)
 }

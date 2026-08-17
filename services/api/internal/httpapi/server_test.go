@@ -14,6 +14,7 @@ import (
 	"github.com/nhathao-nguyen/NH-Media/services/api/internal/auth"
 	"github.com/nhathao-nguyen/NH-Media/services/api/internal/config"
 	"github.com/nhathao-nguyen/NH-Media/services/api/internal/health"
+	"github.com/nhathao-nguyen/NH-Media/services/api/internal/storage"
 )
 
 type dependency struct {
@@ -33,6 +34,10 @@ func (d dependency) Check(ctx context.Context) error {
 }
 
 func testServer(t *testing.T, dependencies []health.Dependency) (*Server, *auth.LocalAuthProvider) {
+	return testServerWithStorage(t, dependencies, nil)
+}
+
+func testServerWithStorage(t *testing.T, dependencies []health.Dependency, backend storage.StoragePort) (*Server, *auth.LocalAuthProvider) {
 	t.Helper()
 	provider, err := auth.NewLocalAuthProvider("admin", "correct-password")
 	if err != nil {
@@ -45,7 +50,7 @@ func testServer(t *testing.T, dependencies []health.Dependency) (*Server, *auth.
 	if err != nil {
 		t.Fatal(err)
 	}
-	server, err := NewServer(value, provider, health.NewRegistry(dependencies, 20*time.Millisecond))
+	server, err := NewServerWithStorage(value, provider, health.NewRegistry(dependencies, 20*time.Millisecond), backend)
 	if err != nil {
 		t.Fatal(err)
 	}

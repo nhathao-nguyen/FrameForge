@@ -1,0 +1,126 @@
+openapi: 3.1.0
+info:
+  title: NH-Media Product API
+  version: 1.0.0
+  description: Native Workspace-scoped Product API. Large media uses direct signed storage URLs.
+servers:
+  - url: /api/v1
+security:
+  - bearerAuth: []
+paths:
+  /auth/login:
+    post:
+      security: []
+      operationId: login
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/LoginRequest'}}}
+      responses: {'200': {description: Session, content: {application/json: {schema: {$ref: '#/components/schemas/Session'}}}}, '401': {$ref: '#/components/responses/Unauthorized'}}
+  /auth/refresh:
+    post: {operationId: refreshSession, responses: {'200': {description: Rotated session, content: {application/json: {schema: {$ref: '#/components/schemas/Session'}}}}}}
+  /auth/logout:
+    post: {operationId: logout, responses: {'204': {description: Revoked}}}
+  /auth/session:
+    get: {operationId: currentSession, responses: {'200': {description: Current redacted session}}}
+  /workspaces:
+    get: {operationId: listWorkspaces, responses: {'200': {description: Workspace memberships}}}
+  /projects:
+    post:
+      operationId: createProject
+      parameters: [{$ref: '#/components/parameters/IdempotencyKey'}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/ProjectCreate'}}}}
+      responses: {'201': {description: Project, content: {application/json: {schema: {$ref: '#/components/schemas/Project'}}}}}
+    get: {operationId: listProjects, responses: {'200': {description: Project page}}}
+  /projects/{project_id}:
+    parameters: [{$ref: '#/components/parameters/ProjectId'}]
+    get: {operationId: getProject, responses: {'200': {description: Project}, '404': {$ref: '#/components/responses/NotFound'}}}
+    patch: {operationId: updateProject, parameters: [{$ref: '#/components/parameters/IfMatch'}], responses: {'200': {description: Updated project}, '412': {$ref: '#/components/responses/PreconditionFailed'}}}
+    delete: {operationId: deleteProject, parameters: [{$ref: '#/components/parameters/IdempotencyKey'}], responses: {'202': {description: Soft deleted}}}
+  /projects/{project_id}/assets/upload-sessions:
+    post: {operationId: initiateAssetUpload, parameters: [{$ref: '#/components/parameters/ProjectId'}, {$ref: '#/components/parameters/IdempotencyKey'}], responses: {'201': {description: Direct multipart session}}}
+  /projects/{project_id}/assets:
+    get: {operationId: listAssets, parameters: [{$ref: '#/components/parameters/ProjectId'}], responses: {'200': {description: Asset page}}}
+  /projects/{project_id}/assets/{asset_id}:
+    parameters: [{$ref: '#/components/parameters/ProjectId'}, {$ref: '#/components/parameters/AssetId'}]
+    get: {operationId: getAsset, responses: {'200': {description: Asset}}}
+    patch: {operationId: updateAssetMetadata, parameters: [{$ref: '#/components/parameters/IfMatch'}], responses: {'200': {description: Updated asset}}}
+    delete: {operationId: deleteAsset, responses: {'202': {description: Soft deleted}}}
+  /projects/{project_id}/assets/{asset_id}/upload-sessions/{upload_id}/parts:
+    post: {operationId: presignUploadParts, parameters: [{$ref: '#/components/parameters/ProjectId'}, {$ref: '#/components/parameters/AssetId'}, {$ref: '#/components/parameters/UploadId'}], responses: {'200': {description: Signed direct part requests}}}
+  /projects/{project_id}/assets/{asset_id}/upload-sessions/{upload_id}/complete:
+    post: {operationId: completeAssetUpload, parameters: [{$ref: '#/components/parameters/ProjectId'}, {$ref: '#/components/parameters/AssetId'}, {$ref: '#/components/parameters/UploadId'}, {$ref: '#/components/parameters/IdempotencyKey'}], responses: {'202': {description: Validation job created}}}
+  /projects/{project_id}/assets/{asset_id}/upload-sessions/{upload_id}/abort:
+    post: {operationId: abortAssetUpload, parameters: [{$ref: '#/components/parameters/ProjectId'}, {$ref: '#/components/parameters/AssetId'}, {$ref: '#/components/parameters/UploadId'}], responses: {'202': {description: Aborted}}}
+  /projects/{project_id}/scripts:
+    post: {operationId: createScript, parameters: [{$ref: '#/components/parameters/ProjectId'}], responses: {'201': {description: Script and immutable version}}}
+  /projects/{project_id}/scripts/{script_id}/versions:
+    post: {operationId: createScriptVersion, parameters: [{$ref: '#/components/parameters/ProjectId'}, {$ref: '#/components/parameters/ScriptId'}, {$ref: '#/components/parameters/IfMatch'}], responses: {'201': {description: Immutable ScriptVersion}}}
+  /projects/{project_id}/narrations:
+    post: {operationId: createNarration, parameters: [{$ref: '#/components/parameters/ProjectId'}], responses: {'202': {description: Narration Job}}}
+  /projects/{project_id}/narrations/{narration_id}:
+    get: {operationId: getNarration, parameters: [{$ref: '#/components/parameters/ProjectId'}, {name: narration_id, in: path, required: true, schema: {type: string}}], responses: {'200': {description: Narration request}}}
+  /projects/{project_id}/timelines:
+    post: {operationId: createTimeline, parameters: [{$ref: '#/components/parameters/ProjectId'}], responses: {'201': {description: Canonical TimelineVersion}}}
+  /projects/{project_id}/timelines/{timeline_id}:
+    get: {operationId: getTimeline, parameters: [{$ref: '#/components/parameters/ProjectId'}, {$ref: '#/components/parameters/TimelineId'}], responses: {'200': {description: Timeline}}}
+  /projects/{project_id}/timelines/{timeline_id}/commands:
+    post: {operationId: executeTimelineCommand, parameters: [{$ref: '#/components/parameters/ProjectId'}, {$ref: '#/components/parameters/TimelineId'}, {$ref: '#/components/parameters/IfMatch'}], responses: {'201': {description: New immutable TimelineVersion}, '412': {$ref: '#/components/responses/PreconditionFailed'}}}
+  /projects/{project_id}/renders:
+    post: {operationId: createRender, parameters: [{$ref: '#/components/parameters/ProjectId'}, {$ref: '#/components/parameters/IdempotencyKey'}], responses: {'202': {description: Render Job}}}
+  /projects/{project_id}/analyses:
+    post: {operationId: createAnalysis, parameters: [{$ref: '#/components/parameters/ProjectId'}], responses: {'202': {description: Analysis Job}}}
+    get: {operationId: listAnalyses, parameters: [{$ref: '#/components/parameters/ProjectId'}], responses: {'200': {description: Analysis page}}}
+  /projects/{project_id}/scenes:
+    get: {operationId: listScenes, parameters: [{$ref: '#/components/parameters/ProjectId'}], responses: {'200': {description: Scene page}}}
+    post: {operationId: createScene, parameters: [{$ref: '#/components/parameters/ProjectId'}], responses: {'201': {description: Scene}}}
+  /projects/{project_id}/scenes/{scene_id}:
+    get: {operationId: getScene, parameters: [{$ref: '#/components/parameters/ProjectId'}, {name: scene_id, in: path, required: true, schema: {type: string}}], responses: {'200': {description: Scene}}}
+  /projects/{project_id}/candidate-groups:
+    post: {operationId: createCandidateGroup, parameters: [{$ref: '#/components/parameters/ProjectId'}], responses: {'202': {description: Candidate group}}}
+  /projects/{project_id}/candidate-groups/{group_id}:
+    get: {operationId: getCandidateGroup, parameters: [{$ref: '#/components/parameters/ProjectId'}, {name: group_id, in: path, required: true, schema: {type: string}}], responses: {'200': {description: Candidate group}}}
+  /provider-configurations:
+    get: {operationId: listProviderConfigurations, responses: {'200': {description: Redacted configurations}}}
+    post: {operationId: createProviderConfiguration, responses: {'201': {description: Redacted configuration}, '422': {description: Plaintext secrets rejected}}}
+  /provider-configurations/{provider_id}:
+    get: {operationId: getProviderConfiguration, parameters: [{$ref: '#/components/parameters/ProviderId'}], responses: {'200': {description: Redacted configuration}}}
+    patch: {operationId: updateProviderConfiguration, parameters: [{$ref: '#/components/parameters/ProviderId'}, {$ref: '#/components/parameters/IfMatch'}], responses: {'200': {description: Redacted configuration}}}
+  /provider-configurations/{provider_id}/validate:
+    post: {operationId: validateProviderConfiguration, parameters: [{$ref: '#/components/parameters/ProviderId'}], responses: {'202': {description: Validation request}}}
+  /provider-configurations/{provider_id}/disable:
+    post: {operationId: disableProviderConfiguration, parameters: [{$ref: '#/components/parameters/ProviderId'}], responses: {'200': {description: Disabled configuration}}}
+components:
+  securitySchemes:
+    bearerAuth: {type: http, scheme: bearer}
+  parameters:
+    ProjectId: {name: project_id, in: path, required: true, schema: {type: string}}
+    AssetId: {name: asset_id, in: path, required: true, schema: {type: string}}
+    UploadId: {name: upload_id, in: path, required: true, schema: {type: string}}
+    ScriptId: {name: script_id, in: path, required: true, schema: {type: string}}
+    TimelineId: {name: timeline_id, in: path, required: true, schema: {type: string}}
+    ProviderId: {name: provider_id, in: path, required: true, schema: {type: string}}
+    IfMatch: {name: If-Match, in: header, required: true, schema: {type: string, pattern: '^"[0-9]+"$'}}
+    IdempotencyKey: {name: Idempotency-Key, in: header, required: false, schema: {type: string, minLength: 8, maxLength: 200}}
+  responses:
+    Unauthorized: {description: Authentication required}
+    NotFound: {description: Resource absent or outside Workspace scope}
+    PreconditionFailed: {description: ETag conflict}
+  schemas:
+    LoginRequest:
+      type: object
+      required: [username, password]
+      additionalProperties: false
+      properties: {username: {type: string}, password: {type: string, format: password}}
+    Session:
+      type: object
+      required: [access_token, token_type]
+      properties: {access_token: {type: string}, token_type: {const: Bearer}, workspace_id: {type: string}}
+    ProjectCreate:
+      type: object
+      required: [name, workflow_key]
+      additionalProperties: false
+      properties: {name: {type: string, minLength: 1}, workflow_key: {type: string, minLength: 1}, settings: {type: object}}
+    Project:
+      type: object
+      required: [id, workspace_id, name, status, revision]
+      properties: {id: {type: string}, workspace_id: {type: string}, name: {type: string}, status: {enum: [active, archived, deleted]}, revision: {type: integer, minimum: 1}}
