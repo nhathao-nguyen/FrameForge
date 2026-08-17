@@ -1,0 +1,22 @@
+name: NH-Media foundation
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  foundation:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify foundation
+        shell: pwsh
+        run: .\tools\verify.ps1
+      - name: Prove independence gate fails closed
+        shell: pwsh
+        run: |
+          $fixture = Join-Path $env:RUNNER_TEMP 'forbidden-reference.txt'
+          Set-Content -LiteralPath $fixture -Value 'movie_narrator must be rejected'
+          & .\tools\verify-independence.ps1 -ScanPath $fixture
+          if ($LASTEXITCODE -eq 0) { throw 'negative independence fixture unexpectedly passed' }

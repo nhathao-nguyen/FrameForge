@@ -1,0 +1,7 @@
+{
+  "name": "@nh-media/sdk",
+  "private": true,
+  "version": "0.1.0-foundation",
+  "scripts": { "typecheck": "tsc --noEmit" },
+  "devDependencies": { "typescript": "5.8.3" }
+}

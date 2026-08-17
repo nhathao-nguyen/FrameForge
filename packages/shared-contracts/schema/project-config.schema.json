@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nh-media.local/contracts/project-config/v1",
+  "title": "Safe project configuration boundary",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "serialization_version": { "const": "1" },
+    "render_profile": { "type": "string", "pattern": "^[a-z][a-z0-9_-]{0,63}$" },
+    "provider_configuration_id": { "type": "string", "pattern": "^[a-z][a-z0-9_-]{2,127}$" },
+    "limits": { "type": "object", "additionalProperties": { "type": "integer", "minimum": 0 } }
+  },
+  "not": { "anyOf": [{ "required": ["executable"] }, { "required": ["command"] }, { "required": ["shell"] }] }
+}

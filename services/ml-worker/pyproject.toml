@@ -1,0 +1,29 @@
+[project]
+name = "nh-media-ml-worker"
+version = "0.1.0"
+description = "Isolated NH-Media Python ML worker foundation"
+requires-python = ">=3.13,<3.14"
+dependencies = []
+
+[tool.uv]
+package = true
+
+[dependency-groups]
+dev = [
+    "bandit==1.8.6",
+    "mypy==1.17.1",
+    "pytest==8.4.2",
+    "ruff==0.12.12",
+]
+
+[tool.ruff]
+line-length = 120
+target-version = "py313"
+
+[tool.mypy]
+python_version = "3.13"
+strict = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

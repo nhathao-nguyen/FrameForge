@@ -1,0 +1,8 @@
+{
+  "name": "@nh-media/desktop",
+  "private": true,
+  "version": "0.1.0-foundation",
+  "scripts": {
+    "typecheck": "echo Tauri 2 Rust shell; use cargo fmt --check and cargo check in src-tauri"
+  }
+}

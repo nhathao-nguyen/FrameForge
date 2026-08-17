@@ -18,15 +18,15 @@ reviewable evidence is recorded.
 | T002 | Toolchain matrix | T000 | complete | `docs/bootstrap/T002-TOOLCHAIN-MATRIX-WINDOWS.md` and native version/codec evidence | T003 |
 | T003 | Reference-behavior fixture policy | T001 | complete | `tests/reference-behavior/README.md` and empty manifest validation | T100 |
 | T004 | Documentation/independence gate | T000, T001 | complete | owner ratification, final spec audit and post-bootstrap certification | T100 |
-| T100 | Repository skeleton | T002, T003, T004 | pending | none | start T100 |
-| T101 | Language-neutral primitives | T100 | blocked | none | after T100 |
-| T102 | Configuration/redaction | T101 | blocked | none | after T101 |
-| T103 | PostgreSQL | T100 | blocked | none | after T100 |
-| T104 | Redis | T100 | blocked | none | after T100 |
-| T105 | Object storage | T100 | blocked | none | after T100 |
-| T106 | Go Product API shell | T101–T105 | blocked | none | after dependencies |
-| T107 | Health/readiness | T106 | blocked | none | after dependencies |
-| T108 | CI/independence gates | T100-T107 | blocked | none | after foundation |
+| T100 | Repository skeleton | T002, T003, T004 | complete | approved boundaries, Go module, clients, workers, contracts/SDK, infra/test trees | T101–T108 |
+| T101 | Language-neutral primitives | T100 | complete | shared JSON schemas/fixtures pass Go/Python/TypeScript validation | T102 |
+| T102 | Configuration/redaction | T101 | complete | separate namespaces, SecretStore AES-GCM boundary, redaction tests and placeholder env | T103–T105 |
+| T103 | PostgreSQL | T100 | complete | private Compose service, distinct app/migration roles, privilege/restart smoke | T104 |
+| T104 | Redis | T100 | complete | authenticated private service, AOF/RDB persistence and restart smoke | T105 |
+| T105 | Object storage | T100 | complete | private MinIO bucket/bootstrap, object/range/anonymous-denial/restart smoke | T106 |
+| T106 | Go Product API shell | T101–T105 | complete | `/api/v1`, IDs/errors/CORS/bounds, LocalAuth shell, mocked-port tests | T107 |
+| T107 | Health/readiness | T106 | complete | liveness/readiness/diagnostics with dependency-down, timeout and drain tests | T108 |
+| T108 | CI/independence gates | T100-T107 | complete | local verification, CI workflow, negative independence proof, lock/SBOM/secret scans | T200 |
 | T200 | Migration framework | T103, T108 | blocked | none | after dependencies |
 | T201 | Identity/Workspace tables | T200 | blocked | none | after T200 |
 | T202 | Workflow/Pipeline tables | T200 | blocked | none | after T200 |

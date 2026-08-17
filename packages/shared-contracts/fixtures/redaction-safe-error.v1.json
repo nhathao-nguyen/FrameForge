@@ -1,0 +1,11 @@
+{
+  "schema_version": "redaction-safe-error/v1",
+  "input": {
+    "secret": "[REDACTED]",
+    "authorization": "[REDACTED]",
+    "path": "[REDACTED_PATH]",
+    "presigned_url": "[REDACTED_URL]",
+    "traceback": "[REDACTED_TRACEBACK]"
+  },
+  "expected_public_fields": ["code", "safe_message", "request_id", "correlation_id"]
+}

@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nh-media.local/contracts/config-namespaces/v1",
+  "type": "object",
+  "required": ["api", "media_worker", "ml_worker", "provider", "storage", "queue"],
+  "additionalProperties": false,
+  "properties": {
+    "api": { "type": "object", "additionalProperties": false, "properties": { "bind": { "type": "string" }, "profile": { "enum": ["local", "lan"] }, "allowed_origins": { "type": "array", "items": { "type": "string" } } } },
+    "media_worker": { "type": "object", "additionalProperties": false, "properties": { "ffmpeg_path": { "type": "string" }, "ffprobe_path": { "type": "string" }, "max_concurrency": { "type": "integer", "minimum": 1 } } },
+    "ml_worker": { "type": "object", "additionalProperties": false, "properties": { "max_concurrency": { "type": "integer", "minimum": 1 } } },
+    "provider": { "type": "object", "additionalProperties": false, "properties": { "default_timeout_seconds": { "type": "integer", "minimum": 1 } } },
+    "storage": { "type": "object", "additionalProperties": false, "properties": { "endpoint": { "type": "string" }, "access_key_ref": { "type": "string" }, "secret_key_ref": { "type": "string" } } },
+    "queue": { "type": "object", "additionalProperties": false, "properties": { "endpoint": { "type": "string" }, "password_ref": { "type": "string" } } }
+  }
+}

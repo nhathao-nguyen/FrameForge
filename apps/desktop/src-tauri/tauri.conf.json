@@ -1,0 +1,17 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "NH-Media",
+  "version": "0.1.0",
+  "identifier": "com.nhathao.nhmedia",
+  "build": {
+    "beforeDevCommand": "",
+    "beforeBuildCommand": "",
+    "devUrl": "http://localhost:3000",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [{ "title": "NH-Media", "width": 1200, "height": 800 }],
+    "security": { "csp": null }
+  },
+  "bundle": { "active": false, "targets": "all", "icon": [] }
+}

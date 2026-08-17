@@ -11,7 +11,7 @@ owner: repository owner / task assignee
 | Field | Value | Evidence |
 |---|---|---|
 | Working branch | `implementation/bootstrap` | `git branch --show-current` |
-| Baseline commit | `5df7308` | `git rev-parse HEAD` before this bootstrap task; tag `spec-ready-v1` |
+| Baseline commit | `2664057` | `git rev-parse HEAD` before Gate B implementation; branch bootstrap commit |
 | Tracking branch | `origin/implementation/bootstrap` | `git status --short --branch` |
 | Push/merge action | none performed | task scope |
 
@@ -24,8 +24,8 @@ owner: repository owner / task assignee
 - T003 reference-behavior fixture policy: complete with a policy README and intentionally empty manifest.
 - T004 owner approval/independence certification: complete by 2026-08-17 ratification and final
   documentation consistency evidence; final pre-code certification rerun after T002/T003.
-- Application implementation: not started. T100 is now eligible.
-- Next task: T100 independent repository skeleton toward T550 Local Functional Acceptance.
+- Application implementation: Gate B foundation T100–T108 is implemented in the current uncommitted working tree.
+- Next task: T200 migration framework (Gate C), after review/checkpoint of T100–T108.
 
 ## Current evidence
 
@@ -35,10 +35,11 @@ owner: repository owner / task assignee
 - T003 policy and manifest are in `tests/reference-behavior/`; the manifest is empty and normal CI
   remains upstream-free.
 - First deterministic native slice is T321/T322; first Python worker slice is T323.
+- Gate B evidence covers repository boundaries, shared primitives, redaction/config boundaries, private
+  PostgreSQL/Redis/MinIO Compose services, Go API shell, health/readiness, CI and independence scans.
 - Local Functional Acceptance is T550; Local/LAN Hardened Acceptance is T603; Internet/VPS
   production is T605.
-- No `apps/`, `cmd/`, `internal/`, `packages/`, `services/`, Go module, Python package, database
-  migration, runtime or deployment implementation was added by this documentation task.
+- No Gate C domain schema, migration, Job pipeline, QueuePort or media/AI workflow was implemented.
 
 ## Decision status
 
@@ -49,10 +50,10 @@ vendors are later configuration choices.
 ## Handoff
 
 ```text
-Task: T004 documentation/independence gate
+Task: T108 CI and independence gates
 Status: complete
-Boundary: documentation, policy, capability classification, planning and memory only
-Application code: none
+Boundary: Gate B repository/service foundation only
+Application code: API shell, contracts, config, client/worker boundaries and private dev infrastructure
 Upstream relationship: research/reference only; no operational dependency
-Next: T100 independent repository skeleton
+Next: T200 migration framework (Gate C)
 ```

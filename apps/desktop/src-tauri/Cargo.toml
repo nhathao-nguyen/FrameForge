@@ -1,0 +1,15 @@
+[package]
+name = "nh-media-desktop"
+version = "0.1.0"
+description = "NH-Media thin remote-first Tauri desktop client"
+authors = ["NH-Media"]
+edition = "2024"
+
+[build-dependencies]
+tauri-build = { version = "2.5.1" }
+
+[dependencies]
+tauri = { version = "2.8.5", features = [] }
+
+[lints.rust]
+unsafe_code = "forbid"

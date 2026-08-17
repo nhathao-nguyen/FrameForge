@@ -1,0 +1,91 @@
+name: nh-media-foundation
+
+services:
+  postgres:
+    image: postgres:16.10-alpine
+    restart: unless-stopped
+    profiles: [local, lan]
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB is required}
+      POSTGRES_USER: ${POSTGRES_SUPERUSER:?POSTGRES_SUPERUSER is required}
+      POSTGRES_PASSWORD: ${POSTGRES_SUPERUSER_PASSWORD:?POSTGRES_SUPERUSER_PASSWORD is required}
+      POSTGRES_APP_USER: ${POSTGRES_APP_USER:?POSTGRES_APP_USER is required}
+      POSTGRES_APP_PASSWORD: ${POSTGRES_APP_PASSWORD:?POSTGRES_APP_PASSWORD is required}
+      POSTGRES_MIGRATION_USER: ${POSTGRES_MIGRATION_USER:?POSTGRES_MIGRATION_USER is required}
+      POSTGRES_MIGRATION_PASSWORD: ${POSTGRES_MIGRATION_PASSWORD:?POSTGRES_MIGRATION_PASSWORD is required}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - nh_media_postgres_data:/var/lib/postgresql/data
+      - ../postgres/init:/docker-entrypoint-initdb.d:ro
+    expose: [5432]
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    networks: [nh_media_private]
+
+  redis:
+    image: redis:7.4.5-alpine
+    restart: unless-stopped
+    profiles: [local, lan]
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
+      REDIS_PORT: 6379
+    command: ["sh", "-c", "exec redis-server --appendonly yes --appendfsync everysec --save 60 1000 --requirepass \"$${REDIS_PASSWORD}\" --protected-mode yes --bind 0.0.0.0"]
+    volumes:
+      - nh_media_redis_data:/data
+    expose: [6379]
+    healthcheck:
+      test: [CMD-SHELL, "REDISCLI_AUTH=\"$${REDIS_PASSWORD}\" redis-cli ping | grep -q PONG"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    networks: [nh_media_private]
+
+  minio:
+    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
+    restart: unless-stopped
+    profiles: [local, lan]
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?MINIO_ROOT_USER is required}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD is required}
+    command: ["server", "/data", "--address", ":9000", "--console-address", ":9001"]
+    volumes:
+      - nh_media_minio_data:/data
+    expose: [9000, 9001]
+    healthcheck:
+      test: [CMD-SHELL, "curl -fsS http://127.0.0.1:9000/minio/health/live >/dev/null"]
+      interval: 5s
+      timeout: 5s
+      retries: 18
+      start_period: 10s
+    networks: [nh_media_private]
+
+  minio-bootstrap:
+    image: minio/mc:RELEASE.2025-08-13T08-35-41Z
+    profiles: [local, lan]
+    depends_on:
+      minio:
+        condition: service_healthy
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?MINIO_ROOT_USER is required}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD is required}
+      MINIO_BUCKET: ${MINIO_BUCKET:?MINIO_BUCKET is required}
+    entrypoint: ["/bin/sh", "-ec"]
+    command: ["mc alias set local http://minio:9000 \"$${MINIO_ROOT_USER}\" \"$${MINIO_ROOT_PASSWORD}\" >/dev/null; mc mb --ignore-existing \"local/$${MINIO_BUCKET}\" >/dev/null; mc anonymous set none \"local/$${MINIO_BUCKET}\" >/dev/null; mc stat \"local/$${MINIO_BUCKET}\" >/dev/null"]
+    networks: [nh_media_private]
+
+volumes:
+  nh_media_postgres_data:
+    name: nh_media_postgres_data
+  nh_media_redis_data:
+    name: nh_media_redis_data
+  nh_media_minio_data:
+    name: nh_media_minio_data
+
+networks:
+  nh_media_private:
+    name: nh_media_private
+    driver: bridge

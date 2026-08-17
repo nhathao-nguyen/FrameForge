@@ -13,4 +13,11 @@ venv/
 .env
 .env.*
 !.env.example
+node_modules/
+dist/
+.next/
+target/
+coverage/
+uv.lock.tmp
+apps/desktop/src-tauri/icons/icon.ico
 

@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nh-media.local/contracts/shared-primitives/v1",
+  "title": "NH-Media shared primitives v1",
+  "type": "object",
+  "required": ["schema_version", "ids", "timestamp", "media", "concurrency", "error"],
+  "properties": {
+    "schema_version": { "const": "shared-primitives/v1" },
+    "ids": {
+      "type": "object",
+      "required": ["workspace_id", "project_id", "artifact_id"],
+      "additionalProperties": false,
+      "properties": {
+        "workspace_id": { "$ref": "#/$defs/opaqueId" },
+        "project_id": { "$ref": "#/$defs/opaqueId" },
+        "artifact_id": { "$ref": "#/$defs/opaqueId" }
+      }
+    },
+    "timestamp": { "type": "string", "format": "date-time", "pattern": "Z$" },
+    "media": {
+      "type": "object",
+      "required": ["start_sec", "end_sec", "duration_sec"],
+      "additionalProperties": false,
+      "properties": {
+        "start_sec": { "$ref": "#/$defs/mediaTime" },
+        "end_sec": { "$ref": "#/$defs/mediaTime" },
+        "duration_sec": { "$ref": "#/$defs/mediaTime" }
+      }
+    },
+    "concurrency": {
+      "type": "object",
+      "required": ["revision", "etag", "expected_version"],
+      "additionalProperties": false,
+      "properties": {
+        "revision": { "type": "integer", "minimum": 0 },
+        "etag": { "type": "string", "pattern": "^\"[A-Za-z0-9._~-]+\"$" },
+        "expected_version": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "error": { "$ref": "#/$defs/safeError" }
+  },
+  "$defs": {
+    "opaqueId": { "type": "string", "pattern": "^[a-z][a-z0-9_-]{2,127}$" },
+    "mediaTime": { "type": "number", "minimum": 0, "multipleOf": 0.001 },
+    "safeError": {
+      "type": "object",
+      "required": ["code", "category", "retryable", "safe_message"],
+      "additionalProperties": false,
+      "properties": {
+        "code": { "type": "string", "pattern": "^[a-z][a-z0-9_]{2,63}$" },
+        "category": { "enum": ["transient", "permanent", "policy", "cancelled", "internal"] },
+        "retryable": { "type": "boolean" },
+        "safe_message": { "type": "string", "minLength": 1, "maxLength": 512 }
+      }
+    }
+  }
+}

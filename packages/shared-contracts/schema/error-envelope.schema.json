@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nh-media.local/contracts/error-envelope/v1",
+  "type": "object",
+  "required": ["serialization_version", "error"],
+  "additionalProperties": false,
+  "properties": {
+    "serialization_version": { "const": "1" },
+    "error": {
+      "type": "object",
+      "required": ["code", "message", "request_id", "correlation_id"],
+      "additionalProperties": false,
+      "properties": {
+        "code": { "type": "string", "pattern": "^[a-z][a-z0-9_]{2,63}$" },
+        "message": { "type": "string", "minLength": 1, "maxLength": 512 },
+        "request_id": { "$ref": "primitives.schema.json#/$defs/opaqueId" },
+        "correlation_id": { "$ref": "primitives.schema.json#/$defs/opaqueId" },
+        "details": { "type": "object", "additionalProperties": false }
+      }
+    }
+  }
+}
