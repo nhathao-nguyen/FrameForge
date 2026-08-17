@@ -13,14 +13,18 @@ product boundary. Movie Narrator is external research/reference material only.
 
 ## System boundary
 
-- Go Product API owns identity, authorization, Project, Asset, Job, database transactions,
+- Go Product API owns AuthPort/LocalAuthProvider, Workspace-first authorization, Project, Asset, Job, database transactions,
   idempotency, uploads and product events. It does not import Python, FFmpeg or ML runtimes.
 - Bounded Go media workers own FFmpeg/media orchestration.
 - Isolated Python workers use the `nh_media` namespace for ML/AI capabilities.
-- PostgreSQL owns durable product state, Redis is delivery/coordination, and private object storage
+- PostgreSQL owns durable product state, Redis Streams is delivery/coordination, and MinIO through
+  S3-compatible semantics owns initial durable large bytes. Private object storage
   owns large bytes. Contracts use Asset/Artifact refs.
 - Next.js/React web and Tauri 2 desktop are thin Product API clients.
 - Local/LAN is a valid release target; public internet/VPS is a later deployment phase.
+- Local bootstrap creates one admin User, one default Workspace and one owner membership. SecretStore
+  encrypts provider credentials with a server-owned master key.
+- TimelineVersion uses versioned PostgreSQL JSONB and typed domain commands; SSE is primary progress.
 
 ## Non-negotiable invariants
 
@@ -44,7 +48,7 @@ product boundary. Movie Narrator is external research/reference material only.
 1. Current owner instruction and dated approved decisions.
 2. Root [`PROJECT_REBUILD_PLAN.md`](../../PROJECT_REBUILD_PLAN.md) and canonical master context.
 3. [`../GLOSSARY.md`](../GLOSSARY.md) and `docs/00`–`docs/14`.
-4. [`../OPEN-QUESTIONS.md`](../OPEN-QUESTIONS.md).
+4. [`../OPEN-QUESTIONS.md`](../OPEN-QUESTIONS.md), now a closed-decision register.
 5. [`../IMPLEMENTATION-ORDER.md`](../IMPLEMENTATION-ORDER.md).
 6. [`../UPSTREAM-REFERENCE-POLICY.md`](../UPSTREAM-REFERENCE-POLICY.md), capability matrix and
    research audit for non-normative upstream evidence.
@@ -69,6 +73,7 @@ product boundary. Movie Narrator is external research/reference material only.
 
 ## Task intake
 
-Read the four required memory files, locate the task and dependencies, check relevant OQs, identify
-the owning service/trust boundary, and update evidence/memory in the same change. Stop affected
-implementation when an owner decision is genuinely missing.
+Read the four required memory files, locate the task and dependencies, check the decision register,
+identify the owning service/trust boundary, and update evidence/memory in the same change. Current
+architecture questions are closed; future vendor/configuration choices are nonblocking unless a new
+owner decision explicitly changes scope.

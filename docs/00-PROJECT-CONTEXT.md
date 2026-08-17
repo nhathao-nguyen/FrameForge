@@ -2,13 +2,14 @@
 
 ## Status and authority
 
-This specification implements the owner-confirmed 2026-08-17 direction: NH-Media is an independent
+This specification implements the owner-confirmed 2026-08-17 direction and final Local/LAN-first
+ratification: NH-Media is an independent
 product; Movie Narrator is research/reference-only. This decision supersedes every prior target
 that required an upstream runtime, adapter, compatibility service, migration path or rollback image.
 Historical research facts remain evidence, not architecture.
 
-The repository is still in the specification phase. No application code is authorized by this
-documentation change.
+This change completes the specification phase without adding application code. The ratified gate
+authorizes the ordered bootstrap/implementation tasks after their explicit evidence prerequisites.
 
 ## Product identity
 
@@ -27,7 +28,7 @@ Build an independent AI Video Production System with:
 - TimelineVersion as renderer source of truth;
 - provider abstractions for LLM, VLM, TTS, ASR and Embedding;
 - bounded Go media workers and isolated Python `nh_media` workers;
-- PostgreSQL metadata, Redis coordination and private object storage;
+- PostgreSQL metadata, Redis Streams coordination and private MinIO/S3-compatible object storage;
 - multiple output profiles without rerunning unrelated AI work;
 - future distributed execution without requiring it initially.
 
@@ -41,8 +42,8 @@ Web / Tauri 2 clients
           ▼
 Go Product API / control plane
   ├── PostgreSQL: durable product and job state
-  ├── Redis: queue, lease and live-event coordination
-  └── object storage: source media and Artifacts
+  ├── Redis Streams: consumer-group execution transport and coordination
+  └── MinIO/S3-compatible object storage: source media and Artifacts
           │ versioned worker contract
           ├── Go media worker → FFmpeg/ffprobe
           └── Python ML worker → nh_media / models
@@ -70,9 +71,12 @@ FFmpeg processing, models, PostgreSQL, Redis, server secrets or worker services.
 
 ### Local/LAN production-like validation
 
-A server on the LAN runs API, PostgreSQL, Redis, storage and workers. Other LAN machines use the
+A server on the LAN runs API, PostgreSQL, Redis Streams, MinIO and workers. Other LAN machines use the
 web or desktop client. This is sufficient to prove architecture, jobs, rendering, recovery,
 persistence and multi-client behavior. Lack of a VPS does not block functional implementation.
+Local-only binding is the default; LAN binding, API URL and allowed origins are explicit profile
+configuration. Authentication remains active. Trusted-private-LAN HTTP is permitted for the first
+functional milestone and must be labelled as unsuitable for Internet exposure.
 
 ### Internet production
 
@@ -93,6 +97,10 @@ concerns. Internal services remain private in every profile.
 10. Worker concurrency, retries, leases, cancellation and resources are bounded.
 11. No `shell=True`, untrusted extension auto-load or secret/path/traceback exposure.
 12. Upstream code, containers and dependency graphs remain outside product/runtime/release packages.
+13. LocalAuthProvider behind AuthPort bootstraps one local admin, one Workspace and one membership.
+14. Provider secrets use encrypted server-side records protected by a server-owned master key.
+15. TimelineVersion uses versioned PostgreSQL JSONB and changes only through validated domain commands.
+16. SSE is the primary progress transport; REST/database state remains authoritative.
 
 ## Upstream reference boundary
 
@@ -128,10 +136,11 @@ contract.
 | `UPSTREAM-CAPABILITY-MATRIX.md` | capability-level disposition and acceptance |
 | `UPSTREAM-REFERENCE-POLICY.md` | provenance, license and allowed research use |
 | `IMPLEMENTATION-ORDER.md` | task order and definitions of done |
-| `OPEN-QUESTIONS.md` | only genuine unresolved decisions |
+| `OPEN-QUESTIONS.md` | closed decisions and deferred nonblocking operational choices |
 
 ## Specification completion
 
-The spec is ready when independence assertions pass, every meaningful upstream capability has a
-documented disposition, links/terms are consistent, the independent first slice is defined, and
-open choices block only their dependent tasks. Readiness does not mean application code was written.
+The specification gate is approved when independence assertions pass, every meaningful upstream
+capability has a documented disposition, links/terms are consistent, the independent first slice is
+defined and no unresolved architecture/product decision remains. Readiness does not mean application
+code was written or runtime acceptance has already passed.

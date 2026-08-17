@@ -31,7 +31,7 @@ reverse proxy / origin / rate controls
           ├── web delivery
           └── Go Product API replicas
                 ├── PostgreSQL
-                ├── Redis
+                ├── Redis Streams
                 ├── private S3/MinIO
                 └── versioned worker contracts
                      ├── bounded Go media workers → FFmpeg
@@ -62,6 +62,13 @@ DLQ and fake-node conformance.
 Prove remote client → API → durable Job → Go media worker → Artifact → event/result on Local/LAN.
 No upstream checkout/package/image is present.
 
+### Milestone — LOCAL FUNCTIONAL ACCEPTANCE
+
+Start PostgreSQL, Redis Streams, MinIO, Product API, Go media worker, Python `nh_media` worker, web
+and Tauri development client on the owner machine. Prove LocalAuth/default Workspace bootstrap,
+Project/upload/Job, deterministic FFmpeg Artifact, one minimal Python worker task, SSE result,
+restart recovery and an explicit second LAN client. VPS, public DNS and public TLS are not required.
+
 ### Phase 4 — Pipeline/studio
 
 Implement native DAG, Script/Scene/Analysis/Timeline/reviews, web/Tauri review slices and canonical
@@ -77,12 +84,12 @@ matching, audio mix, render, QA and exports.
 Add candidates/evaluation/selection, Character, embeddings, ReferenceStyleAnalysis, coverage,
 auto-reframe and reusable 16:9/9:16/1:1 outputs.
 
-### Phase 7 — Local/LAN release
+### Phase 7 — LOCAL/LAN HARDENED ACCEPTANCE
 
 Prove auth, multi-client operation, backups/restores, worker failure recovery, observability,
 malicious-media containment and signed staging desktop on a LAN server.
 
-### Phase 8 — Internet production
+### Phase 8 — INTERNET / VPS PRODUCTION
 
 Add public TLS/DNS/ingress, canary, SLO/alerts and rollback only after the functional Local/LAN
 release. VPS/public hosting is not a blocker for earlier phases.
@@ -108,6 +115,9 @@ release. VPS/public hosting is not a blocker for earlier phases.
 6. Kill/restart workers and dependencies; verify lease/checkpoint/event/Artifact recovery.
 7. Run malicious-media, cross-Workspace and secret/path negative suites.
 8. Record owner acceptance or concrete blockers.
+
+This sequence is hardening/release evidence after Local Functional Acceptance; it does not delay the
+first functional system.
 
 ## 7. Internet release sequence
 

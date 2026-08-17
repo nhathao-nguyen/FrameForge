@@ -4,7 +4,9 @@
 
 - Job command/snapshots commit PostgreSQL before enqueue.
 - Queue delivery at-least-once; JobStep execution and Artifact commit idempotent.
-- PostgreSQL is source of truth; Redis carries queue/live fan-out only.
+- PostgreSQL is source of truth; Redis Streams carries execution delivery/coordination only.
+- Redis Streams consumer groups are the initial execution transport; stream state is reconstructable
+  from PostgreSQL outbox/Job state.
 - Every state transition is guarded, transactional with durable event/outbox, and uses canonical state vocabulary.
 - Worker claim uses lease + heartbeat; media executor memory/local disk is disposable.
 - Progress is an estimate; terminal event is emitted only after state/output transaction commits.
@@ -22,7 +24,7 @@ orchestrator resolves ready nodes
   JobStep pending → ready → queued
   Job/PipelineRun created → queued
   ↓
-Redis delivery
+Redis Streams delivery
   ↓
 worker controller claim
   Job/PipelineRun queued → running
@@ -40,6 +42,15 @@ aggregate Job transition and committed event
 ```
 
 Queue message contract is in `13-WORKER-ARCHITECTURE.md`; no media bytes, local paths or secrets.
+
+Redis Streams baseline:
+
+- bounded streams per execution class or an equivalently bounded routing layout;
+- consumer groups with explicit acknowledgement after guarded claim/result handling;
+- pending-entry inspection and reclaim only after PostgreSQL lease reconciliation;
+- delayed retry scheduled from canonical PostgreSQL attempt state, then republished idempotently;
+- a Redis DLQ stream may aid transport operations, but PostgreSQL `dead_letters` is canonical;
+- Redis restart/eviction cannot erase Job history or completed Artifact relationships.
 
 ## 3. State consistency
 
@@ -85,6 +96,11 @@ Retryable categories:
 - executor process interruption;
 - GPU OOM only when node policy permits retry on another compatible worker.
 
+Canonical failure classes are `transient`, `permanent`, `cancellation`, `timeout`,
+`provider_throttling`, `resource_exhaustion` and `invalid_user_input`. Provider throttling follows
+bounded `Retry-After`/exponential backoff; timeout is retryable only by node policy; resource
+exhaustion may reroute only to an advertised compatible worker.
+
 Non-retryable categories:
 
 - schema/semantic input invalid;
@@ -94,6 +110,9 @@ Non-retryable categories:
 - deterministic Timeline/render validation;
 - plugin/security sandbox violation;
 - user cancellation.
+
+Invalid user input is rejected before Job creation where possible. If discovered only by a worker
+after media inspection, it is permanent/non-retryable with a safe diagnostic.
 
 JobStep `running → retrying` creates terminal attempt row `failed`, schedules attempt+1 with exponential backoff + jitter, then `retrying → queued`. Timeout is a `failure_category`, not an extra node status.
 
@@ -257,27 +276,7 @@ Behavior:
 - Close after terminal event plus short flush grace; disconnect is not failure/cancel.
 - Auth rechecked at connect and bounded stream lifetime/refresh policy.
 
-## 10. WebSocket
-
-Optional endpoint `/api/v1/ws/jobs/{job_id}/events` uses same envelope/order/replay.
-
-Client:
-
-```json
-{"type":"subscribe","after_sequence":26}
-```
-
-Server control messages:
-
-```jsonl
-{"type":"subscribed","job_id":"job_01","from_sequence":27}
-{"type":"snapshot_required","reason":"retention_gap","snapshot_url":"/api/v1/.../jobs/job_01"}
-{"type":"error","code":"FORBIDDEN","message":"..."}
-```
-
-Client cannot send state/event mutations over WebSocket. Commands remain authorized REST requests.
-
-## 11. Progress aggregation
+## 10. Progress aggregation
 
 Job `progress_percent` is materialized from Pipeline `progress_weight`:
 
@@ -289,7 +288,7 @@ Job `progress_percent` is materialized from Pipeline `progress_weight`:
 
 Frontend reducers use snapshot + sequence, not infer state from event names alone. Artifact download appears only after `artifact.committed` or REST confirms committed.
 
-## 12. Outbox and observability
+## 11. Outbox and observability
 
 State/event/outbox rows commit together. Publisher retries with same event ID; live duplicate is harmless. Event replay uses `job_events`, not Redis retention.
 

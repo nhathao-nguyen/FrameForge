@@ -143,6 +143,12 @@ Policy profiles dùng trong bảng:
 
 `timeout` cụ thể có thể override trong Pipeline version nhưng không được vô hạn. Bảng dưới là required contract của built-in `movie_recap_v2`; “soft” nghĩa là output consequence phải hiện trong Job warnings, không nghĩa nuốt mọi exception.
 
+Every retry decision classifies the failure as `transient`, `permanent`, `cancellation`, `timeout`,
+`provider_throttling`, `resource_exhaustion` or `invalid_user_input`. Only categories explicitly
+declared retryable use bounded exponential backoff with jitter; permanent/security/invalid-input
+failures do not consume repeated attempts. Resource exhaustion may retry only on a compatible worker
+when the node policy declares that route.
+
 | Node | Inputs / required artifacts | Produced domain/output artifacts | Dependencies | Policy | Failure semantics |
 |---|---|---|---|---|---|
 | `resolve_source_asset` | Asset ID, committed original Artifact | validated source ref + probe Artifact | entry | `P-PROBE` | hard; security/invalid media non-retryable |
@@ -202,6 +208,11 @@ upstream node aliases or compatibility graph are part of NH-Media.
 - optional human gate payload and UI instructions.
 
 Checkpoint is persisted before event `node.completed`/`node.skipped` is published. On crash, replay state from DB/object storage; Redis message is not source of truth.
+
+Meaningful pipeline checkpoints use typed stage names where applicable, including `uploaded`,
+`probed`, `audio_extracted`, `speech_transcribed`, `scenes_detected`, `script_generated`,
+`narration_generated`, `timeline_built`, `rendered` and `validated`. A completed compatible stage is
+not rerun after process restart unless an input fingerprint or declared invalidation rule changes.
 
 ## 8. Provider interfaces
 
@@ -329,9 +340,25 @@ render profile
 optional preview policy
 ```
 
-Renderer compile Timeline → media graph/FFmpeg/MoviePy execution → output Artifact(s) → QA. Profile chỉ thay target constraints (resolution, aspect ratio, codec, bitrate, safe area), không mutate canonical Timeline.
+Renderer compile Timeline → deterministic Go media plan/FFmpeg execution → output Artifact(s) → QA.
+Profile chỉ thay target constraints (resolution, aspect ratio, codec, bitrate, safe area), không
+mutate canonical Timeline. Python ML workers are not used for deterministic media composition.
 
-## 11. Reference-informed implementation boundary
+## 11. First Python worker integration slice
+
+After the deterministic Go probe/thumbnail path passes, a minimal `nh_media` node validates the
+same versioned worker protocol. It may perform lightweight audio/image analysis or a deterministic
+protocol fixture, but it must create a real result/Artifact through:
+
+```text
+Go Product API → PostgreSQL Job → Redis Streams → Python nh_media worker
+→ result/Artifact → Product API/SSE
+```
+
+This slice must not depend on a hosted LLM, Whisper, CUDA, VLM or TTS provider. Heavy AI capability
+work begins only after both worker classes and recovery paths are proven.
+
+## 12. Reference-informed implementation boundary
 
 For a capability identified through upstream research:
 

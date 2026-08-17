@@ -1,8 +1,9 @@
 # Implementation Order
 
 NH-Media begins as an independent implementation. Movie Narrator research is not a prerequisite for
-normal build, test or runtime. Assign one reviewable task at a time. An OQ recommendation is not a
-decision, and an OPEN decision blocks only tasks that name it.
+normal build, test or runtime. Assign one reviewable task at a time. The 2026-08-17 owner
+ratification closes all architecture/product OQs; deferred vendor/optimization choices do not block
+implementation.
 
 Every task handoff includes: boundary, tests, independence, security, data/rollback, open questions
 and next task.
@@ -49,10 +50,12 @@ and next task.
 
 - **Goal:** run the final pre-code audit.
 - **Files/modules:** audit, memory and validation tooling.
-- **Dependencies:** T000–T003.
-- **Notes:** unresolved implementation choices remain isolated OQs.
+- **Dependencies:** T000, T001.
+- **Notes:** owner ratification is recorded; T002/T003 remain separate bootstrap evidence before T100
+  and do not reopen this architecture gate.
 - **Tests:** docs links/anchors, task/OQ/status parity, forbidden architecture/source scan.
-- **DoD:** audit says `SPEC READY FOR IMPLEMENTATION` and no application code was added.
+- **DoD:** audit says `SPEC READY FOR IMPLEMENTATION`, open architecture questions are zero, owner
+  approval is recorded and no application code was added.
 
 ## Gate B — Repository and service foundation
 
@@ -60,7 +63,7 @@ and next task.
 
 - **Goal:** create approved web/desktop/API/media-worker/ml-worker/contracts/SDK/infra/test boundaries.
 - **Files/modules:** layout/package metadata only.
-- **Dependencies:** T002, T004.
+- **Dependencies:** T002, T003, T004.
 - **Notes:** no `legacy-compat`, upstream submodule/vendor tree or media/domain behavior.
 - **Tests:** import/dependency graph and upstream-absence scan.
 - **DoD:** Go, `nh_media` and clients compile/import only through approved boundaries.
@@ -68,7 +71,7 @@ and next task.
 ### T101 — Add language-neutral primitives
 
 - **Goal:** define IDs, UTC/time ranges, revisions/ETags and safe errors.
-- **Files/modules:** `packages/contracts` and tests.
+- **Files/modules:** `packages/shared-contracts` and tests.
 - **Dependencies:** T100.
 - **Notes:** no framework/ORM/provider/storage classes.
 - **Tests:** schema/serialization/invalid input/redaction snapshots.
@@ -78,8 +81,9 @@ and next task.
 
 - **Goal:** separate API, media worker, ML worker and provider configuration.
 - **Files/modules:** config packages, `.env.example`, tests.
-- **Dependencies:** T101; OQ-05 for real credentials.
-- **Notes:** secret refs only; no arbitrary executable from Project config.
+- **Dependencies:** T101.
+- **Notes:** implement SecretStore refs and encrypted-record boundary using a server-owned master key;
+  no arbitrary executable from Project config.
 - **Tests:** precedence, unknown fields and log/event/checkpoint redaction.
 - **DoD:** no secret is serialized or logged.
 
@@ -106,7 +110,7 @@ and next task.
 - **Goal:** pinned MinIO/S3 development bucket.
 - **Files/modules:** infrastructure/object-storage.
 - **Dependencies:** T100.
-- **Notes:** non-default credentials; lifecycle waits for OQ-10.
+- **Notes:** non-default credentials; persistent volume and ratified retain-until-explicit-delete defaults.
 - **Tests:** health, private ACL, multipart and restart.
 - **DoD:** scoped access works and anonymous access fails.
 
@@ -114,8 +118,9 @@ and next task.
 
 - **Goal:** `/api/v1`, request/correlation IDs, safe errors and bounded HTTP settings.
 - **Files/modules:** `services/api` transport/application shell.
-- **Dependencies:** T101–T105; OQ-01 for concrete auth middleware.
-- **Notes:** no media/domain feature and no Python/FFmpeg execution.
+- **Dependencies:** T101–T105.
+- **Notes:** include AuthPort/LocalAuthProvider shell and explicit CORS/profile bounds; no media/domain
+  feature and no Python/FFmpeg execution.
 - **Tests:** startup, OpenAPI/error smoke, body/CORS bounds, dependency scan.
 - **DoD:** API shell runs with mocked ports and no long compute inline.
 
@@ -152,8 +157,8 @@ and next task.
 
 - **Goal:** users/workspaces/members/API keys.
 - **Files/modules:** migration/repositories/tests.
-- **Dependencies:** T200; OQ-01, OQ-06.
-- **Notes:** key hash only and Workspace-scoped repositories.
+- **Dependencies:** T200.
+- **Notes:** LocalAuth identity/session hash only, default Workspace bootstrap and Workspace-scoped repositories.
 - **Tests:** FK/index/role/cross-Workspace negative corpus.
 - **DoD:** ownership scope is structural.
 
@@ -161,18 +166,18 @@ and next task.
 
 - **Goal:** persist versioned built-in graph definitions.
 - **Files/modules:** migration/repositories/validators.
-- **Dependencies:** T200; OQ-11.
-- **Notes:** active definitions immutable; no executor.
+- **Dependencies:** T200.
+- **Notes:** active built-in definitions immutable; no public authoring or executor.
 - **Tests:** version/hash/dependency and mutation rejection.
 - **DoD:** native graph data stores without running work.
 
-### T203 — Add ProviderConfiguration and RenderProfile tables
+### T203 — Add SecretStore, ProviderConfiguration and RenderProfile tables
 
-- **Goal:** redacted provider metadata and versioned render profiles.
+- **Goal:** encrypted secret records, redacted provider metadata and versioned render profiles.
 - **Files/modules:** migration/repositories/tests.
-- **Dependencies:** T200–T201; OQ-05.
-- **Notes:** no plaintext secret/provider SDK.
-- **Tests:** status/revision/uniqueness/redaction/immutability.
+- **Dependencies:** T200–T201.
+- **Notes:** server master key remains outside PostgreSQL; no plaintext secret/provider SDK.
+- **Tests:** encryption/AAD/key-version/rotation plus status/revision/uniqueness/redaction/immutability.
 - **DoD:** snapshots resolve by ID/version.
 
 ### T204 — Add Project/Asset/upload tables
@@ -215,7 +220,7 @@ and next task.
 
 - **Goal:** immutable TimelineVersion/Render and later candidate/evaluation structures.
 - **Files/modules:** migration/repositories/tests.
-- **Dependencies:** T203, T206–T207; OQ-02.
+- **Dependencies:** T203, T206–T207.
 - **Notes:** candidate tables may be feature-gated but schema direction is native.
 - **Tests:** hashes/current pointers/render dedupe/candidate selection audit.
 - **DoD:** exact Timeline/Profile and candidate lineage are representable.
@@ -233,7 +238,7 @@ and next task.
 
 - **Goal:** enforce identity, Workspace and roles across resource access.
 - **Files/modules:** auth adapter/application/repositories.
-- **Dependencies:** T106, T201; OQ-01, OQ-06.
+- **Dependencies:** T106, T201.
 - **Notes:** never trust scope from request payload.
 - **Tests:** roles, suspension, guessed IDs and API-key scopes.
 - **DoD:** access fails closed.
@@ -316,8 +321,9 @@ and next task.
 
 - **Goal:** version/edit/approve/lock and Render request resources.
 - **Files/modules:** API/application tests.
-- **Dependencies:** T210, T232; OQ-08.
-- **Notes:** optimistic concurrency; exact version refs.
+- **Dependencies:** T210, T232.
+- **Notes:** typed domain commands, optimistic concurrency and exact version refs; full document only
+  through validated create/import.
 - **Tests:** conflicts, role checks, profile dedupe and user-origin preservation.
 - **DoD:** native clients create and render versioned Timelines.
 
@@ -334,7 +340,7 @@ and next task.
 
 - **Goal:** redacted provider lifecycle and validation commands.
 - **Files/modules:** API/application/secret adapter tests.
-- **Dependencies:** T203, T210; OQ-05.
+- **Dependencies:** T203, T210.
 - **Notes:** plaintext never returned or persisted.
 - **Tests:** rotation/disable/revoke/validation/redaction/authorization.
 - **DoD:** workers resolve scoped bindings without exposing secrets.
@@ -363,8 +369,8 @@ and next task.
 
 - **Goal:** at-least-once bounded delivery behind a port.
 - **Files/modules:** queue adapter/load tests.
-- **Dependencies:** T104, T301; OQ-03.
-- **Notes:** message contains IDs only.
+- **Dependencies:** T104, T301.
+- **Notes:** Redis Streams consumer groups; message contains IDs only and PostgreSQL remains truth.
 - **Tests:** duplicates, reclaim, delayed retry, restart and bounds.
 - **DoD:** queue loss does not lose durable Job state.
 
@@ -422,6 +428,16 @@ and next task.
 - **Tests:** client disconnect, worker restart, retry and upstream-absence scan.
 - **DoD:** independent Local/LAN vertical slice is green.
 
+### T323 — Prove the first Python worker integration slice
+
+- **Goal:** route one minimal versioned task through Redis Streams to a real `nh_media` worker.
+- **Files/modules:** Python worker shell, shared contracts and integration harness.
+- **Dependencies:** T320, T322.
+- **Notes:** use lightweight analysis or deterministic protocol work; no hosted LLM, Whisper, CUDA,
+  VLM or TTS prerequisite.
+- **Tests:** cross-language version rejection, health, retry/restart, result/Artifact commit and redaction.
+- **DoD:** Go API→Job→Redis Streams→Python worker→Artifact/result completes with no upstream runtime.
+
 ### T330 — Implement checkpoints and crash resume
 
 - **Goal:** persist compatible references/fingerprints and resume descendants.
@@ -453,19 +469,19 @@ and next task.
 
 - **Goal:** snapshot/replay/live stream with canonical envelope.
 - **Files/modules:** API/event/client tests.
-- **Dependencies:** T301, T331–T332; OQ-04.
+- **Dependencies:** T301, T331–T332.
 - **Notes:** commands remain REST.
 - **Tests:** order/dedupe/reconnect/gap/auth/backpressure.
 - **DoD:** client reconstructs same state as REST.
 
-### T341 — Implement optional WebSocket transport
+### T341 — Evaluate a future bidirectional transport requirement
 
-- **Goal:** same read-only event semantics if later required.
-- **Files/modules:** transport tests.
-- **Dependencies:** T340 and explicit decision requiring it.
-- **Notes:** no mutations over socket.
-- **Tests:** parity with SSE, auth and mutation rejection.
-- **DoD:** envelope/order/replay are identical.
+- **Goal:** document and validate a genuinely bidirectional feature before adding WebSocket.
+- **Files/modules:** decision/evidence only unless a future approved feature requires implementation.
+- **Dependencies:** T340.
+- **Notes:** `DEFERRED-NONBLOCKING`; SSE remains primary and progress is not sufficient justification.
+- **Tests:** requirement, threat model and contract compatibility review if activated.
+- **DoD:** either remain explicitly deferred or approve a scoped transport task without blocking clients.
 
 ### T350 — Implement Job/Run/Step/Render commands
 
@@ -482,7 +498,7 @@ and next task.
 
 - **Goal:** validate keys/cycles/schemas/dependencies/capabilities/policies.
 - **Files/modules:** pipeline validator tests.
-- **Dependencies:** T202, T320; OQ-11.
+- **Dependencies:** T202, T320.
 - **Notes:** definition is data.
 - **Tests:** complete negative corpus and immutable active hash.
 - **DoD:** only complete native node contracts activate.
@@ -527,7 +543,7 @@ and next task.
 
 - **Goal:** auth-aware Project/Job navigation, errors and reconnect.
 - **Files/modules:** web/SDK/tests.
-- **Dependencies:** T210, T230, T340; OQ-01/OQ-04.
+- **Dependencies:** T210, T230, T340.
 - **Notes:** Product API only.
 - **Tests:** auth/pagination/reconnect/secret scan/accessibility smoke.
 - **DoD:** dashboard survives stream reconnect.
@@ -545,7 +561,7 @@ and next task.
 
 - **Goal:** inspect Scenes and replace/move Clips in a new TimelineVersion.
 - **Files/modules:** web/e2e.
-- **Dependencies:** T233–T234, T410, T420, T430; OQ-08.
+- **Dependencies:** T233–T234, T410, T420, T430.
 - **Notes:** preserve origin/proposal refs.
 - **Tests:** range/version/undo/conflict/reload/rerun override.
 - **DoD:** one Clip edit rerenders without unrelated AI work.
@@ -558,6 +574,18 @@ and next task.
 - **Notes:** no bundled server compute/data services/secrets.
 - **Tests:** endpoint config, session revocation, restart reconnect, permissions.
 - **DoD:** desktop completes native remote flow on Local/LAN.
+
+### T550 — Certify LOCAL FUNCTIONAL ACCEPTANCE
+
+- **Goal:** prove the complete owner-machine functional stack and an explicit LAN client before hardening.
+- **Files/modules:** local/lan profiles, startup orchestration, integration/e2e evidence.
+- **Dependencies:** T323, T340, T430, T433.
+- **Notes:** start PostgreSQL, Redis, MinIO, Go API/media worker, Python worker, web and Tauri dev;
+  prove LocalAuth/default Workspace, Project/upload/Job, FFmpeg Artifact, Python task, SSE, restart
+  recovery and configured LAN access. VPS/public DNS/public TLS are not required.
+- **Tests:** clean start, login/authz, upload, Redis Streams dispatch, both workers, result access,
+  dependency/worker restart, second-device LAN connection and upstream-absence scan.
+- **DoD:** report says `LOCAL FUNCTIONAL ACCEPTANCE: PASS` with no Movie Narrator dependency.
 
 ### T434 — Package and secure desktop baseline
 
@@ -574,7 +602,7 @@ and next task.
 
 - **Goal:** LLM/VLM/TTS/ASR/Embedding ports, errors and fake adapters.
 - **Files/modules:** `nh_media.providers`/contracts/tests.
-- **Dependencies:** T235, T401; OQ-05.
+- **Dependencies:** T235, T401.
 - **Notes:** explicit allowlisted registration and scoped credentials.
 - **Tests:** conformance/error/cancel/timeout/fallback/redaction.
 - **DoD:** five provider kinds pass one framework.
@@ -637,8 +665,8 @@ and next task.
 
 - **Goal:** versioned text/image embeddings for matching.
 - **Files/modules:** `nh_media.matching.embeddings`.
-- **Dependencies:** T500, T521; OQ-07.
-- **Notes:** no cross-model comparisons.
+- **Dependencies:** T500, T521.
+- **Notes:** baseline persistence is Artifact + item-index manifest; no cross-model comparisons.
 - **Tests:** batch/partial/reload/model-space/benchmark.
 - **DoD:** deterministic item index through provider-neutral contract.
 
@@ -696,7 +724,7 @@ and next task.
 - **Tests:** dimensions/codecs/safe area/provider-call audit/cache invalidation.
 - **DoD:** three outputs reuse unchanged inputs correctly.
 
-## Gate H — Security, Local/LAN operations and release
+## Gate H — Security and LOCAL/LAN HARDENED ACCEPTANCE
 
 ### T600 — Harden sandbox/secret/egress policy
 
@@ -720,17 +748,17 @@ and next task.
 
 - **Goal:** clean restore of PostgreSQL plus object refs/checksums.
 - **Files/modules:** tools/runbooks/tests.
-- **Dependencies:** T222, T601; OQ-10.
+- **Dependencies:** T222, T601.
 - **Notes:** restore is non-destructive and reports missing/orphans.
 - **Tests:** clean restore/corrupt object/current pointers/checkpoints.
 - **DoD:** selected Job→Timeline→Render→Artifact traces exactly.
 
-### T603 — Certify Local/LAN release
+### T603 — Certify LOCAL/LAN HARDENED ACCEPTANCE
 
 - **Goal:** prove production-like operation without a VPS.
 - **Files/modules:** deployment profile/e2e/report.
-- **Dependencies:** T322, T430–T434, T531–T532, T600–T602.
-- **Notes:** server and clients run on separate LAN machines where practical.
+- **Dependencies:** T434, T531–T532, T550, T600–T602.
+- **Notes:** harden the already functional system; server and clients run on separate LAN machines where practical.
 - **Tests:** auth/upload/review/render/reconnect/restart/restore/multi-client.
 - **DoD:** owner accepts Local/LAN release evidence and upstream-absence scan.
 
@@ -743,11 +771,12 @@ and next task.
 - **Tests:** provenance, matrix coverage, no source/dependency/artifact changes.
 - **DoD:** research can evolve without product coupling.
 
-### T605 — Prepare internet production release
+### T605 — Prepare INTERNET / VPS PRODUCTION
 
 - **Goal:** public staging/canary/TLS/operations after Local/LAN pass.
 - **Files/modules:** deployment/runbook/release evidence.
-- **Dependencies:** T603; all production-affecting OQs decided.
-- **Notes:** VPS/public ingress is a later deployment concern, not a functional blocker.
+- **Dependencies:** T603.
+- **Notes:** exact VPS, DNS, OIDC, KMS, storage and monitoring vendors are deployment configuration
+  choices selected here; they are not functional implementation blockers.
 - **Tests:** staging/canary/load/security/migration/restore/client update/rollback.
 - **DoD:** public release passes `PRODUCTION-PLAN.md` and uses only NH-Media rollback artifacts.

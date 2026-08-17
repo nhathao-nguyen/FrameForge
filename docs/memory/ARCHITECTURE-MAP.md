@@ -10,10 +10,10 @@ owner: architecture owner / task assignee
 
 ```text
 Next.js/React web ─┐
-                   ├─ HTTPS Product API (Go) ─ PostgreSQL/outbox
+                   ├─ HTTP(S) Product API (Go) ─ PostgreSQL/outbox
 Tauri 2 client ────┘              │              │
-                                  ├─ private object storage
-                                  └─ Redis delivery
+                                  ├─ private MinIO/S3 storage
+                                  └─ Redis Streams delivery
                                         │
                               bounded worker controllers
                               ├─ Go media executor (FFmpeg)
@@ -28,9 +28,13 @@ Tauri 2 client ────┘              │              │
 | Go media worker | media probe/transform/render orchestration | users, sessions, billing, durable product truth |
 | Python `nh_media` worker | isolated ML/AI inference and analysis | Product API, auth, local-path public contracts |
 | PostgreSQL | durable product and execution state | media bytes |
-| Redis | bounded delivery/coordination | authoritative Job/Artifact state |
+| Redis Streams | bounded delivery/consumer-group coordination | authoritative Job/Artifact state |
 | Object storage | immutable/staged bytes | authorization decisions |
 | Web/Tauri | user interaction through Product API | server secrets, direct worker/provider calls |
+
+Local/LAN Product API includes AuthPort/LocalAuthProvider, default Workspace bootstrap and
+SecretStore encrypted records under a server-owned master key. SSE is the primary progress feed;
+Timeline edits are domain commands producing immutable JSONB TimelineVersions.
 
 ## Trust boundaries
 

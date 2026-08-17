@@ -14,7 +14,8 @@ behavior; exact commands, image digests, endpoints and secret references belong 
 | Stage | Exit condition |
 |---|---|
 | Local development | pinned toolchains and isolated disposable dependencies |
-| Local/LAN release | T603 functional, security, failure and desktop/web evidence |
+| Local Functional Acceptance | T550 functional/auth/two-worker/client/LAN evidence |
+| Local/LAN Hardened Acceptance | T603 security, failure, restore, stability and packaged-client evidence |
 | Staging/public candidate | owner-selected DNS/TLS/services plus production-like drills |
 | Internet production | T605 sign-off, canary and rollback evidence |
 
@@ -42,6 +43,7 @@ behavior; exact commands, image digests, endpoints and secret references belong 
 - Retry only declared transient failures; security/validation/stale-snapshot failures are not
   automatically retried.
 - DLQ replay is authorized, audited and idempotent.
-- Retention/deletion remains blocked on OQ-10; preserve referenced/protected content.
+- Initial retention preserves source/final/resume-required content until explicit audited deletion;
+  executor scratch may be cleaned after success. T602 proves backup/restore and inventory.
 - Capture opaque correlation and Job/Run/Step IDs, deployment identity and safe error category;
   redact tokens, credentials, paths and user content.

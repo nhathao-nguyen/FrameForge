@@ -12,20 +12,41 @@
 - JSONB chỉ dùng cho versioned document, validated snapshot, provider-specific metadata hoặc fields không cần join/filter thường xuyên.
 - FK audit/history dùng `ON DELETE RESTRICT`; child lifecycle thuần dùng `CASCADE`. Migration đã apply không được sửa.
 - Mọi unique constraint trên soft-deleted resource cần partial index `WHERE deleted_at IS NULL` khi phù hợp.
+- Schema changes are version-controlled, committed and reproducible from an empty database; manual
+  production schema edits are prohibited.
+- `timeline_versions.document jsonb` with explicit `schema_version`, immutable content hash and
+  relational ownership metadata is the initial canonical Timeline representation.
 
 ## 2. Identity and ownership
 
 ### `users`
 
-`id uuid PK`, `external_subject text NOT NULL UNIQUE`, `email citext`, `display_name text`, `status text NOT NULL CHECK (status IN ('active','suspended','deleted'))`, `created_at`, `updated_at`.
+`id uuid PK`, `email citext`, `display_name text`, `status text NOT NULL CHECK (status IN ('active','suspended','deleted'))`, `created_at`, `updated_at`, `deleted_at`.
 
-Indexes: unique `(email) WHERE email IS NOT NULL`, `(status)`. Authentication provider còn mở tại OQ-01; bảng này là local authorization identity, không lưu password nếu dùng OIDC.
+Indexes: unique `(email) WHERE email IS NOT NULL AND deleted_at IS NULL`, `(status)`. User is the
+authorization identity; provider subjects and credential verifiers are isolated below.
+
+### `auth_identities`
+
+`id uuid PK`, `user_id uuid FK users`, `provider_kind text CHECK (provider_kind IN ('local','oidc'))`,
+`subject text NOT NULL`, `password_hash text NULL`, `password_changed_at timestamptz NULL`,
+`created_at`, `updated_at`; unique `(provider_kind,subject)` and unique `(user_id,provider_kind)`.
+
+For `provider_kind='local'`, `password_hash` is a vetted password-KDF verifier and `subject` is the
+normalized login name. For OIDC, `password_hash` is null. Plaintext credentials are never stored.
+
+### `auth_sessions`
+
+`id uuid PK`, `user_id uuid FK users`, `token_hash char(64) NOT NULL UNIQUE`, `client_kind text CHECK
+(client_kind IN ('web','desktop','api'))`, `expires_at`, `last_seen_at`, `revoked_at`, `created_at`.
+Opaque session tokens are random, rotateable, revocable and only a hash is persisted.
 
 ### `workspaces`
 
 `id uuid PK`, `slug text NOT NULL`, `name text NOT NULL`, `status text NOT NULL CHECK (status IN ('active','suspended','deleted'))`, `settings jsonb NOT NULL DEFAULT '{}'`, `revision bigint NOT NULL DEFAULT 1`, `created_by uuid FK users`, `created_at`, `updated_at`, `deleted_at`.
 
-Indexes: unique `(slug) WHERE deleted_at IS NULL`, `(status)`. Workspace-first hay single-user bootstrap phải được chốt tại OQ-06; schema không được bỏ ownership scope khỏi repository contract.
+Indexes: unique `(slug) WHERE deleted_at IS NULL`, `(status)`. Workspace is first-class from the
+first migration. The Local/LAN bootstrap transaction creates the default Workspace and owner member.
 
 ### `workspace_members`
 
@@ -66,6 +87,18 @@ Indexes: unique `(pipeline_id,node_key)`, `(pipeline_id,execution_class)`.
 `id uuid PK`, `workspace_id uuid NULL FK workspaces` (`NULL` = system/local config), `kind text CHECK (kind IN ('llm','vlm','tts','asr','embedding'))`, `adapter_key text NOT NULL`, `display_name text NOT NULL`, `status text CHECK (status IN ('draft','active','disabled','invalid','deleted'))`, `credential_ref text NULL`, `endpoint_policy jsonb NOT NULL DEFAULT '{}'`, `model_defaults jsonb NOT NULL DEFAULT '{}'`, `capability_overrides jsonb NOT NULL DEFAULT '{}'`, `config jsonb NOT NULL DEFAULT '{}'`, `revision bigint`, `last_validated_at`, `created_by uuid NULL FK users`, `updated_by uuid NULL FK users`, `created_at`, `updated_at`, `deleted_at`.
 
 Indexes: unique `(kind,display_name) WHERE workspace_id IS NULL AND deleted_at IS NULL`; unique `(workspace_id,kind,display_name) WHERE workspace_id IS NOT NULL AND deleted_at IS NULL`; `(workspace_id,kind,status)`, `(adapter_key,kind)`. `credential_ref` là opaque secret-manager reference, không phải plaintext.
+
+### `secret_records`
+
+`id uuid PK`, `workspace_id uuid NULL FK workspaces`, `purpose text NOT NULL`, `ciphertext bytea NOT
+NULL`, `nonce bytea NOT NULL`, `key_version text NOT NULL`, `aad jsonb NOT NULL`, `status text CHECK
+(status IN ('active','rotated','revoked','deleted'))`, `created_by uuid NULL FK users`, `rotated_from_id
+uuid NULL FK secret_records`, `created_at`, `updated_at`, `deleted_at`.
+
+The initial SecretStore uses authenticated encryption with a server-owned master key supplied
+outside PostgreSQL. The key is never stored beside these records. `credential_ref` points to an
+opaque SecretStore record; ciphertext, nonce and key metadata never appear in public API, Job,
+queue, checkpoint or log payloads.
 
 ### `render_profiles`
 
@@ -279,13 +312,19 @@ Indexes: `(status,available_at)`, `(aggregate_type,aggregate_id)`. Payload dùng
 |---|---|---|
 | Track, Clip, SubtitleTrack | Embedded trong immutable `timeline_versions.document`. | Atomic edit/version/hash và renderer input canonical; tránh hai source of truth. |
 | Voice catalog entry | Không bắt buộc table ở baseline; cache tùy adapter. Exact selection nằm trong Narration snapshot. | Provider catalog thay đổi và provider-specific. |
-| Embedding vectors | Artifact hoặc future vector-store port; DB giữ Artifact ref/model metadata. | Không biến PostgreSQL thành blob store; pgvector quyết định sau benchmark/OQ-07. |
+| Embedding vectors | Artifact + item-index manifest baseline hoặc future vector-store port; DB giữ Artifact ref/model metadata. | Không biến PostgreSQL thành blob store; pgvector/external store chỉ chọn sau benchmark và không chặn implementation. |
 | Media bytes/checkpoint payload | Object storage Artifact. | Kích thước lớn, cần checksum/version/lifecycle. |
 
 ## 12. Retention and external imports
 
 - External/user media imports use the same staged upload, checksum, probe and Artifact commit path.
 - Research fixtures are not product state unless explicitly authorized as Project data.
+- Local/LAN defaults retain source media, resume/re-edit intermediates and final Artifacts until an
+  explicit audited delete. Temporary executor scratch is eligible for cleanup after successful
+  completion. Staging/orphan cleanup remains bounded and reference-aware.
 - DB audit records follow retention policy even when a blob becomes `expired|deleted`; sweepers do
   not delete blobs protected by active Jobs, checkpoints or approved/current versions.
+- Project deletion first marks the aggregate and owned resources logically deleted, then performs
+  idempotent physical cleanup only after active work and reference protections clear. Cleanup
+  attempts and permanent destruction are auditable.
 - No upstream task database, status or raw path is mapped into NH-Media product state.

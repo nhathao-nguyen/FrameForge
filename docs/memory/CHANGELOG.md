@@ -6,6 +6,16 @@ owner: repository owner / task assignee
 
 # Memory changelog
 
+## 2026-08-17 — Final Local/LAN decision closure
+
+- Recorded owner ratification of LocalAuthProvider, Workspace-first authorization, encrypted
+  SecretStore records, Timeline JSONB/domain commands, Redis Streams, SSE and MinIO/S3 semantics.
+- Closed all 15 former OQs; OQ-07/OQ-11 are deferred nonblocking with concrete baselines.
+- Marked T004 complete, added T323 Python worker proof and T550 Local Functional Acceptance, and
+  separated T603 Local/LAN Hardened Acceptance from T605 Internet/VPS Production.
+- Updated Local/LAN HTTP/CORS/binding, retention/delete, health and canonical Windows startup targets.
+- No application code, migration, service/client/worker scaffold or runtime configuration was added.
+
 ## 2026-08-17 — Independent specification refactor
 
 - Replaced the former wrapper/migration/compatibility architecture with an independent NH-Media

@@ -1,241 +1,195 @@
-# Open Questions
+# Decision Closure Register
 
-Recommendations are not decisions. An OPEN question blocks only tasks listed in that section.
-Owner-confirmed architecture is recorded under `RESOLVED BY THIS ARCHITECTURE` and must not be
-reopened during implementation without a new dated owner decision.
+Owner ratification dated 2026-08-17 closes every architecture/product question required for
+implementation. This register preserves the former OQ identifiers and their final disposition.
+There are no unresolved owner or implementation blockers.
 
-## OWNER DECISION REQUIRED
+Allowed statuses are `RESOLVED`, `DEFERRED-NONBLOCKING` and `OBSOLETE`. A deferred item below is a
+later vendor/configuration/optimization choice and explicitly does not block implementation.
 
 ## OQ-01 — Product identity provider
 
-**Category:** OWNER DECISION REQUIRED
+**Category:** ARCHITECTURE
 
-**Question:** Which authentication/session mechanism will Product API and Next.js/Tauri use?
+**Decision:** Use `AuthPort`. Initial Local/LAN mode uses NH-Media `LocalAuthProvider` with real
+authentication, opaque server-controlled sessions and an idempotent bootstrap of one local admin.
+Later Internet deployment may add `OIDCAuthProvider`; no external IdP is required for development.
+There is no normal `DEV_DISABLE_AUTH` architecture.
 
-**Why:** It fixes token/session validation, local bootstrap, CSRF/CORS and identity dependencies.
+**Decision status:** RESOLVED
 
-**Options:** A) external OIDC only; B) product-owned password/session; C) OIDC authentication plus
-local authorization/API keys.
-
-**Recommendation:** C, with a concrete IdP/claims contract selected before auth implementation.
-
-**Decision status:** OPEN
-
-Blocks: T106 auth middleware, T201, T210, T430.
-
-## OQ-05 — Provider credential ownership and secret backend
-
-**Category:** OWNER DECISION REQUIRED
-
-**Question:** Are credentials system-, Workspace- or User-owned, and which secret backend supplies
-scoped references?
-
-**Why:** Authorization, cost attribution, rotation, local use and worker secret scope depend on it.
-
-**Options:** A) system credentials; B) Workspace credentials in a secret manager; C) user BYOK.
-
-**Recommendation:** B for product deployment plus explicit system/local configuration for a
-single-user Local/LAN profile. Never plaintext PostgreSQL storage.
-
-**Decision status:** OPEN
-
-Blocks: T102 real secrets, T203, T235, T500.
-
-## OQ-06 — Workspace scope in MVP
-
-**Category:** OWNER DECISION REQUIRED
-
-**Question:** Workspace-first RBAC or single-user bootstrap with Workspace-shaped repositories?
-
-**Why:** Ownership must not be retrofitted after data and API behavior exist.
-
-**Options:** A) implicit single Workspace; B) Workspace-first schema/RBAC with one-Workspace
-bootstrap; C) organization hierarchy now.
-
-**Recommendation:** B; do not add organization/billing yet.
-
-**Decision status:** OPEN
-
-Blocks: T201, T210 and authorization-dependent resources.
-
-## OQ-10 — Retention/privacy defaults
-
-**Category:** OWNER DECISION REQUIRED
-
-**Question:** What retention applies to source media, intermediates, checkpoints, renders, provider
-content and logs?
-
-**Why:** Replay, storage cost, privacy and backup depend on it.
-
-**Options:** A) retain until explicit delete; B) class-based Workspace policy; C) auto-delete source
-after output.
-
-**Recommendation:** B; source/final outputs retained by default, short TTL only for unprotected
-staging/temp/log classes.
-
-**Decision status:** OPEN
-
-Blocks: T602 and production deletion policy; does not block immutable Artifact design.
-
-## IMPLEMENTATION DECISION
+**Owner/date:** repository owner, 2026-08-17. Blocks: none.
 
 ## OQ-02 — Timeline read projections
 
-**Category:** IMPLEMENTATION DECISION
+**Category:** IMPLEMENTATION BASELINE
 
-**Question:** Add normalized Track/Clip read projections in Phase 2?
+**Decision:** PostgreSQL JSONB is the canonical initial TimelineVersion document. Track/Clip tables
+are not canonical. Rebuildable read projections may be added only after measured query evidence and
+can never replace the document as renderer truth.
 
-**Options:** A) JSONB only; B) rebuildable PostgreSQL projection; C) external/search projection later.
+**Decision status:** RESOLVED
 
-**Recommendation:** A until measured queries justify B. Renderer always reads TimelineVersion.
-
-**Decision status:** OPEN
-
-Blocks: projection-specific part of T208 only.
+**Owner/date:** repository owner, 2026-08-17. Blocks: none.
 
 ## OQ-03 — Redis QueuePort primitive
 
-**Category:** IMPLEMENTATION DECISION
+**Category:** ARCHITECTURE
 
-**Question:** Redis Streams consumer groups or Lists/sorted sets for initial QueuePort?
+**Decision:** Use Redis Streams consumer groups behind QueuePort with acknowledgement, pending-entry
+reclaim/lease reconciliation, bounded retry and optional transport DLQ. PostgreSQL remains the
+canonical Job/attempt/dead-letter state.
 
-**Options:** A) Streams; B) Lists + sorted sets; C) broker framework.
+**Decision status:** RESOLVED
 
-**Recommendation:** A behind QueuePort, with PostgreSQL lease/outbox authoritative.
-
-**Decision status:** OPEN
-
-Blocks: T310–T312.
+**Owner/date:** repository owner, 2026-08-17. Blocks: none.
 
 ## OQ-04 — Primary progress transport
 
-**Category:** IMPLEMENTATION DECISION
+**Category:** API ARCHITECTURE
 
-**Question:** SSE or WebSocket as the primary client progress transport?
+**Decision:** SSE is primary for snapshot/replay/progress/completion. REST remains responsible for
+commands and authoritative queries. WebSocket is absent from the initial contract and requires a
+future genuinely bidirectional use case.
 
-**Options:** A) SSE primary, WebSocket optional; B) WebSocket primary; C) polling MVP.
+**Decision status:** RESOLVED
 
-**Recommendation:** A; commands remain REST and both transports share one envelope/replay service.
+**Owner/date:** repository owner, 2026-08-17. Blocks: none.
 
-**Decision status:** OPEN
+## OQ-05 — Provider credential ownership and secret backend
 
-Blocks: T340 and client transport choice; durable events are not blocked.
+**Category:** SECURITY ARCHITECTURE
 
-## OQ-08 — Timeline edit transport
+**Decision:** Use `SecretStore`. Provider credentials are Workspace-owned by default; a system/local
+credential may be explicitly configured for the single-server installation. Initial storage is
+authenticated-encrypted secret records protected by a server-owned master key supplied outside the
+database. Vault/KMS/cloud secret managers are later adapters. Workers receive only the minimum
+secret for an execution scope; clients, durable Jobs, Redis messages and logs receive none.
 
-**Category:** IMPLEMENTATION DECISION
+**Decision status:** RESOLVED
 
-**Question:** JSON Patch, full replacement or domain edit commands?
+**Owner/date:** repository owner, 2026-08-17. Blocks: none.
 
-**Options:** A) RFC 6902; B) full document; C) domain commands plus full import/replace.
+## OQ-06 — Workspace scope in MVP
 
-**Recommendation:** C, with B for import/replace; avoid array-index patch as primary editor API.
+**Category:** DOMAIN/AUTHORIZATION
 
-**Decision status:** OPEN
+**Decision:** Workspace is first-class from the first migration. Authorization is Workspace-first.
+Initial setup creates one default Workspace and one owner membership for the local admin; the domain
+supports additional users/Workspaces later without redesign.
 
-Blocks: T233, T432.
+**Decision status:** RESOLVED
 
-## DEPLOYMENT DECISION
-
-No deployment decision blocks Local/LAN functional development. Public DNS, TLS termination,
-CDN, managed services, target OS matrix and canary traffic policy are selected in T605 after T603
-Local/LAN certification. They are intentionally not converted into premature service choices here.
-
-## LATER-PHASE DECISION
+**Owner/date:** repository owner, 2026-08-17. Blocks: none.
 
 ## OQ-07 — Persistent embedding storage
 
-**Category:** LATER-PHASE DECISION
+**Category:** LATER OPTIMIZATION
 
-**Question:** Artifact index, pgvector or external vector service?
+**Decision:** Start with a versioned embedding Artifact plus item-index manifest. T523 may benchmark
+pgvector or an external vector service and select one without changing provider/domain contracts.
+The exact future index is an operational scale choice and does not block implementation.
 
-**Options:** A) Artifact + index manifest; B) PostgreSQL pgvector; C) external vector service.
+**Decision status:** DEFERRED-NONBLOCKING
 
-**Recommendation:** A until T523 benchmarks justify B; C requires separate scale/privacy evidence.
+**Owner/date:** repository owner, 2026-08-17. Blocks: none; T523 has a valid baseline.
 
-**Decision status:** DEFERRED
+## OQ-08 — Timeline edit transport
 
-Blocks: persistent index choice in T523 only.
+**Category:** API/DOMAIN
 
-## OQ-11 — Pipeline authoring scope
+**Decision:** Use typed domain commands with `expected_version`/`If-Match`, stable object IDs and a
+new immutable TimelineVersion result. Baseline commands cover add/remove/move/trim clip, subtitle,
+narration, track order and scene updates. A privileged validated full-document create/import command
+exists only for imports; arbitrary replacement and array-index JSON Patch are not the editor model.
 
-**Category:** LATER-PHASE DECISION
+**Decision status:** RESOLVED
 
-**Question:** Built-in only, admin declarative graphs or user code?
-
-**Options:** A) built-in versioned Pipelines; B) admin-authored declarative graphs; C) user code.
-
-**Recommendation:** A through the native pipeline release; evaluate B later. C is not a public
-default because arbitrary code violates the trust boundary.
-
-**Decision status:** DEFERRED
-
-Blocks: public/admin authoring APIs. T202/T400 may implement built-in-only definitions.
-
-## RESOLVED BY THIS ARCHITECTURE
+**Owner/date:** repository owner, 2026-08-17. Blocks: none.
 
 ## OQ-09 — Upstream task ownership mapping
 
-**Category:** RESOLVED BY THIS ARCHITECTURE
+**Category:** UPSTREAM BOUNDARY
 
-**Decision:** No mapping exists. NH-Media does not expose an upstream task/CLI/REST compatibility
-surface or import upstream runtime state. External user media uses native Project/Asset upload.
+**Decision:** No mapping exists. NH-Media does not expose upstream task/CLI/REST compatibility or
+import upstream runtime state. External media enters native Workspace/Project/Asset flows.
 
-**Decision status:** DECIDED — 2026-08-17
+**Decision status:** RESOLVED
 
-**Owner:** repository owner
+**Owner/date:** repository owner, 2026-08-17. Blocks: none.
 
-Blocks: none.
+## OQ-10 — Retention/privacy defaults
+
+**Category:** INITIAL OPERATIONS
+
+**Decision:** Local/LAN PostgreSQL backup is manual/on-demand initially; MinIO uses a persistent
+local volume; source, final and resume/re-edit-required Artifacts are retained until explicit audited
+deletion; executor scratch is cleanup-eligible after success; protected intermediates are not
+automatically deleted. Later class-based policies are configuration, not architecture.
+
+**Decision status:** RESOLVED
+
+**Owner/date:** repository owner, 2026-08-17. Blocks: none.
+
+## OQ-11 — Pipeline authoring scope
+
+**Category:** LATER PRODUCT CAPABILITY
+
+**Decision:** Initial Pipelines are built-in, versioned and explicitly registered. Later admin
+declarative authoring may be evaluated. Arbitrary third-party/user code and unrestricted Python
+entry-point loading are excluded. The later authoring UX does not block built-in pipeline work.
+
+**Decision status:** DEFERRED-NONBLOCKING
+
+**Owner/date:** repository owner, 2026-08-17. Blocks: none.
 
 ## OQ-12 — Product and package namespace
 
-**Category:** RESOLVED BY THIS ARCHITECTURE
+**Category:** PRODUCT IDENTITY
 
-**Decision:** Product is NH-Media. Python namespace is `nh_media`. Go module starts at
-`github.com/nhathao-nguyen/NH-Media`. `movie_narrator` appears only in upstream research/provenance.
+**Decision:** Product is NH-Media; Python namespace is `nh_media`; Go module is
+`github.com/nhathao-nguyen/NH-Media`. `movie_narrator` is research/provenance text only.
 
-**Decision status:** DECIDED — 2026-08-17
+**Decision status:** RESOLVED
 
-**Owner:** repository owner
-
-Blocks: none.
+**Owner/date:** repository owner, 2026-08-17. Blocks: none.
 
 ## OQ-13 — Runtime/language topology
 
-**Category:** RESOLVED BY THIS ARCHITECTURE
+**Category:** ARCHITECTURE
 
-**Decision:** Go Product API/control plane; bounded Go media workers; isolated Python `nh_media`
-ML/AI workers; versioned language-neutral contracts; no Python/FFmpeg/ML inline in Product API.
+**Decision:** Go Product API/control plane; Go media worker with FFmpeg; isolated Python `nh_media`
+ML/AI worker; versioned language-neutral contracts. Toolchain patch versions are pinned by T002 and
+do not constitute an architecture question.
 
-**Decision status:** DECIDED — 2026-08-17
+**Decision status:** RESOLVED
 
-**Owner:** repository owner
-
-Blocks: none for topology; T002 still selects exact versions.
+**Owner/date:** repository owner, 2026-08-17. Blocks: none.
 
 ## OQ-14 — Upstream relationship
 
-**Category:** RESOLVED BY THIS ARCHITECTURE
+**Category:** INDEPENDENCE
 
 **Decision:** Movie Narrator is research/reference-only. No runtime, build, deployment, import,
-compatibility, migration or rollback dependency. Capability research is classified in the dedicated
-matrix and implementations are independently authored.
+compatibility, migration, frozen V1 or rollback dependency is permitted.
 
-**Decision status:** DECIDED — 2026-08-17
+**Decision status:** RESOLVED
 
-**Owner:** repository owner
-
-Blocks: none.
+**Owner/date:** repository owner, 2026-08-17. Blocks: none.
 
 ## OQ-15 — Desktop runtime
 
-**Category:** RESOLVED BY THIS ARCHITECTURE
+**Category:** CLIENT ARCHITECTURE
 
-**Decision:** Tauri 2 thin remote-first Product API client. It does not bundle Python, FFmpeg
-processing, ML models/workers, PostgreSQL, Redis or server/provider secrets.
+**Decision:** Tauri 2 is a thin configurable remote-first Product API client. It does not bundle
+Python, FFmpeg processing, models/workers, PostgreSQL, Redis or provider/server secrets.
 
-**Decision status:** DECIDED — 2026-08-17
+**Decision status:** RESOLVED
 
-**Owner:** repository owner
+**Owner/date:** repository owner, 2026-08-17. Blocks: none.
 
-Blocks: signing/update/permission evidence remains T434, not an architecture decision.
+## Later operational choices
+
+Exact VPS/provider, public domain, production OIDC vendor, production KMS/Vault, cloud S3 vendor,
+monitoring SaaS, public ingress and certificate automation are `DEFERRED-NONBLOCKING`. They belong to
+the Internet/VPS production profile and do not block Local Functional Acceptance or current coding.

@@ -64,8 +64,9 @@ tests and code. Optional comparisons use recorded observations or a separate res
 
 ## 6. Decision protocol
 
-If a task depends on an OPEN decision, stop only that dependent work, document context/options/
-trade-offs and continue unrelated authorized work. A recommendation is not approval.
+The 2026-08-17 decision register contains no open architecture/product item. Deferred nonblocking
+vendor/optimization choices must not stop implementation of their ratified baseline. A future task
+may stop only if a new, explicitly scoped owner decision is genuinely required.
 
 ## 7. Required verification
 

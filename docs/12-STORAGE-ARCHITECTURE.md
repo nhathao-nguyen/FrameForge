@@ -22,6 +22,10 @@ Worker LocalCache
 - **Local Cache**: disposable materialization for FFmpeg/ML.
 - **Database Metadata**: ownership, state, relations, checksums and canonical refs.
 
+The initial Local/LAN durable backend is MinIO through S3-compatible semantics. LocalStorage is a
+development/conformance adapter and executor detail, not the canonical multi-client product store.
+Changing to cloud S3 later changes the adapter/configuration, not domain references.
+
 ## 2. StoragePort
 
 ```text
@@ -139,7 +143,15 @@ Cache key gồm Artifact ID + object version + checksum. Mỗi attempt có works
 - Presigned URL TTL ngắn, exact method/key, optional content length/type; URL không được persist vào event/checkpoint.
 - Backup PostgreSQL và object storage phải có consistency inventory bằng Artifact checksum.
 
-Retention defaults còn ở OQ-10; implementation không được tự đặt auto-delete source media.
+Initial Local/LAN defaults:
+
+- source, final and resume/re-edit-required Artifacts are retained until explicit audited deletion;
+- object storage uses a persistent local volume;
+- temporary executor scratch is cleanup-eligible after successful completion;
+- staging/orphan candidates use a bounded reconciliation grace period;
+- no source or protected intermediate is auto-deleted merely because a Job completed.
+
+These defaults are configurable later and do not block implementation.
 
 ## 10. External tools and research observations
 

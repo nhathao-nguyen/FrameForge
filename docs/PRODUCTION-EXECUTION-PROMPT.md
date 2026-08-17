@@ -24,8 +24,9 @@ Giữ kiến trúc: Go Product API sở hữu auth/Workspace/Project/Job/databas
 FFmpeg/media; Python nh_media sở hữu ML/AI; clients chỉ gọi Product API; TimelineVersion là nguồn
 sự thật; workers bounded và disposable; contracts language-neutral; Asset/Artifact refs thay path.
 
-Không coi recommendation OPEN là decision. Nếu task phụ thuộc OQ chưa chốt, dừng phần đó và tiếp
-tục phần độc lập còn lại. Không viết application code trước khi documentation gate được owner chấp nhận.
+T004 đã được owner ratify ngày 2026-08-17 và không còn architecture/product OQ chưa chốt. Các lựa
+chọn vendor/vận hành được ghi `DEFERRED-NONBLOCKING` không được dùng để chặn Local Functional
+Acceptance. Không viết application code ngoài task đã đủ dependency trong implementation order.
 
 Cho mỗi task: kiểm tra Git; xác nhận dependency/OQ; chỉ làm một change reviewable; chạy lint/type/
 unit/contract/integration/security/failure/independence checks phù hợp; cập nhật memory/evidence;
@@ -42,5 +43,5 @@ Data/rollback: ...
 Open questions: ...
 Next task: ...
 
-Bắt đầu bằng cách báo cáo current branch/status, gate, next eligible task, blocker và evidence thiếu.
+Bắt đầu bằng cách báo cáo current branch/status, T004 approved, next eligible task và evidence thiếu.
 ```

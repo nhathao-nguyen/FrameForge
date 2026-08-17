@@ -11,6 +11,18 @@ This decision supersedes every earlier statement that described Movie Narrator a
 legacy runtime, compatibility workload, migration source, rollback target or implementation base.
 Historical upstream observations remain useful research evidence. They are not target architecture.
 
+## Owner final ratification — 2026-08-17
+
+The owner-confirmed Local/LAN-first readiness prompt closes the specification gate. Its decisions
+are authoritative: PostgreSQL is product truth; Redis Streams is execution transport; MinIO is the
+initial S3-compatible object store; SSE is the primary progress transport; TimelineVersion is stored
+as versioned PostgreSQL JSONB and edited through domain commands; Workspace-first authorization,
+LocalAuthProvider and an encrypted server-side SecretStore are required from the first slice.
+
+No public VPS, DNS, TLS certificate, CDN, production OIDC provider, Vault/KMS backend or distributed
+worker topology is required to begin implementation or pass Local Functional Acceptance. Those are
+later profile/configuration choices and do not reopen the architecture gate.
+
 ## 1. Product identity and independence
 
 - Product name: **NH-Media**.
@@ -72,7 +84,7 @@ capabilities unless separately scheduled.
                      Go control plane
                 ┌────────────┼────────────┐
                 ▼            ▼            ▼
-           PostgreSQL      Redis      Object Storage
+           PostgreSQL   Redis Streams   MinIO / S3 Storage
                                              │
                                   versioned worker contracts
                                   ┌──────────┴──────────┐
@@ -87,10 +99,15 @@ capabilities unless separately scheduled.
 
 ### Product API/control plane
 
-The Go backend owns authentication integration, authorization, Workspace, Project, Asset, Job,
+The Go backend owns `AuthPort`, LocalAuthProvider, authorization, Workspace, Project, Asset, Job,
 Pipeline metadata, database transactions, upload orchestration, idempotency, scheduling and public
 API/events. It does not import Python, execute FFmpeg/ML in HTTP handlers, or know provider SDK
 internals.
+
+The initial installation creates one local admin User, one default Workspace and one owner
+membership. A later OIDCAuthProvider uses the same port without changing product domain contracts.
+Provider credentials are encrypted as SecretStore records by a server-owned master key; clients and
+durable worker messages never receive plaintext secrets.
 
 ### Go media worker
 
@@ -132,7 +149,7 @@ NH-Media/
 │           ├── pipelines/
 │           └── evaluation/
 ├── packages/
-│   ├── contracts/
+│   ├── shared-contracts/
 │   └── sdk/
 ├── infrastructure/
 ├── docs/
@@ -164,7 +181,7 @@ immutable versions and are never silently overwritten by a later AI run.
 ```text
 Product API command
   → PostgreSQL Job + JobSteps + outbox
-  → Redis delivery/coordination
+  → Redis Streams consumer-group delivery/coordination
   → worker lease
   → declared node inputs via Asset/Artifact refs
   → checkpointed execution
@@ -176,6 +193,10 @@ Product API command
 PostgreSQL is authoritative for product and execution state. Redis is coordination, not truth.
 Large bytes live in private object storage. Worker local disks are disposable. All boundaries use
 versioned language-neutral contracts; no pickle, gob, ORM or framework-internal durable payloads.
+
+The Product API exposes versioned REST commands/queries under `/api/v1` and SSE for replayable
+progress. Mutating requests and worker attempts are idempotent. Timeline edits use validated domain
+commands with `expected_version`; arbitrary client JSON replacement is not the normal edit path.
 
 ## 7. Pipeline direction
 
@@ -207,7 +228,7 @@ Functional development is not blocked on a VPS.
 LAN server machine
   ├── Product API
   ├── PostgreSQL
-  ├── Redis
+  ├── Redis Streams
   ├── object storage
   ├── media workers
   └── ML workers
@@ -217,10 +238,25 @@ LAN client machines
   └── Tauri desktop client
 ```
 
+The local profile binds loopback by default. The LAN profile is explicitly selected, binds a chosen
+LAN interface or `0.0.0.0`, configures allowed origins and client API URLs, keeps authentication
+enabled and clearly labels trusted-private-LAN HTTP as insecure for Internet exposure.
+
 This profile must prove remote client/server separation, durable jobs, worker orchestration,
 rendering, recovery, persistence and multiple clients. Internet-facing DNS/TLS/CDN/public ingress
 is a later deployment phase. Local/LAN production-like operation still uses authentication,
 private service ports and explicit endpoint configuration.
+
+## 8.1 Acceptance progression
+
+1. **LOCAL FUNCTIONAL ACCEPTANCE** proves PostgreSQL, Redis, MinIO, Go API/media worker, Python
+   worker, web, Tauri development client, real auth/workspace bootstrap, upload, durable Job,
+   Redis Streams dispatch, FFmpeg Artifact creation, SSE progress, restart recovery and an explicit
+   LAN client connection. Complex AI providers are not prerequisites.
+2. **LOCAL/LAN HARDENED ACCEPTANCE** adds security validation, restore drills, resource limits,
+   observability, packaged desktop and stability evidence.
+3. **INTERNET / VPS PRODUCTION** later adds public TLS/DNS/ingress, production secret/identity
+   backends, rollout, alerts and SLOs.
 
 ## 9. Upstream knowledge policy
 
@@ -312,9 +348,9 @@ The current repository phase is documentation/specification. This refactor may e
 diagrams, matrices, task plans, reference policy, audit evidence and documentation validation tools.
 It must not add Product API, workers, clients, database migrations or media/AI implementation.
 
-Application implementation begins only after the owner accepts the independent specification and
-the next task's explicit prerequisites. Open implementation/deployment choices block only their
-dependent tasks, not unrelated documentation cleanup.
+The owner ratification dated 2026-08-17 approves the documentation gate after consistency checks.
+Application implementation begins through `IMPLEMENTATION-ORDER.md`; toolchain and fixture evidence
+remain bootstrap prerequisites, not unresolved architecture questions.
 
 ## 15. Final architecture assertions
 
@@ -328,4 +364,11 @@ Legacy compatibility service: NO
 Product: NH-Media
 Python namespace: nh_media
 Local/LAN validation: SUPPORTED
+Authentication architecture: LocalAuthProvider behind AuthPort
+Authorization: Workspace-first
+Queue: Redis Streams
+Object storage: MinIO / S3-compatible
+Progress: SSE
+Timeline storage/editing: versioned PostgreSQL JSONB + domain commands
+Open architectural questions: 0
 ```

@@ -18,6 +18,7 @@ Timeline/event contracts; implementation order; Local/LAN plan; final audit.
 
 **Acceptance:** independence assertions pass; every capability has disposition; no upstream runtime,
 adapter, compatibility service, image or import target; links/terms consistent; no application diff.
+Owner ratification dated 2026-08-17 approves T004 when this consistency evidence passes.
 
 ## 3. Phase 1 — Repository and toolchain foundation
 
@@ -35,7 +36,7 @@ FFmpeg; Tauri needs no server compute; clean setup reproducible.
 **Scope:** implement NH-Media-native aggregates, migrations, uploads, events and worker protocol.
 
 **Deliverables:** Workspace/Project/Asset/Artifact/Workflow/Pipeline/Job/Script/Timeline/Render tables;
-StoragePort; multipart upload/probe/quarantine; outbox/Redis QueuePort; leases/checkpoints/retry/DLQ;
+StoragePort; multipart upload/probe/quarantine; outbox/Redis Streams QueuePort; leases/checkpoints/retry/DLQ;
 versioned worker contracts and fake-node conformance.
 
 **Acceptance:** state vocabulary agrees across DB/API/events; bytes bypass API; workers are bounded;
@@ -49,7 +50,7 @@ crash/retry/idempotency tests pass; no paths/secrets cross boundaries.
 web or desktop request
 → Go Product API
 → persistent Job/JobStep/outbox
-→ Redis delivery + worker lease
+→ Redis Streams delivery + worker lease
 → Go media worker independently probes source and generates thumbnail/proxy
 → Artifact stage/verify/commit
 → durable completion event
@@ -58,6 +59,21 @@ web or desktop request
 
 **Acceptance:** works on Local/LAN, survives client disconnect and worker restart, uses no upstream
 runtime/build/import/data directory, and returns safe native Product API resources.
+
+## 5.1 First Python worker integration slice
+
+After the deterministic Go media slice passes, route one minimal versioned task through Redis
+Streams to the Python `nh_media` worker and persist its result/Artifact. Use lightweight analysis or
+a deterministic protocol fixture; do not require hosted AI, Whisper, CUDA, VLM or TTS.
+
+## 5.2 Milestone — LOCAL FUNCTIONAL ACCEPTANCE
+
+This milestone precedes hardened release work. It requires one machine to start PostgreSQL, Redis,
+MinIO, Product API, Go media worker, Python ML worker, web and Tauri development client; then prove
+LocalAuth/default Workspace bootstrap, Project creation, upload, durable Job, Redis Streams dispatch,
+FFmpeg Artifact creation, Python worker protocol, SSE progress/result access, basic restart recovery
+and an explicitly configured second LAN client. Movie Narrator is absent. Public VPS, DNS and TLS
+certificates are not prerequisites.
 
 ## 6. Phase 4 — Native pipeline and studio foundations
 
@@ -93,9 +109,9 @@ advanced subtitle/audio quality.
 **Acceptance:** candidate selection is auditable; reference style contains abstract metrics, not
 copied footage; profile-only renders do not rerun unrelated AI; quality benchmarks pass.
 
-## 9. Phase 7 — Local/LAN release and operations
+## 9. Phase 7 — LOCAL/LAN HARDENED ACCEPTANCE
 
-**Scope:** production-like single-server/LAN validation without requiring a VPS.
+**Scope:** harden the already functional single-server/LAN system without requiring a VPS.
 
 **Deliverables:** reproducible LAN server profile; private data services; auth; multi-client flows;
 worker drain/recovery; backups/restores; Artifact inventory; observability; signed staging desktop.
@@ -103,7 +119,7 @@ worker drain/recovery; backups/restores; Artifact inventory; observability; sign
 **Acceptance:** remote web/Tauri clients, persistence, restart, recovery, security and restore drills
 pass on LAN; upstream absence is proven in images/packages/dependency graphs.
 
-## 10. Phase 8 — Internet production and later capabilities
+## 10. Phase 8 — INTERNET / VPS PRODUCTION and later capabilities
 
 **Scope:** public ingress/deployment after functional architecture is proven.
 

@@ -20,6 +20,8 @@ Mỗi hàng dưới đây là một contract bắt buộc. “Persist” chỉ n
 
 | Entity | Responsibility | Identifier và ownership | Lifecycle | Relations | Mutable / immutable | Persistence |
 |---|---|---|---|---|---|---|
+| **User** | Local or federated product identity mapped by AuthPort. | `user_id`; identity subject is provider-scoped, never a worker identity. | `active → suspended → deleted`. | Có WorkspaceMembership và audit actions. | Display metadata mutable; credential/session material is managed separately by auth/secret boundaries. | `users`, `auth_identities`, `auth_sessions`; bắt buộc. |
+| **Workspace** | First-class authorization and ownership boundary. | `workspace_id`; local bootstrap creates one default Workspace. | `active → suspended → deleted`. | Có WorkspaceMembership, Project, ProviderConfiguration và policy resources. | Name/settings/revision mutable; ID immutable. | `workspaces`, `workspace_members`; bắt buộc từ migration đầu tiên. |
 | **Project** | Aggregate sản xuất video: gom input, content, timeline, jobs và outputs. | `project_id`; thuộc một Workspace, actor được authorize quản lý. | `active → archived → deleted` (soft delete); có thể restore theo policy. | Có nhiều Asset, Script, Scene, Character, Timeline, Job, Render, Artifact. | `name`, settings và current-version pointers mutable qua `revision`; ID/owner immutable. | Bảng `projects`; bắt buộc. |
 | **Asset** | Logical media do product quản lý, ví dụ source movie, BGM, image, font. Không đồng nghĩa với blob. | `asset_id`; thuộc đúng một Project. | `pending_upload → uploading → uploaded → validating → ready`; lỗi thành `failed` hoặc `quarantined`; cuối cùng `deleted`. | Trỏ `original_artifact_id`; có nhiều Artifact variant và Scene. | Metadata mô tả/probe, status và current original pointer mutable; một original blob cụ thể immutable qua Artifact. | Bảng `assets`, `asset_uploads`, `artifact_variants`; bắt buộc. |
 | **Artifact** | Manifest của một blob immutable do upload hoặc node tạo ra. | `artifact_id`; thuộc Project, optional Asset/Job/JobStep/Render producer. | `staged → committed → expired → deleted`; `quarantined` nếu output bị nghi ngờ. | Có storage locator, checksum, semantic kind/role; được domain objects tham chiếu bằng ID. | Sau `committed`, bytes, checksum, storage locator và producer immutable; retention/status có thể đổi. | Bảng `artifacts`; bytes ở StorageBackend. |
@@ -49,6 +51,11 @@ Mỗi hàng dưới đây là một contract bắt buộc. “Persist” chỉ n
 | **RenderProfile** | Versioned target constraints: aspect ratio, codec, resolution, safe area, subtitle/audio policy. | `render_profile_id`; system hoặc Workspace-owned; `(profile_key, version, owner_scope)` unique. | `draft → active → deprecated → disabled`. | Được Render snapshot; không nằm trong canonical Timeline. | Mutable khi draft; immutable sau active. | Bảng `render_profiles`; bắt buộc. |
 | **Render** | Product request/result compile exact TimelineVersion bằng exact RenderProfile. | `render_id`; thuộc Project; có `job_id`. | `created → queued → running → completed|failed|cancelled`. | Tham chiếu TimelineVersion, profile snapshot, Job, optional prior Render lineage và output Artifacts. | Request snapshot immutable; status/QA/output relation mutable tới terminal. Rerender/retry tạo Render mới với `supersedes_render_id`. | `renders`, `render_artifacts`; bắt buộc. |
 | **ProviderConfiguration** | Product metadata/policy để resolve một provider adapter và credential reference; không chứa plaintext secret. | `provider_configuration_id`; system- hoặc Workspace-owned. | `draft → active → disabled|invalid → deleted`. | Được Job/JobStep/Narration snapshot; adapter registry resolve theo kind/name. | Kind/adapter key/owner immutable sau use; model defaults/policy/credential ref mutable với revision và audit. | `provider_configurations`; secret ở secret manager. |
+
+Initial bootstrap is transactional and idempotent: create one active local admin User, one active
+default Workspace and one `owner` membership. Single-user operation is a deployment default, not a
+different domain model. Every user-owned aggregate is either directly Workspace-owned or inherits
+Workspace ownership through Project, and authorization is enforced at that boundary.
 
 ## 3. Chuẩn hóa các concept dễ trùng
 
@@ -193,3 +200,8 @@ Không được có hai PipelineRun active (`queued|running|paused|waiting_for_r
 10. Nhiều Render profile reuse Script/Narration/Scene/Timeline artifacts khi input fingerprint không đổi.
 11. Worker-local path chỉ là lease-scoped cache handle; không xuất hiện trong domain/API/event/checkpoint.
 12. AI output có `origin`, provenance, model/provider snapshot và confidence khi có; user override không bị overwrite nếu không có explicit replace command.
+13. Timeline changes are accepted only as validated domain commands against an `expected_version`;
+    creating a new immutable JSONB document is the command result, not an unrestricted client write.
+14. Deleting a Project is a logical, audited domain operation. It blocks or coordinates active Jobs,
+    marks owned resources for deletion and schedules physical Artifact cleanup only after reference,
+    checkpoint and retention checks pass.

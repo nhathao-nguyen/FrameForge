@@ -38,7 +38,10 @@ LINK_RE = re.compile(r"!?\[[^\]]*\]\(([^)]+)\)")
 TASK_RE = re.compile(r"^###\s+(T\d{3})\s+—", re.MULTILINE)
 MEMORY_TASK_RE = re.compile(r"^\|\s*(T\d{3})\s*\|", re.MULTILINE)
 OQ_HEADING_RE = re.compile(r"^##\s+(OQ-\d{2})\s+—", re.MULTILINE)
-MEMORY_OQ_RE = re.compile(r"^\|\s*(OQ-\d{2})\s*\|\s*(OPEN|DECIDED|DEFERRED)\s*\|", re.MULTILINE)
+MEMORY_OQ_RE = re.compile(
+    r"^\|\s*(OQ-\d{2})\s*\|\s*(RESOLVED|DEFERRED-NONBLOCKING|OBSOLETE)\s*\|",
+    re.MULTILINE,
+)
 DECISION_RE = re.compile(r"^\|\s*(D-[A-Z0-9-]+)\s*\|", re.MULTILINE)
 PLAN_FILES = (
     ROOT / "docs" / "SETUP-PLAN.md",
@@ -189,7 +192,7 @@ def check_oqs(errors: list[str]) -> None:
         section = root.split(f"## {oq_id} —", 1)
         if len(section) != 2:
             continue
-        status_match = re.search(r"\*\*Decision status\*\*:\s*(\w+)", section[1])
+        status_match = re.search(r"\*\*Decision status\*\*:\s*([A-Z-]+)", section[1])
         if status_match and mirror_rows.get(oq_id) != status_match.group(1):
             errors.append(f"OQ status mismatch for {oq_id}: root={status_match.group(1)}")
 

@@ -15,6 +15,10 @@
 | Candidate race and reference style are native concepts | `02`, `03`, `04`, `05`, matrix, T525/T526 | Consistent; provenance and selection are explicit. |
 | Web and Tauri are thin Product API clients | `00`, `01`, `10`, setup/production plans | Consistent; neither client embeds the engine or server secrets. |
 | Local/LAN is a valid release milestone | `00`, `10`, `14`, setup/production plans, T603 | Consistent; VPS/public internet is a later release choice. |
+| Auth/authorization are concrete | `02`–`04`, `08`, OQ-01/OQ-06 | LocalAuthProvider plus Workspace-first bootstrap; future OIDC is nonblocking. |
+| Secrets are concrete | `03`, `08`, `11`, OQ-05 | Server-owned master key encrypts SecretStore records; future Vault/KMS is an adapter. |
+| Queue/progress are concrete | `01`, `04`, `07`, `13`, OQ-03/OQ-04 | Redis Streams for execution; SSE for progress; PostgreSQL/REST remain authoritative. |
+| Timeline storage/editing are concrete | `03`, `04`, `06`, OQ-02/OQ-08 | Versioned JSONB plus typed domain commands and optimistic concurrency. |
 
 ## 2. Entity-to-contract mapping
 
@@ -107,8 +111,16 @@ T604 records a new upstream identity and reclassifies capability evidence. It ca
 NH-Media public contract, add a source dependency or enter normal CI/build/deploy without a new
 owner-approved architecture decision.
 
+### K — Local Functional Acceptance
+
+The first milestone starts all server/data/worker/client components, proves LocalAuth and default
+Workspace bootstrap, executes deterministic Go media and minimal Python worker paths, persists an
+Artifact, streams SSE progress, recovers from restart and accepts one explicitly configured LAN
+client. It requires neither VPS nor public TLS.
+
 ## 5. Result
 
 The specifications use one independent product identity, one ownership topology, one state
-vocabulary, one Artifact boundary and one implementation order. Remaining OPEN questions are
-explicitly scoped in `OPEN-QUESTIONS.md`; none reintroduces upstream compatibility.
+vocabulary, one Artifact boundary and one implementation order. `OPEN-QUESTIONS.md` is now a closed
+decision register: open architectural questions are zero; later vendor/optimization choices are
+explicitly deferred nonblocking.

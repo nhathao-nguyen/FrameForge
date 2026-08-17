@@ -6,11 +6,11 @@ NH-Media begins as a modular monorepo and a small number of deployable processes
 boundaries are explicit so worker classes can scale independently later.
 
 ```text
-apps/web ─────HTTPS─────┐
-apps/desktop ─HTTPS─────┴──> Go Product API ──SQL──> PostgreSQL
+apps/web ─────HTTP(S)───┐
+apps/desktop ─HTTP(S)───┴──> Go Product API ──SQL──> PostgreSQL
                                   │
-                                  ├── Redis: queue/lease/live fan-out
-                                  ├── object storage: uploads/Artifacts
+                                  ├── Redis Streams: queue/consumer groups
+                                  ├── MinIO/S3: uploads/Artifacts
                                   └── trusted orchestration
                                          │ versioned worker contracts
                          ┌───────────────┴───────────────┐
@@ -34,6 +34,11 @@ Movie Narrator has no runtime position in this diagram.
 | Python ML worker | `nh_media` AI/ML nodes and provider adapters requiring Python/model runtimes | HTTP product models, user/billing/session, durable business truth |
 | Executor sandbox | one declared attempt with scoped inputs/capability | broad storage, DB/Redis credentials, host/workspace access |
 | Frontend | view/edit commands, upload, progress and downloads via Product API | provider/worker calls, server secrets, durable product truth |
+
+The Product API owns `AuthPort` with `LocalAuthProvider` initially and an optional future
+`OIDCAuthProvider`. It also owns `SecretStore`; the Local/LAN backend encrypts secret records with a
+server-owned master key. Initial bootstrap creates one admin User, one default Workspace and one
+owner membership.
 
 ## 3. Dependency direction
 
@@ -63,7 +68,7 @@ services/
   ml-worker/
     nh_media/                  # Python AI/ML namespace
 packages/
-  contracts/                   # language-neutral schemas
+  shared-contracts/            # language-neutral schemas
   sdk/                         # shared client SDK
 infrastructure/
   compose/
@@ -133,6 +138,12 @@ One LAN server may run API, PostgreSQL, Redis, object storage and bounded worker
 clients may run on other LAN machines. This is the first required end-to-end profile and does not
 require a VPS, public DNS or public certificates.
 
+- `local`: loopback-only API/web binding.
+- `lan`: explicit server interface/bind, configurable public API URL and exact allowed origins.
+- Auth and authorization stay enabled in both profiles.
+- HTTP is permitted only on a trusted private LAN for Local Functional Acceptance and is visibly
+  marked insecure for Internet exposure.
+
 ### Internet-facing production
 
 Later deployment adds public TLS/reverse proxy, DNS/CDN as needed, managed/private dependencies,
@@ -146,7 +157,9 @@ Artifact refs and capability routing; it is not an initial extra service require
 
 ## 7. Reliability
 
-- PostgreSQL is authoritative; Redis messages and worker memory are reconstructable.
+- PostgreSQL is authoritative; Redis Stream entries and worker memory are reconstructable.
+- Redis consumer groups acknowledge only after guarded state/result handling; pending entries are
+  reclaimed after lease reconciliation and exhausted work has a canonical PostgreSQL failed-task record.
 - At-least-once delivery plus idempotent JobStep/Artifact commit.
 - Lease expiry and heartbeat reconciliation.
 - Checkpoints after terminal node outcomes and at declared chunk boundaries.
@@ -163,7 +176,10 @@ versioned capabilities, allowlists and isolation; they never gain implicit produ
 
 ## 9. Observability
 
-Structured logs, metrics and traces share request/correlation/project/job/run/step IDs. Track queue
+Structured logs from the first slice carry `request_id`, `workspace_id`, `project_id`, `job_id`,
+`job_step_id` (the canonical task identity) and `pipeline_run_id` where applicable.
+`/live` and `/ready` expose minimal liveness/readiness; readiness checks PostgreSQL and, when enabled,
+Redis/object storage. Metrics/traces dashboards are later hardening work. Track queue
 age, lease loss, retries, provider latency/cost, media process duration, Artifact bytes and render
 QA. Logs/events expose no secret, expiring URL, durable local path or traceback.
 

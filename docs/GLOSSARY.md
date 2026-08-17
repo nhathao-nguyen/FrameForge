@@ -8,6 +8,8 @@ provenance context.
 | Term | Canonical meaning | Do not conflate with |
 |---|---|---|
 | NH-Media | Independent product and source tree. | Movie Narrator or any upstream runtime. |
+| AuthPort | Product authentication abstraction; LocalAuthProvider initially, OIDCAuthProvider later. | Authorization bypass or worker identity. |
+| SecretStore | Server-side encrypted credential store/port; initial backend uses a server-owned master key. | Plaintext config in clients, Jobs or queue payloads. |
 | Product API | Go control plane owning identity, authorization, Project, commands, persistence and public contracts. | Media/ML execution or frontend. |
 | Trusted orchestration | Application services guarding Job/Run/Step transitions, outbox, scheduling and commit. | Executor sandbox. |
 | Media worker | Go worker for media I/O, FFmpeg process orchestration, progress and Artifact staging. | Product API handler or codec implementation. |
@@ -16,6 +18,7 @@ provenance context.
 | Executor | Disposable sandbox running one node attempt over untrusted inputs. | Durable state owner. |
 | Frontend | Next.js web or Tauri 2 desktop client using Product API. | Timeline truth or secret holder. |
 | Language-neutral contract | Versioned JSON/Protobuf/schema shared across Go/Python/clients. | Go struct, Python class, ORM object, pickle or gob. |
+| Redis Streams | Initial at-least-once execution transport with consumer groups; PostgreSQL remains truth. | Durable Product Job history. |
 | Upstream reference | External research source used for capability/behavior observations. | Product dependency, implementation base or compatibility target. |
 
 ## Domain

@@ -11,11 +11,13 @@
 - Job/JobStep status dùng canonical states ở `02-DOMAIN-MODEL.md`; NH-Media không trả
   `processing`, `executing`, `succeeded`, `waiting_review` hoặc `dead`.
 - Delete Project/Asset/Script/Timeline/ProviderConfiguration là soft-delete/command; Artifact physical deletion không public direct action.
+- OpenAPI is the machine-readable source for `/api/v1`; generated/validated client types must not
+  introduce a second contract.
 
 ### Client compatibility
 
 Web và desktop là hai client của cùng Product API, không phải hai backend khác nhau. Cả hai dùng
-`packages/contracts` và `packages/sdk` để chia sẻ ID, error envelope, ETag/If-Match, pagination,
+`packages/shared-contracts` và `packages/sdk` để chia sẻ ID, error envelope, ETag/If-Match, pagination,
 upload-session và event reducer. Client không được gọi `VideoEngine`, worker, provider, PostgreSQL,
 Redis hoặc object storage credentials trực tiếp.
 
@@ -45,7 +47,29 @@ HTTP status: `400` malformed, `401` unauthenticated, `403` forbidden, `404` abse
 
 Validation error không tạo failed Job.
 
-## 2. Project CRUD
+## 2. Authentication and Workspace bootstrap
+
+Initial Local/LAN auth is `LocalAuthProvider` behind `AuthPort`. Installation performs an idempotent,
+server-side bootstrap of one local admin User, one default Workspace and one owner membership.
+Bootstrap credentials are supplied or generated through installation tooling and must be changed or
+acknowledged according to the bootstrap policy; no anonymous LAN mode or `DEV_DISABLE_AUTH` path is
+part of the normal architecture.
+
+| Method/path | Contract |
+|---|---|
+| `POST /auth/login` | Local username/password; rate-limited; returns/sets an opaque server-controlled session without returning credential material. |
+| `POST /auth/refresh` | Rotates an unexpired authorized session; old token is revoked. |
+| `POST /auth/logout` | Revokes current session idempotently. |
+| `GET /auth/session` | Returns redacted User, Workspace memberships and expiry. |
+| `GET /workspaces` | Returns only memberships visible to the actor. |
+| `GET /workspaces/{workspace_id}` | Workspace metadata scoped by membership. |
+
+Web may use an HttpOnly, SameSite-protected cookie with CSRF controls; Tauri uses an opaque bearer
+session stored in the OS credential store. Both map to hashed, revocable server session records and
+execute the same Workspace authorization checks. A later OIDCAuthProvider changes authentication,
+not User/Workspace/resource contracts.
+
+## 3. Project CRUD
 
 | Method/path | Contract | Success |
 |---|---|---|
@@ -65,7 +89,7 @@ Create response example:
 }
 ```
 
-## 3. Asset upload and metadata
+## 4. Asset upload and metadata
 
 ### `POST /projects/{project_id}/assets/upload-sessions`
 
@@ -122,7 +146,7 @@ Complete idempotent. Checksum/MIME/probe/security failure đưa Asset tới `fai
 | `POST /projects/{id}/assets/{asset_id}/download-url` | `{expires_in_sec}`; exact authorized original/variant; `200`. |
 | `DELETE /projects/{id}/assets/{asset_id}` | Soft delete after reference/active-job check; `202`. |
 
-## 4. Scripts and Narrations
+## 5. Scripts and Narrations
 
 Script aggregate and immutable versions are separate resources.
 
@@ -157,7 +181,7 @@ Narration endpoints:
 
 Client không upload provider response path; generated audio exposed through Artifact action.
 
-## 5. Scenes and Characters
+## 6. Scenes and Characters
 
 | Method/path | Contract |
 |---|---|
@@ -172,7 +196,7 @@ Client không upload provider response path; generated audio exposed through Art
 
 Client không tự set embedding Artifact, model revision hoặc cross-project source.
 
-## 6. Timelines
+## 7. Timelines
 
 | Method/path | Contract |
 |---|---|
@@ -181,7 +205,7 @@ Client không tự set embedding Artifact, model revision hoặc cross-project s
 | `GET /projects/{id}/timelines/{timeline_id}` | Aggregate/current pointer. |
 | `GET /projects/{id}/timelines/{timeline_id}/versions` | Version history. |
 | `GET /projects/{id}/timelines/{timeline_id}/versions/{version_id}` | Exact canonical JSON document. |
-| `POST /projects/{id}/timelines/{timeline_id}/versions` | Create version from exact `based_on_version_id`, requires `If-Match` aggregate. Payload format follows OQ-08. |
+| `POST /projects/{id}/timelines/{timeline_id}/commands` | Execute one typed domain command against exact `based_on_version_id`/`expected_version`; requires `If-Match`; returns a new immutable version. |
 | `POST .../versions/{version_id}/validate` | Validate schema/cross-refs without changing content; `200 ValidationReport`. |
 | `POST .../versions/{version_id}/approve` | Approval command; exact validated version; idempotent. |
 | `POST .../versions/{version_id}/lock` | Prevent further pointer mutation/edit; admin/editor policy. |
@@ -190,7 +214,13 @@ Client không tự set embedding Artifact, model revision hoặc cross-project s
 
 Edit never merges Clips by array index. Conflict returns `412` with current ETag/version and diff metadata; user override semantics follow `06-TIMELINE-SPEC.md`.
 
-## 7. Jobs, PipelineRuns and JobSteps
+Initial command kinds are `AddClip`, `RemoveClip`, `MoveClip`, `TrimClip`, `UpdateSubtitle`,
+`ReplaceNarration`, `ChangeTrackOrder` and `UpdateScene`. Each payload has a versioned schema,
+validates ownership/ranges/invariants and declares downstream invalidation. Full-document input is
+accepted only by a separate privileged create/import command, is validated as untrusted input and
+is not the normal editor mutation surface.
+
+## 8. Jobs, PipelineRuns and JobSteps
 
 ### `POST /projects/{project_id}/jobs`
 
@@ -244,7 +274,7 @@ Resume không rerun committed compatible nodes. Retry/replay không mutate termi
 
 Approve có thể chọn version user vừa tạo dựa trên proposal. Đây là ReviewResolution/JobStep output mới, không sửa immutable Job command. Response/event trả cả proposed và selected refs; downstream checkpoints/fingerprints dùng selected ref.
 
-## 8. Renders and Artifacts
+## 9. Renders and Artifacts
 
 ### `POST /projects/{project_id}/renders`
 
@@ -271,7 +301,7 @@ Validates exact TimelineVersion/Profile, creates Render `created` + Job `kind=re
 
 Một TimelineVersion có thể tạo 16:9, 9:16 và 1:1 Render mà không tạo lại research/script/scenes/matches.
 
-## 9. Workflow, Pipeline, profiles and providers
+## 10. Workflow, Pipeline, profiles and providers
 
 Read catalog:
 
@@ -281,7 +311,7 @@ Read catalog:
 - `GET /render-profiles?profile_key=&status=`
 - `GET /providers/catalog?kind=` — descriptors/models/capabilities only.
 
-ProviderConfiguration product API (admin/owner scope, subject to OQ-05):
+ProviderConfiguration product API (admin/owner scope, backed by server-side SecretStore):
 
 | Method/path | Contract |
 |---|---|
@@ -293,7 +323,8 @@ ProviderConfiguration product API (admin/owner scope, subject to OQ-05):
 | `POST /provider-configurations/{id}/disable` | Prevent new Jobs; existing snapshot policy explicit. |
 | `DELETE /provider-configurations/{id}` | Soft delete only if references/policy allow. |
 
-Pipeline authoring mutation không public trong baseline; built-in version activation follows OQ-11/admin tooling.
+Pipeline authoring mutation không public trong baseline; only built-in versioned definitions are
+activated initially. Later admin declarative authoring is deferred nonblocking.
 
 ### Analyses and candidates
 
@@ -309,17 +340,23 @@ Pipeline authoring mutation không public trong baseline; built-in version activ
 `ReferenceStyleAnalysis` accepts a user-authorized reference Asset and returns abstract metrics. It
 does not expose copied footage or an upstream workflow name.
 
-## 10. Event transports
+## 11. Event transport and health
 
-- SSE canonical endpoint là nested Job stream ở mục 7.
-- WebSocket optional endpoint `/api/v1/ws/jobs/{job_id}/events` dùng cùng auth/envelope/replay semantics.
-- State-changing commands luôn REST; WebSocket client không được emit domain event.
+- SSE canonical endpoint là nested Job stream ở mục 8.
+- State-changing commands luôn REST; clients cannot emit domain events over the progress stream.
 - Snapshot is REST state, event stream is ordered change feed. Disconnect không đổi Job state.
+- `GET /live` reports minimal process liveness and does not expose dependency/tenant details.
+- `GET /ready` reports whether required enabled dependencies are reachable: PostgreSQL, Redis Streams
+  and object storage. Detailed diagnostics are protected.
+- WebSocket is not part of the initial contract. A future bidirectional requirement must justify a
+  separate versioned transport decision; progress alone is not sufficient justification.
 
-## 11. Independence and API contract tests
+## 12. Independence and API contract tests
 
 - OpenAPI schema snapshots and request/response examples;
 - Project/Asset/ScriptVersion/TimelineVersion CRUD + ETag conflict;
+- LocalAuth login/rotation/revocation, default Workspace bootstrap and cross-Workspace denial;
+- Timeline domain command positive/negative/version/invalidation corpus;
 - direct multipart upload proves no media body through API;
 - all Job commands across valid/invalid canonical states;
 - REST status equals DB/event state after transitions;

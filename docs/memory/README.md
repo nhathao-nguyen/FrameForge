@@ -24,7 +24,8 @@ Run `python tools/check_memory.py --max-age 0` after changing specifications or 
 
 - Update related memory/evidence in the same change.
 - Never store secrets, presigned URLs, user data or durable local paths here.
-- An OPEN recommendation is not an approved choice.
+- The decision register has no open architecture/product item; deferred nonblocking choices do not
+  override ratified baselines.
 - Movie Narrator facts are research provenance only; memory must not turn them into an operational
   dependency, compatibility contract or rollback target.
 - Record commands as evidence only after they run.

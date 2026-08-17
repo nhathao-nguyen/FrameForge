@@ -353,14 +353,23 @@ JSON Schema không đủ cho các rule sau; Timeline validator bắt buộc enfo
 ## 5. Versioning and editing
 
 - Timeline aggregate giữ current version; TimelineVersion document/content hash immutable.
-- `PATCH`/replace dựa trên exact source version + `If-Match`; server validate rồi tạo version `n+1`, không mutate `n`.
+- Editor mutations are typed domain commands based on an exact source version, `expected_version`
+  and `If-Match`; server validates and creates version `n+1`, never mutating `n`.
+- Baseline commands are `AddClip`, `RemoveClip`, `MoveClip`, `TrimClip`, `UpdateSubtitle`,
+  `ReplaceNarration`, `ChangeTrackOrder` and `UpdateScene`. Command schemas are versioned and identify
+  stable Track/Clip IDs rather than JSON array indexes.
 - AI proposal ghi `origin=ai`, `proposal_ref`, confidence/provenance; user edit ghi `origin=user` cho region thay đổi.
 - Concurrent conflict trả current version + safe diff summary; không merge array clip theo index.
 - Approved/locked version edit bằng duplicate/new version. Approval/lock là audit transition, không đổi document bytes.
-- Rollback nghĩa là tạo version mới dựa trên old content hoặc đổi current pointer theo guarded command; không xóa history.
+- Rollback nghĩa là một guarded domain command tạo version mới dựa trên old content hoặc updates
+  the current pointer under policy; không xóa history.
 - Track/Clip không có table canonical; JSONB TimelineVersion là source of truth. Projection nếu có phải rebuild được và không được renderer đọc thay document.
 
-Patch transport còn ở OQ-08; bất kể JSON Patch/full replace/domain command, versioning rules trên không đổi.
+Full-document create/import is a distinct privileged command for validated migration/import use. It
+is not the routine editor API and never permits unrestricted overwrite of an existing version.
+
+Each successful command records actor, base/result version, command kind and downstream invalidation
+set. Optimistic conflicts return the current version/ETag and never silently overwrite newer state.
 
 ## 6. Render profile separation
 

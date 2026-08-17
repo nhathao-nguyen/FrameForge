@@ -12,8 +12,9 @@ Create reproducible boundaries for web, Tauri 2 desktop, Go Product API, Go medi
 Python `nh_media` worker, shared contracts, PostgreSQL, Redis and object storage. The setup contains
 no upstream runtime, code, package, image, service or compatibility layer.
 
-**Status:** specification work only; setup has not been executed. Application setup begins only
-after owner acceptance of the specification gate and the selected task prerequisites.
+**Status:** specification gate T004 approved by owner ratification dated 2026-08-17; setup has not
+been executed. T002 toolchain pinning and T003 fixture-policy evidence remain the next bootstrap
+prerequisites before the repository skeleton.
 
 ## 2. Target layout
 
@@ -26,7 +27,7 @@ services/
   media-worker/
   ml-worker/nh_media/
 packages/
-  contracts/
+  shared-contracts/
   sdk/
 infrastructure/
   compose/
@@ -51,14 +52,15 @@ Go module: `github.com/nhathao-nguyen/NH-Media`. Python imports begin at `nh_med
 ### Profile A — Local developer
 
 One machine runs clients, API, bounded workers and private disposable data services. Toolchains and
-images are pinned; Python is uv-managed; FFmpeg is tested.
+images are pinned; Python is uv-managed; FFmpeg is tested. API/web bind loopback by default,
+LocalAuthProvider remains active and bootstrap creates the local admin/default Workspace/membership.
 
 ### Profile B — Local/LAN production-like
 
 ```text
 LAN server
   ├── Go Product API
-  ├── PostgreSQL / Redis / object storage
+  ├── PostgreSQL / Redis Streams / MinIO
   ├── Go media worker
   └── Python nh_media worker
 
@@ -70,6 +72,10 @@ LAN client machines
 This is the first required remote-client proof. No VPS, public DNS, CDN or public certificate is
 required. Internal services remain private and clients use configured server endpoints.
 
+LAN binding is explicit (`PROFILE=lan`), never automatic. The server bind, public API URL and exact
+allowed origins are configured without hard-coding an IP. Trusted-private-LAN HTTP is allowed for
+Local Functional Acceptance and must carry an insecure-LAN warning; clients still authenticate.
+
 ### Profile C — Internet production
 
 Later phase adds public TLS/reverse proxy, public DNS, canary and managed/private dependencies. It is
@@ -79,7 +85,7 @@ not a prerequisite for development or the first functional release candidate.
 
 | Stage | Scope | Gate |
 |---|---|---|
-| S0 | accept independent specification and decisions | docs-only gate |
+| S0 | accept independent specification and decisions | complete: T004 owner-ratified docs gate |
 | S1 | pin Go/Python/Node/Rust/FFmpeg toolchains | clean-room version evidence |
 | S2 | create repository/service/client boundaries | import/dependency scan |
 | S3 | create language-neutral contracts and safe errors/config | schema/redaction tests |
@@ -90,7 +96,21 @@ not a prerequisite for development or the first functional release candidate.
 | S8 | establish CI and independence checks | required checks pass |
 | S9 | Local/LAN clean-room certification | remote-client smoke |
 
-## 5. Desktop requirements
+## 5. Canonical development startup target
+
+The implemented repository must expose one PowerShell-friendly orchestration entry point. Until
+T002/T100 select and create it, the required conceptual order is:
+
+```text
+docker compose up -d postgres redis minio
+Product API → Go media worker → Python nh_media worker → web → Tauri dev
+```
+
+The command name (`make dev`, `just dev` or equivalent) is a bootstrap tool choice and does not
+block implementation. It must provide local/lan profiles, health output and safe stop/restart while
+keeping persistent PostgreSQL/MinIO volumes.
+
+## 6. Desktop requirements
 
 - Remote Product API is the default and source of truth.
 - No Python, FFmpeg processing, model, PostgreSQL, Redis or server secret in the app.
@@ -98,7 +118,7 @@ not a prerequisite for development or the first functional release candidate.
 - Endpoint configuration is environment-aware; no hard-coded production secret or localhost release.
 - OS credential store, deep-link/update origin and signing are separate release gates.
 
-## 6. Verification passes
+## 7. Verification passes
 
 | Pass | Check | Evidence |
 |---|---|---|
@@ -114,11 +134,15 @@ not a prerequisite for development or the first functional release candidate.
 | V9 | Local/LAN | separate client connects, uploads and follows a durable Job |
 | V10 | clean-room/review | new checkout reproduces setup; owner handoff |
 
-## 7. Completion
+## 8. Completion
 
 Setup is complete only when V0–V10 pass, Local/LAN separation is proven, private dependencies are
 reproducible, clients share contracts, workers are bounded, no secrets/paths leak, and upstream is
 absent from all product dependency/package/image graphs.
+
+The earlier `LOCAL FUNCTIONAL ACCEPTANCE` milestone proves the functional stack, auth/bootstrap,
+both worker paths, FFmpeg, SSE, recovery and an explicit LAN client before hardening/signing/restore
+evidence is required for `LOCAL/LAN HARDENED ACCEPTANCE`.
 
 ```text
 Setup: independent client/server foundation

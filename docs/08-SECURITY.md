@@ -6,9 +6,9 @@ Các input không tin cậy: browser/user text, uploaded media, URL/source metad
 documents, LLM/VLM output, extension package và provider response.
 
 ```text
-Public API boundary
-  Internet/browser (untrusted)
-    → HTTPS reverse proxy
+Client/API boundary
+  local, LAN or Internet client (untrusted)
+    → profile-appropriate HTTP(S) ingress
     → Product API (auth, authorization, upload/command validation)
 
 Trusted orchestration boundary
@@ -24,7 +24,11 @@ Product API không chạy FFmpeg/Pillow/ML model nặng trong request thread. Wo
 
 ## 2. Authentication and authorization
 
-- Web browser và desktop dùng product identity/session hoặc bearer token do auth layer cấp; không
+- `AuthPort` is mandatory. Local/LAN uses `LocalAuthProvider`; later Internet deployment may add
+  `OIDCAuthProvider` without changing authorization or resource contracts.
+- Installation idempotently bootstraps one local admin User, one default Workspace and one owner
+  membership. Authentication is never disabled as the normal developer/LAN path.
+- Web browser và desktop dùng opaque, revocable product session or bearer token do auth layer cấp; không
   có upstream engine key hoặc compatibility credential.
 - Mọi request scoped theo `workspace_id`; mọi resource access kiểm tra membership/role và project ownership.
 - Roles baseline: `owner`, `admin`, `editor`, `viewer`.
@@ -79,8 +83,12 @@ Third-party Python plugin là arbitrary code và có thể đọc filesystem/env
 
 ## 6. Provider and secret handling
 
-- Credential lưu secret manager hoặc encrypted config; DB chỉ lưu reference/metadata.
+- Initial Local/LAN SecretStore encrypts secret records with authenticated encryption under a
+  server-owned master key supplied outside PostgreSQL. Database/domain records keep opaque refs;
+  a later Vault/KMS/cloud backend implements the same port.
 - API không gửi provider key tới browser hoặc render worker không cần.
+- Plaintext secrets never enter browser/desktop bundles, durable Job/Redis/checkpoint payloads or
+  logs. A worker receives only the exact secret for one authorized execution scope.
 - Provider request log chỉ metadata redacted; text/media content có retention và privacy policy riêng.
 - Timeout, retry budget, circuit breaker và rate limit cho từng provider.
 - Validate structured LLM/VLM output trước khi đưa vào domain/timeline.
@@ -92,14 +100,17 @@ Third-party Python plugin là arbitrary code và có thể đọc filesystem/env
 
 ### PostgreSQL
 
-- TLS in transit, encrypted disks/backups, least-privilege DB roles.
+- Private binding and least-privilege DB roles in all profiles. Transport TLS is mandatory for
+  Internet/host-separated production and optional inside the initial single-host Local/LAN stack;
+  hardened LAN selects it by deployment policy.
 - API role không có schema migration privilege trong production.
 - Tenant scoping test bắt buộc; có thể dùng RLS sau khi identity/transaction context chốt.
 - Backup/restore được kiểm tra định kỳ; audit/event tables append-only.
 
 ### Redis
 
-- private network, ACL/password/TLS tùy deployment; không expose public.
+- Redis Streams on a private network with ACL/password; TLS follows the same profile policy and
+  Redis is never exposed to clients.
 - Không coi Redis là durable audit; stream/pubsub payload không chứa secret.
 - TTL cho ephemeral queue/control data và bounded event retention.
 
@@ -114,8 +125,14 @@ Third-party Python plugin là arbitrary code và có thể đọc filesystem/env
 
 ## 8. API/web security
 
-- HTTPS qua Caddy/Nginx/Traefik; không truyền API key qua plain HTTP Internet.
-- CORS allowlist exact web origins; CSRF protection cho cookie session; SameSite/secure flags.
+- Local mode binds `127.0.0.1`; LAN exposure is explicit and binds only the selected interface or
+  configured wildcard. HTTP is allowed only for the first functional milestone on a trusted private
+  LAN, with an insecure-LAN warning; Internet exposure in that profile is prohibited.
+- Internet production uses HTTPS via reviewed ingress; no API/session credential crosses plain HTTP
+  on the Internet.
+- CORS uses exact configured localhost or LAN origins. Authenticated operation never uses
+  `Access-Control-Allow-Origin: *`; cookie sessions add CSRF and SameSite controls, with `Secure`
+  required whenever HTTPS is active.
 - Request body/JSON nesting/string limits; pagination bounded.
 - Rate limit theo user/workspace/IP; upload initiation và Job submission có quota.
 - Idempotency key chống duplicate upload/job.
@@ -132,8 +149,9 @@ Third-party Python plugin là arbitrary code và có thể đọc filesystem/env
 - File picker chỉ gửi file sau khi user chọn rõ ràng; client không tự quét toàn bộ filesystem.
 - Deep link/custom protocol, auto-update manifest và downloaded installer phải được allowlist,
   ký/xác minh và kiểm tra origin; không thực thi payload từ project/media.
-- Desktop chỉ gọi HTTPS Product API với certificate/hostname validation chuẩn; không cho user
-  override TLS verification trong production build.
+- Desktop calls the configured Product API. Trusted private-LAN development may explicitly use HTTP;
+  hardened/Internet profiles require HTTPS with normal certificate/hostname validation and no
+  verification override.
 - Local cache/draft là untrusted và reconstructable; server vẫn là source of truth.
 
 ## 9. Pipeline and timeline safety
@@ -148,7 +166,8 @@ Third-party Python plugin là arbitrary code và có thể đọc filesystem/env
 ## 10. Dependency and supply chain
 
 - Pin/lock dependency và container image versions; scan `pip-audit`/Bandit/Ruff/mypy phù hợp.
-- Theo dõi Pillow advisory và MoviePy constraint; không bỏ qua advisory toàn cục mà không có ticket/rationale.
+- Theo dõi advisories for every selected media/ML dependency; deterministic composition remains in
+  the pinned Go/FFmpeg worker and no advisory is globally ignored without ticket/rationale.
 - NH-Media funnels subprocesses through one reviewed execution port/wrapper; source review of
   upstream callsites may inform the threat model but creates no implementation dependency.
 - Record the upstream license identifier and provenance; any use or redistribution requires a
@@ -182,7 +201,11 @@ development-only MinIO examples. NH-Media independently enforces the controls in
 
 Audit các action: login/member change, asset upload/delete, script/timeline edit/approve, Job start/pause/resume/cancel, provider config change, artifact download, plugin enable.
 
-Audit event chứa actor/resource/action/result/request ID, không chứa media bytes hoặc secret. Xác định retention cho source media, generated media, prompt/log và event trong `OPEN-QUESTIONS.md` trước production policy.
+Audit event chứa actor/resource/action/result/request ID, không chứa media bytes hoặc secret.
+Initial Local/LAN retention keeps source media, required intermediates and final outputs until an
+explicit audited delete; executor scratch is cleanup-eligible after success. Provider content/log
+retention is bounded by configured privacy policy, and changing those defaults does not block core
+implementation.
 
 ## 12. Incident controls
 

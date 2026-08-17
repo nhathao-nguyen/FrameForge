@@ -6,6 +6,10 @@ Provider là engine port cho LLM, VLM, TTS, ASR và Embedding. PipelineNode ph�
 
 Product backend sở hữu ProviderConfiguration, authorization và credential reference. Engine nhận resolved provider binding snapshot. Worker chỉ nhận short-lived/scoped credential cần cho node; render/probe worker không nhận LLM/TTS secret nếu không dùng.
 
+`SecretStore` is the credential port. The initial implementation stores authenticated-encrypted
+secret records with a server-owned master key supplied outside the database. Vault/KMS/cloud secret
+managers are later adapters, not Local/LAN prerequisites.
+
 ```text
 PipelineNode
   → ProviderResolver(kind, binding snapshot)
@@ -182,7 +186,10 @@ Product scope hỗ trợ:
 - select provider binding ở Workspace/Project/Job policy;
 - audit mọi validation/rotation/use.
 
-Credential ownership cụ thể còn ở OQ-05; task phụ thuộc không được mặc định plaintext `.env` thành multi-user product policy.
+Provider credentials are Workspace-owned by default; explicitly configured system credentials may
+support the single-server installation. User BYOK is not an initial contract. Plaintext `.env`
+values may bootstrap the server-owned master key or one-time import only when local policy allows;
+they are never the durable multi-user product store.
 
 ## 11. Contract tests
 

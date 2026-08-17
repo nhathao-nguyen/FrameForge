@@ -5,7 +5,7 @@
 ```text
 Go Product API / trusted orchestration
             ↓ durable outbox
-         Redis queue
+         Redis Streams consumer groups
             ↓ versioned worker contracts
        bounded worker replicas
          ├─ Go media worker → FFmpeg/I/O
@@ -32,7 +32,7 @@ Redis, user/session, billing or unrelated provider credentials.
 
 ```json
 {
-  "schema_version":"1.0",
+  "message_version":"1.0",
   "message_id":"msg_...",
   "job_id":"job_...",
   "pipeline_run_id":"run_...",
@@ -46,6 +46,11 @@ Redis, user/session, billing or unrelated provider credentials.
 ```
 
 Messages contain no media bytes, local paths, plaintext secret, user token or mutable full context.
+
+Redis delivery semantics are explicit: publish with a stable message ID, consume through a bounded
+consumer group, acknowledge only after guarded claim/result inspection, inspect/reclaim pending
+entries after lease expiry and route exhausted execution transport entries to an optional DLQ
+stream. PostgreSQL Job/attempt/dead-letter rows remain canonical through Redis restart or loss.
 
 Claim sequence:
 
@@ -146,3 +151,11 @@ single-host Local/LAN profile passes reliability and load evidence.
 - bounded Go and Python workers complete the independent NH-Media vertical slice;
 - moving a capability across worker hosts preserves the same contracts;
 - release scans find no `movie_narrator` import, service, image or execution path.
+
+## 11. Health and first Local/LAN topology
+
+Each worker exposes minimal `/live` and `/ready` or an equivalent versioned health contract.
+Readiness includes its required queue/storage/tool/model capabilities without leaking paths or
+secrets. The first accepted topology runs one bounded Go media worker and one bounded Python
+`nh_media` worker on the server machine; contracts and Artifact refs do not assume co-location, so
+later GPU/render hosts need no protocol or domain redesign.

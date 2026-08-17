@@ -2,8 +2,9 @@
 
 ## 1. Reproducibility goals
 
-Primary documented development target is Arch Linux; Local/LAN deployment may also be exercised on
-other supported hosts. Required toolchain:
+Primary documented development and first Local/LAN acceptance target is the owner's current Windows
+machine using PowerShell, Docker-compatible infrastructure and pinned native/tool-managed runtimes.
+Linux remains a supported CI/deployment target once validated. Required toolchain:
 
 ```text
 Git
@@ -19,7 +20,7 @@ Rust + Tauri 2 tooling for desktop
 Docker or Podman when needed for infrastructure/sandbox
 ```
 
-Do not install ML dependencies into Arch system Python or bypass PEP 668.
+Do not install ML dependencies into a system Python or bypass environment isolation/PEP 668.
 
 ## 2. Runtime policy
 
@@ -45,6 +46,9 @@ ffprobe -version
 ```
 
 Exact versions and lock hashes are selected by T002 and stored in clean-room evidence.
+T002 selects currently supported compatible Go, Node/pnpm, Rust/Tauri, Python/uv and FFmpeg
+versions at task execution time. Exact version selection is a bootstrap operation, not an Open
+Question and does not reopen the architecture.
 
 ## 3. FFmpeg
 
@@ -60,11 +64,39 @@ Exact versions and lock hashes are selected by T002 and stored in clean-room evi
 PostgreSQL, Redis and object storage may run native or in pinned containers with private/local
 binding and non-default credentials. Mutable data uses task-specific volumes outside repository root.
 
+The canonical target developer experience is one documented orchestration entry point (for example
+`make dev`, `just dev` or an equivalent PowerShell-friendly command) which starts/verifies pinned
+PostgreSQL, Redis and MinIO, then Product API, Go media worker, Python worker, web and optional Tauri
+development client. Until that entry point is implemented, the conceptual order is:
+
+```text
+docker compose up -d postgres redis minio
+Product API → Go media worker → Python nh_media worker → web → desktop dev
+```
+
+Local mode binds loopback, runs LocalAuthProvider and idempotently bootstraps one admin User, one
+default Workspace and one owner membership.
+
 ### Local/LAN production-like
 
 One LAN server runs API, data services and workers; separate machines run web/Tauri clients. This
 profile proves endpoint configuration, authentication, upload, Job replay, Artifact download,
 worker recovery and server-authoritative state without requiring public DNS/VPS.
+
+Conceptual LAN configuration (the actual address is environment-specific):
+
+```text
+PROFILE=lan
+API_BIND=0.0.0.0:8080
+PUBLIC_API_URL=http://<server-lan-ip>:8080
+WEB_BIND=0.0.0.0:3000
+ALLOWED_ORIGINS=http://<server-lan-ip>:3000
+```
+
+LAN exposure is never automatic. Authentication and Workspace authorization remain active; clients
+configure the Product API endpoint; PostgreSQL, Redis, MinIO and workers stay server-side. Trusted
+private-LAN HTTP is allowed for Local Functional Acceptance and clearly marked insecure for Internet
+use.
 
 ### Internet production
 
