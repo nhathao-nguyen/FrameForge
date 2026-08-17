@@ -45,7 +45,8 @@ ffmpeg -version
 ffprobe -version
 ```
 
-Exact versions and lock hashes are selected by T002 and stored in clean-room evidence.
+Exact versions and lock hashes are selected by T002 and stored in
+[`bootstrap/T002-TOOLCHAIN-MATRIX-WINDOWS.md`](bootstrap/T002-TOOLCHAIN-MATRIX-WINDOWS.md).
 T002 selects currently supported compatible Go, Node/pnpm, Rust/Tauri, Python/uv and FFmpeg
 versions at task execution time. Exact version selection is a bootstrap operation, not an Open
 Question and does not reopen the architecture.

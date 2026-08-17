@@ -53,8 +53,10 @@ about product capability, never permission to copy source.
 
 ## Reference behavior tests
 
-Recorded fixtures/outputs may be used when lawful and useful. Normal NH-Media tests run NH-Media
-only. Optional comparison:
+Recorded fixtures/outputs may be used when lawful and useful. The repository policy and manifest
+contract live in [`tests/reference-behavior/README.md`](../tests/reference-behavior/README.md), with
+the current manifest intentionally empty. Normal NH-Media tests run NH-Media only. Optional
+comparison:
 
 ```text
 same input fixture

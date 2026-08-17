@@ -279,8 +279,13 @@ def check_plans(errors: list[str], max_age: int) -> None:
 def check_branch_commit(errors: list[str]) -> None:
     branch = git("branch", "--show-current")
     state = read(MEMORY / "CURRENT-STATE.md")
-    if branch != "docs/architecture-spec":
-        errors.append(f"expected current branch docs/architecture-spec, got {branch!r}")
+    branch_match = re.search(r"\| Working branch \| `([^`]+)`", state)
+    if not branch_match:
+        errors.append("CURRENT-STATE.md has no valid working branch")
+    elif branch != branch_match.group(1):
+        errors.append(
+            f"CURRENT-STATE.md branch is {branch_match.group(1)!r}, got current branch {branch!r}"
+        )
     commit_match = re.search(r"\| Baseline commit \| `([0-9a-f]{7,40})`", state)
     if not commit_match:
         errors.append("CURRENT-STATE.md has no valid baseline commit")

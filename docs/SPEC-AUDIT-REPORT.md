@@ -6,10 +6,10 @@ Audit date: 2026-08-17 (Asia/Saigon).
 
 **SPEC READY FOR IMPLEMENTATION**
 
-Owner ratification dated 2026-08-17 is authoritative and T004 is approved. This report certifies
-specification consistency only: no Product API, schema migration, worker, web/Tauri application or
-runtime infrastructure was implemented by this documentation task. T002/T003 remain bootstrap
-evidence before T100; neither is an unresolved architecture decision.
+Owner ratification dated 2026-08-17 is authoritative and T004 is approved. T002 and T003 bootstrap
+evidence are now complete. This report certifies specification and pre-code consistency only: no
+Product API, schema migration, worker, web/Tauri application or runtime infrastructure was
+implemented by this task.
 
 ## Final architecture assertions
 
@@ -107,9 +107,12 @@ UX are `DEFERRED-NONBLOCKING`. Each has a valid initial baseline and cannot bloc
 - Open architectural/product questions: **NONE**.
 - Owner-decision blockers: **NONE**.
 - Application code changed by this task: **NO**.
-- Next evidence tasks: T002 toolchain pinning and T003 reference-fixture policy, then T100.
+- T002 toolchain pinning: **COMPLETE**; Windows evidence is recorded in `docs/bootstrap/`.
+- T003 reference-fixture policy: **COMPLETE**; policy and empty manifest are recorded in
+  `tests/reference-behavior/`.
+- Next implementation task: T100 independent repository skeleton.
 
-NEXT EXECUTION TARGET: LOCAL FUNCTIONAL ACCEPTANCE
+NEXT EXECUTION TARGET: REPOSITORY AND SERVICE FOUNDATION (T100)
 
 SPEC READY FOR IMPLEMENTATION
-NEXT TARGET: LOCAL FUNCTIONAL ACCEPTANCE
+NEXT TARGET: REPOSITORY AND SERVICE FOUNDATION (T100)

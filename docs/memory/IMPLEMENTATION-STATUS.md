@@ -15,10 +15,10 @@ reviewable evidence is recorded.
 |---|---|---|---|---|---|
 | T000 | Independent specification | none | complete | current documentation refactor | T002 and T003 |
 | T001 | Upstream research provenance | T000 | complete | dated provenance record | T003 |
-| T002 | Toolchain matrix | T000 | pending | none | execute T002 |
-| T003 | Reference-behavior fixture policy | T001 | pending | none | execute T003 |
-| T004 | Documentation/independence gate | T000, T001 | complete | owner ratification and final spec audit | T002/T003 bootstrap evidence, then T100 |
-| T100 | Repository skeleton | T002, T003, T004 | pending | none | after T002/T003 |
+| T002 | Toolchain matrix | T000 | complete | `docs/bootstrap/T002-TOOLCHAIN-MATRIX-WINDOWS.md` and native version/codec evidence | T003 |
+| T003 | Reference-behavior fixture policy | T001 | complete | `tests/reference-behavior/README.md` and empty manifest validation | T100 |
+| T004 | Documentation/independence gate | T000, T001 | complete | owner ratification, final spec audit and post-bootstrap certification | T100 |
+| T100 | Repository skeleton | T002, T003, T004 | pending | none | start T100 |
 | T101 | Language-neutral primitives | T100 | blocked | none | after T100 |
 | T102 | Configuration/redaction | T101 | blocked | none | after T101 |
 | T103 | PostgreSQL | T100 | blocked | none | after T100 |

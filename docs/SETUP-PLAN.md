@@ -12,9 +12,9 @@ Create reproducible boundaries for web, Tauri 2 desktop, Go Product API, Go medi
 Python `nh_media` worker, shared contracts, PostgreSQL, Redis and object storage. The setup contains
 no upstream runtime, code, package, image, service or compatibility layer.
 
-**Status:** specification gate T004 approved by owner ratification dated 2026-08-17; setup has not
-been executed. T002 toolchain pinning and T003 fixture-policy evidence remain the next bootstrap
-prerequisites before the repository skeleton.
+**Status:** specification gate T004 and bootstrap evidence T002/T003 are complete as of 2026-08-17.
+The repository/service setup has not been executed; T100 is the next task. T002 records the Windows
+toolchain pins and T003 records the empty reference-behavior manifest/policy.
 
 ## 2. Target layout
 
@@ -86,7 +86,7 @@ not a prerequisite for development or the first functional release candidate.
 | Stage | Scope | Gate |
 |---|---|---|
 | S0 | accept independent specification and decisions | complete: T004 owner-ratified docs gate |
-| S1 | pin Go/Python/Node/Rust/FFmpeg toolchains | clean-room version evidence |
+| S1 | pin Go/Python/Node/Rust/FFmpeg toolchains | complete: `docs/bootstrap/T002-TOOLCHAIN-MATRIX-WINDOWS.md` |
 | S2 | create repository/service/client boundaries | import/dependency scan |
 | S3 | create language-neutral contracts and safe errors/config | schema/redaction tests |
 | S4 | provision private pinned PostgreSQL/Redis/object storage | health and negative access |

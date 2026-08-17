@@ -1,0 +1,6 @@
+{
+  "schema_version": "reference-behavior-manifest/v1",
+  "policy": "optional-recorded-observation",
+  "upstream_execution_allowed_in_normal_ci": false,
+  "fixtures": []
+}

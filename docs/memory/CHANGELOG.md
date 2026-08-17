@@ -6,6 +6,17 @@ owner: repository owner / task assignee
 
 # Memory changelog
 
+## 2026-08-17 — T002/T003 pre-code bootstrap evidence
+
+- Pinned the validated Windows baseline with `.go-version`, `.python-version`, `.node-version`,
+  `package.json` package-manager metadata and `rust-toolchain.toml`.
+- Recorded exact Go/Python/uv/Node/pnpm/Rust/Tauri/FFmpeg/ffprobe/Docker evidence and smoke checks
+  in `docs/bootstrap/T002-TOOLCHAIN-MATRIX-WINDOWS.md`.
+- Added the T003 reference-behavior policy and empty manifest under `tests/reference-behavior/`.
+- Reconciled current branch/status memory and made the branch validator compare against the recorded
+  branch rather than a stale hard-coded branch.
+- No application code, database schema, service/worker/client runtime or upstream dependency was added.
+
 ## 2026-08-17 — Final Local/LAN decision closure
 
 - Recorded owner ratification of LocalAuthProvider, Workspace-first authorization, encrypted
