@@ -27,10 +27,10 @@ reviewable evidence is recorded.
 | T106 | Go Product API shell | T101–T105 | complete | `/api/v1`, IDs/errors/CORS/bounds, LocalAuth shell, mocked-port tests | T107 |
 | T107 | Health/readiness | T106 | complete | liveness/readiness/diagnostics with dependency-down, timeout and drain tests | T108 |
 | T108 | CI/independence gates | T100-T107 | complete | local verification, CI workflow, negative independence proof, lock/SBOM/secret scans | T200 |
-| T200 | Migration framework | T103, T108 | complete | `services/api/internal/persistence/migrations.go`, seven versioned SQL migrations, runner empty/repeat/dirty tests and PostgreSQL apply/repeat/app-role denial | retain checkpoint; Gate C evidence |
+| T200 | Migration framework | T103, T108 | complete | `services/api/internal/persistence/migrations.go`, eight versioned SQL migrations, runner empty/repeat/dirty tests and live PostgreSQL apply/repeat/app-role denial including migration 0008 |
 | T201 | Identity/Workspace tables | T200 | complete | `0001_identity.sql`, transactional bootstrap, scoped role repository and PostgreSQL-backed hashed session/revoke/expiry path | later OIDC/API-key policy remains outside initial LocalAuth |
 | T202 | Workflow/Pipeline tables | T200 | complete | `0002_workflows_providers.sql`, `EnsurePipelineDefinition` and active-definition trigger | add broader graph integration corpus later |
-| T203 | SecretStore/Provider/RenderProfile tables | T200–T201 | complete | encrypted SecretStore boundary, `secret_records`, durable Provider/RenderProfile repository paths and redacted API | external KMS/Vault adapter remains deferred by the ratified Local baseline |
+| T203 | SecretStore/Provider/RenderProfile tables | T200–T201 | complete | encrypted SecretStore boundary, `secret_records`, durable RenderProfile draft/edit/activate/deprecate/disable service, active immutability trigger and redacted Provider API | external KMS/Vault adapter remains deferred by the ratified Local baseline |
 | T204 | Project/Asset tables | T201–T203 | complete | `0003_projects_assets.sql`, scoped SQL Project/Asset/upload repository and native upload metadata API | no large media bytes are stored in PostgreSQL |
 | T205 | Execution/review tables | T202, T204 | complete | `0004_execution.sql` canonical status checks, snapshots, active-run uniqueness and reviews | transition service is explicitly Gate E/T300 |
 | T206 | Artifact/checkpoint/DLQ tables | T204–T205 | complete | artifact/checkpoint/DLQ schema, typed Artifact commit boundary, SQL Artifact metadata repository and orphan reconciliation table | physical orphan sweeper remains a later worker/recovery concern |
@@ -42,11 +42,11 @@ reviewable evidence is recorded.
 | T221 | S3/MinIO adapter | T105, T220 | complete | live opt-in MinIO conformance: staged checksum, promote precondition, range, private presigned download, direct multipart PUT/ETag/complete, expiry and abort | cloud-vendor-specific IAM remains deployment configuration |
 | T222 | Artifact commit | T209, T220–T221 | complete | promote/publish/orphan compensation, duplicate/checksum tests, SQL Artifact metadata and durable reconciliation records | reconciliation worker is later execution work |
 | T223 | Upload-session API | T204, T210, T221–T222 | complete | StoragePort-backed durable initiate/presign/complete/abort, direct MinIO PUT smoke, atomic validating+asset_probe Job insert, restart-safe provider IDs and HTTP idempotency | validation execution remains T224/T300+ boundary |
-| T224 | Validation/probe boundary | T205–T206, T222–T223 | complete | magic/MIME/size/SHA256/ffprobe boundary with oversized/spoofed quarantine tests | add malformed/resource-bomb corpus later |
+| T224 | Validation/probe boundary | T205–T206, T222–T223 | complete | magic/MIME/size/SHA256/ffprobe boundary with deterministic spoofed, oversized, malformed-container, invalid-stream, output-limit, stream-limit and timeout quarantine tests; `Validated` is set only after all checks pass; SQL Asset readiness requires a committed Artifact | worker orchestration and scan execution remain outside Gate C+D/T300 |
 | T230 | Project/Asset REST | T210, T223–T224 | complete | native CRUD/upload metadata routes, durable repository wiring, ETag checks, idempotency replay and live upload smoke | Gate E only for Job commands |
 | T231 | Script/Narration APIs | T207, T210 | complete | immutable ScriptVersion approval, approved-version Narration Job boundary and durable repository wiring | Gate E only for execution |
-| T232 | Timeline validator | T208 | complete | JSON Schema, deterministic hash, range/source/security negative corpus | reference resolver integration expands with durable repositories |
-| T233 | Timeline/Render REST | T210, T232 | complete | typed commands, versioning, approval/lock, approved render request and durable Timeline/Render/Profile repository wiring | Gate E only for Render execution |
+| T232 | Timeline validator | T208 | complete | JSON Schema, deterministic hash, range/source/security negative corpus, fail-closed Asset/Artifact/Scene/Narration resolver and durable sqlmock ownership/state tests | live Compose infrastructure is available; no separate live resolver corpus is claimed |
+| T233 | Timeline/Render REST | T210, T232 | complete | typed commands, versioning, approval/lock and full durable validation on create/version/approve/lock/validate/render; Render requires exact eligible profile snapshot and never auto-creates profiles | Gate E only for Render execution |
 | T234 | Scene/Analysis/candidate APIs | T207–T210 | complete | scoped native routes and provenance/reference-style policy boundary | add selection immutability/pagination corpus later |
 | T235 | ProviderConfiguration API | T203, T210 | complete | redacted durable lifecycle, admin checks, plaintext-secret rejection and SQL-scoped provider repository | external secret manager remains deferred |
 | T300 | State transitions | T205, T209 | blocked | none | after dependencies |
@@ -97,4 +97,5 @@ reviewable evidence is recorded.
 | T604 | Upstream research refresh | T001, T003, T108 | blocked | none | research evidence only |
 | T605 | Internet/VPS production release | T603 | blocked | none | explicit production approval |
 
-No application implementation is claimed in this ledger.
+Gate C+D implementation and this repair pass are claimed in the current working tree; T300 and
+later execution work remain blocked and were not started.

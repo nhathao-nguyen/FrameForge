@@ -54,6 +54,11 @@ type Backend interface {
 	GetTimelineVersion(string, string, string) (*TimelineVersion, error)
 	AddTimelineVersion(string, string, string, string, string, json.RawMessage, int64) (*TimelineVersion, error)
 	SetTimelineVersionStatus(string, string, string, string, string) (*TimelineVersion, error)
+	ValidateTimeline(string, string, string) (string, error)
+	CreateRenderProfile(string, string, int, map[string]any) (*RenderProfile, error)
+	GetRenderProfile(string, string, int) (*RenderProfile, error)
+	UpdateRenderProfile(string, string, int, map[string]any) (*RenderProfile, error)
+	SetRenderProfileStatus(string, string, int, string) (*RenderProfile, error)
 	CreateRender(string, string, string, string, int, map[string]any) (*Render, error)
 	CreateAnalysis(string, string, string, map[string]any, map[string]any) (*Analysis, error)
 	GetAnalysis(string, string, string) (*Analysis, error)
@@ -84,6 +89,7 @@ type Store struct {
 	scenes       map[string]*Scene
 	candidates   map[string]*CandidateGroup
 	providers    map[string]*ProviderConfiguration
+	profiles     map[string]*RenderProfile
 	renders      map[string]*Render
 	jobs         map[string]*Job
 	idempotency  map[string]IdempotencyRecord
@@ -250,15 +256,29 @@ type ProviderConfiguration struct {
 	LastValidatedAt *time.Time     `json:"last_validated_at,omitempty"`
 }
 type Render struct {
-	ID                string    `json:"id"`
-	ProjectID         string    `json:"project_id"`
-	TimelineVersionID string    `json:"timeline_version_id"`
-	ProfileKey        string    `json:"profile_key"`
-	ProfileVersion    int       `json:"profile_version"`
-	Status            string    `json:"status"`
-	JobID             string    `json:"job_id"`
-	RequestHash       string    `json:"request_hash"`
-	CreatedAt         time.Time `json:"created_at"`
+	ID                string         `json:"id"`
+	ProjectID         string         `json:"project_id"`
+	TimelineVersionID string         `json:"timeline_version_id"`
+	ProfileKey        string         `json:"profile_key"`
+	ProfileVersion    int            `json:"profile_version"`
+	Status            string         `json:"status"`
+	JobID             string         `json:"job_id"`
+	RequestHash       string         `json:"request_hash"`
+	ProfileID         string         `json:"profile_id,omitempty"`
+	ProfileSnapshot   map[string]any `json:"profile_snapshot,omitempty"`
+	CreatedAt         time.Time      `json:"created_at"`
+}
+type RenderProfile struct {
+	ID            string         `json:"id"`
+	WorkspaceID   string         `json:"workspace_id"`
+	ProfileKey    string         `json:"profile_key"`
+	Version       int            `json:"version"`
+	Status        string         `json:"status"`
+	SchemaVersion string         `json:"schema_version"`
+	Document      map[string]any `json:"document"`
+	ContentHash   string         `json:"content_hash"`
+	CreatedAt     time.Time      `json:"created_at"`
+	UpdatedAt     time.Time      `json:"updated_at"`
 }
 type Job struct {
 	ID        string           `json:"id"`
@@ -286,7 +306,7 @@ func newStore(workspaceID string, backend storage.StoragePort) *Store {
 	if workspaceID == "" {
 		workspaceID = "ws_default"
 	}
-	return &Store{workspaceID: workspaceID, projects: map[string]*Project{}, assets: map[string]*Asset{}, uploads: map[string]*UploadSession{}, scripts: map[string]*Script{}, scriptVers: map[string]*ScriptVersion{}, narrations: map[string]*Narration{}, timelines: map[string]*Timeline{}, timelineVers: map[string]*TimelineVersion{}, analyses: map[string]*Analysis{}, scenes: map[string]*Scene{}, candidates: map[string]*CandidateGroup{}, providers: map[string]*ProviderConfiguration{}, renders: map[string]*Render{}, jobs: map[string]*Job{}, idempotency: map[string]IdempotencyRecord{}, storage: backend, storageSlots: map[string]storage.UploadSession{}, staged: map[string]storage.StagedObject{}}
+	return &Store{workspaceID: workspaceID, projects: map[string]*Project{}, assets: map[string]*Asset{}, uploads: map[string]*UploadSession{}, scripts: map[string]*Script{}, scriptVers: map[string]*ScriptVersion{}, narrations: map[string]*Narration{}, timelines: map[string]*Timeline{}, timelineVers: map[string]*TimelineVersion{}, analyses: map[string]*Analysis{}, scenes: map[string]*Scene{}, candidates: map[string]*CandidateGroup{}, providers: map[string]*ProviderConfiguration{}, profiles: map[string]*RenderProfile{}, renders: map[string]*Render{}, jobs: map[string]*Job{}, idempotency: map[string]IdempotencyRecord{}, storage: backend, storageSlots: map[string]storage.UploadSession{}, staged: map[string]storage.StagedObject{}}
 }
 
 func (s *Store) WorkspaceID() string { return s.workspaceID }
@@ -493,6 +513,9 @@ func (s *Store) SetAssetStatus(workspaceID, projectID, id, status, artifactID st
 	value, ok := s.assets[id]
 	if !ok || value.ProjectID != projectID {
 		return nil, ErrNotFound
+	}
+	if status == "ready" && strings.TrimSpace(artifactID) == "" {
+		return nil, ErrConflict
 	}
 	value.Status = status
 	value.OriginalArtifactID = artifactID
@@ -811,11 +834,109 @@ func (s *Store) GetNarration(workspaceID, projectID, id string) (*Narration, err
 	return cloneNarration(value), nil
 }
 
+func ValidateRenderProfileTransition(current, next string) error {
+	allowed := map[string]string{"draft": "active", "active": "deprecated", "deprecated": "disabled"}
+	if allowed[current] != next {
+		return fmt.Errorf("invalid render profile lifecycle transition %s -> %s", current, next)
+	}
+	return nil
+}
+
+func renderProfileMapKey(profileKey string, version int) string {
+	return profileKey + "\x00" + strconv.Itoa(version)
+}
+
+func (s *Store) CreateRenderProfile(workspaceID, profileKey string, version int, document map[string]any) (*RenderProfile, error) {
+	if err := s.CheckWorkspace(workspaceID); err != nil {
+		return nil, err
+	}
+	if strings.TrimSpace(profileKey) == "" || version < 1 || len(document) == 0 {
+		return nil, errors.New("render profile key, positive version and document are required")
+	}
+	key := renderProfileMapKey(profileKey, version)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, exists := s.profiles[key]; exists {
+		return nil, ErrConflict
+	}
+	content := copyMap(document)
+	hash := requestHash(content)
+	for _, existing := range s.profiles {
+		if existing.ProfileKey == profileKey && existing.ContentHash == hash {
+			return nil, ErrConflict
+		}
+	}
+	timestamp := now()
+	value := &RenderProfile{ID: newID("render_profile"), WorkspaceID: workspaceID, ProfileKey: profileKey, Version: version, Status: "draft", SchemaVersion: "1.0", Document: content, ContentHash: hash, CreatedAt: timestamp, UpdatedAt: timestamp}
+	s.profiles[key] = value
+	return cloneRenderProfile(value), nil
+}
+
+func (s *Store) GetRenderProfile(workspaceID, profileKey string, version int) (*RenderProfile, error) {
+	if err := s.CheckWorkspace(workspaceID); err != nil {
+		return nil, ErrNotFound
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	value, ok := s.profiles[renderProfileMapKey(profileKey, version)]
+	if !ok || value.WorkspaceID != workspaceID {
+		return nil, ErrNotFound
+	}
+	return cloneRenderProfile(value), nil
+}
+
+func (s *Store) UpdateRenderProfile(workspaceID, profileKey string, version int, document map[string]any) (*RenderProfile, error) {
+	if err := s.CheckWorkspace(workspaceID); err != nil {
+		return nil, ErrNotFound
+	}
+	if len(document) == 0 {
+		return nil, errors.New("render profile document is required")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	value, ok := s.profiles[renderProfileMapKey(profileKey, version)]
+	if !ok || value.WorkspaceID != workspaceID {
+		return nil, ErrNotFound
+	}
+	if value.Status != "draft" {
+		return nil, ErrConflict
+	}
+	updated := copyMap(document)
+	hash := requestHash(updated)
+	for key, existing := range s.profiles {
+		if key != renderProfileMapKey(profileKey, version) && existing.ProfileKey == profileKey && existing.ContentHash == hash {
+			return nil, ErrConflict
+		}
+	}
+	value.Document = updated
+	value.ContentHash = hash
+	value.UpdatedAt = now()
+	return cloneRenderProfile(value), nil
+}
+
+func (s *Store) SetRenderProfileStatus(workspaceID, profileKey string, version int, status string) (*RenderProfile, error) {
+	if err := s.CheckWorkspace(workspaceID); err != nil {
+		return nil, ErrNotFound
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	value, ok := s.profiles[renderProfileMapKey(profileKey, version)]
+	if !ok || value.WorkspaceID != workspaceID {
+		return nil, ErrNotFound
+	}
+	if err := ValidateRenderProfileTransition(value.Status, status); err != nil {
+		return nil, ErrConflict
+	}
+	value.Status = status
+	value.UpdatedAt = now()
+	return cloneRenderProfile(value), nil
+}
+
 func (s *Store) CreateTimeline(workspaceID, projectID, origin string, document json.RawMessage) (*Timeline, *TimelineVersion, error) {
 	if _, err := s.GetProject(workspaceID, projectID); err != nil {
 		return nil, nil, err
 	}
-	hash, err := domain.ValidateTimeline(document, domain.TimelineValidationOptions{})
+	hash, err := domain.ValidateTimeline(document, domain.TimelineValidationOptions{Resolver: s})
 	if err != nil {
 		return nil, nil, err
 	}
@@ -861,7 +982,7 @@ func (s *Store) AddTimelineVersion(workspaceID, projectID, timelineID, basedOn, 
 	if _, err := s.GetProject(workspaceID, projectID); err != nil {
 		return nil, err
 	}
-	hash, err := domain.ValidateTimeline(document, domain.TimelineValidationOptions{})
+	hash, err := domain.ValidateTimeline(document, domain.TimelineValidationOptions{Resolver: s})
 	if err != nil {
 		return nil, err
 	}
@@ -895,6 +1016,11 @@ func (s *Store) SetTimelineVersionStatus(workspaceID, projectID, timelineID, ver
 	if _, err := s.GetProject(workspaceID, projectID); err != nil {
 		return nil, err
 	}
+	if status == "approved" || status == "locked" {
+		if _, err := s.ValidateTimeline(workspaceID, projectID, versionID); err != nil {
+			return nil, err
+		}
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	timeline, ok := s.timelines[timelineID]
@@ -916,8 +1042,81 @@ func (s *Store) SetTimelineVersionStatus(workspaceID, projectID, timelineID, ver
 	return cloneTimelineVersion(version), nil
 }
 
+func (s *Store) ValidateTimeline(workspaceID, projectID, versionID string) (string, error) {
+	value, err := s.GetTimelineVersion(workspaceID, projectID, versionID)
+	if err != nil {
+		return "", err
+	}
+	return domain.ValidateTimeline(value.Document, domain.TimelineValidationOptions{Resolver: s})
+}
+
+func (s *Store) ResolveAssetArtifact(assetID, artifactID, projectID string) (bool, float64, int, int, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	value, ok := s.assets[assetID]
+	if !ok || value.ProjectID != projectID || value.Status != "ready" || value.OriginalArtifactID == "" || value.OriginalArtifactID != artifactID {
+		return false, 0, 0, 0, nil
+	}
+	return true, metadataFloat(value.Metadata, "duration_sec"), metadataInt(value.Metadata, "width"), metadataInt(value.Metadata, "height"), nil
+}
+
+func (s *Store) ResolveScene(sceneID, assetID, artifactID, projectID string) (bool, float64, float64, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	scene, ok := s.scenes[sceneID]
+	asset, assetOK := s.assets[assetID]
+	if !ok || !assetOK || scene.ProjectID != projectID || asset.ProjectID != projectID || scene.AssetID != assetID || scene.ArtifactID != artifactID || asset.Status != "ready" || asset.OriginalArtifactID != artifactID || (scene.Status != "detected" && scene.Status != "analyzed" && scene.Status != "confirmed") {
+		return false, 0, 0, nil
+	}
+	return true, scene.StartSec, scene.EndSec, nil
+}
+
+func (s *Store) ResolveArtifact(artifactID, projectID string) (bool, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	for _, asset := range s.assets {
+		if asset.ProjectID == projectID && asset.Status == "ready" && asset.OriginalArtifactID == artifactID {
+			return true, nil
+		}
+	}
+	for _, scene := range s.scenes {
+		asset, assetOK := s.assets[scene.AssetID]
+		if scene.ProjectID == projectID && assetOK && asset.Status == "ready" && asset.OriginalArtifactID == artifactID && scene.ArtifactID == artifactID && (scene.Status == "detected" || scene.Status == "analyzed" || scene.Status == "confirmed") {
+			return true, nil
+		}
+	}
+	for _, narration := range s.narrations {
+		if narration.ProjectID == projectID && narration.Status == "ready" && (narration.AudioArtifactID == artifactID || narration.TimingArtifactID == artifactID) {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func (s *Store) ResolveNarration(narrationID, scriptVersionID, projectID string) (bool, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	value, ok := s.narrations[narrationID]
+	if !ok || value.ProjectID != projectID || value.ScriptVersionID != scriptVersionID || value.Status != "ready" || value.AudioArtifactID == "" {
+		return false, nil
+	}
+	version, ok := s.scriptVers[scriptVersionID]
+	if !ok || version.ProjectID != projectID || version.Status != "approved" {
+		return false, nil
+	}
+	for _, asset := range s.assets {
+		if asset.ProjectID == projectID && asset.Status == "ready" && asset.OriginalArtifactID == value.AudioArtifactID {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 func (s *Store) CreateRender(workspaceID, projectID string, timelineVersionID, profileKey string, profileVersion int, request map[string]any) (*Render, error) {
 	if _, err := s.GetProject(workspaceID, projectID); err != nil {
+		return nil, err
+	}
+	if _, err := s.ValidateTimeline(workspaceID, projectID, timelineVersionID); err != nil {
 		return nil, err
 	}
 	s.mu.RLock()
@@ -926,8 +1125,19 @@ func (s *Store) CreateRender(workspaceID, projectID string, timelineVersionID, p
 		s.mu.RUnlock()
 		return nil, ErrConflict
 	}
+	profile, profileOK := s.profiles[renderProfileMapKey(profileKey, profileVersion)]
+	if !profileOK {
+		s.mu.RUnlock()
+		return nil, ErrNotFound
+	}
+	if profile.Status != "active" {
+		s.mu.RUnlock()
+		return nil, ErrConflict
+	}
+	profileID := profile.ID
+	profileSnapshot := copyMap(profile.Document)
 	s.mu.RUnlock()
-	value := &Render{ID: newID("render"), ProjectID: projectID, TimelineVersionID: timelineVersionID, ProfileKey: profileKey, ProfileVersion: profileVersion, Status: "created", JobID: newID("job"), RequestHash: requestHash(request), CreatedAt: now()}
+	value := &Render{ID: newID("render"), ProjectID: projectID, TimelineVersionID: timelineVersionID, ProfileKey: profileKey, ProfileVersion: profileVersion, ProfileID: profileID, ProfileSnapshot: profileSnapshot, Status: "created", JobID: newID("job"), RequestHash: requestHash(request), CreatedAt: now()}
 	s.mu.Lock()
 	s.renders[value.ID] = value
 	s.jobs[value.JobID] = &Job{ID: value.JobID, ProjectID: projectID, Kind: "render", Status: domain.JobCreated, Command: copyMap(request), CreatedAt: value.CreatedAt}
@@ -1197,4 +1407,33 @@ func cloneJob(value *Job) *Job {
 	result.Command = copyMap(value.Command)
 	return &result
 }
-func cloneRender(value *Render) *Render { result := *value; return &result }
+func cloneRender(value *Render) *Render {
+	result := *value
+	result.ProfileSnapshot = copyMap(value.ProfileSnapshot)
+	return &result
+}
+func cloneRenderProfile(value *RenderProfile) *RenderProfile {
+	result := *value
+	result.Document = copyMap(value.Document)
+	return &result
+}
+
+func metadataFloat(value map[string]any, key string) float64 {
+	switch current := value[key].(type) {
+	case float64:
+		return current
+	case json.Number:
+		parsed, _ := current.Float64()
+		return parsed
+	case int:
+		return float64(current)
+	case int64:
+		return float64(current)
+	default:
+		return 0
+	}
+}
+
+func metadataInt(value map[string]any, key string) int {
+	return int(metadataFloat(value, key))
+}

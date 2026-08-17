@@ -471,7 +471,7 @@ func (b *DurableBackend) GetNarration(_ string, projectID, narrationID string) (
 }
 
 func (b *DurableBackend) CreateTimeline(_ string, projectID, origin string, document json.RawMessage) (*product.Timeline, *product.TimelineVersion, error) {
-	hash, err := domain.ValidateTimeline(document, domain.TimelineValidationOptions{})
+	hash, err := domain.ValidateTimeline(document, domain.TimelineValidationOptions{Resolver: b})
 	if err != nil {
 		return nil, nil, err
 	}
@@ -544,7 +544,7 @@ func (b *DurableBackend) GetTimelineVersion(_ string, projectID, versionID strin
 }
 
 func (b *DurableBackend) AddTimelineVersion(_ string, projectID, timelineID, basedOn, origin string, document json.RawMessage, expectedRevision int64) (*product.TimelineVersion, error) {
-	hash, err := domain.ValidateTimeline(document, domain.TimelineValidationOptions{})
+	hash, err := domain.ValidateTimeline(document, domain.TimelineValidationOptions{Resolver: b})
 	if err != nil {
 		return nil, err
 	}
@@ -586,13 +586,21 @@ func (b *DurableBackend) SetTimelineVersionStatus(_ string, projectID, timelineI
 	if status != "approved" && status != "locked" && status != "superseded" && status != "draft" {
 		return nil, errors.New("invalid timeline version status")
 	}
+	if _, err := b.SQL.GetProject(context.Background(), b.UserID, b.Workspace, projectID); err != nil {
+		return nil, mapPersistenceError(err)
+	}
+	if status == "approved" || status == "locked" {
+		if _, err := b.ValidateTimeline("", projectID, versionID); err != nil {
+			return nil, err
+		}
+	}
 	ctx := context.Background()
 	tx, err := b.SQL.DB.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, err
 	}
 	defer func() { _ = tx.Rollback() }()
-	result, err := tx.ExecContext(ctx, `UPDATE timeline_versions SET status=$3,approved_by=CASE WHEN $3 IN ('approved','locked') THEN $4 ELSE approved_by END,approved_at=CASE WHEN $3 IN ('approved','locked') THEN now() ELSE approved_at END,updated_at=now() WHERE id=$1 AND timeline_id=$2`, versionID, timelineID, status, b.UserID)
+	result, err := tx.ExecContext(ctx, `UPDATE timeline_versions SET status=$3,approved_by=CASE WHEN $3 IN ('approved','locked') THEN $4 ELSE approved_by END,approved_at=CASE WHEN $3 IN ('approved','locked') THEN now() ELSE approved_at END,updated_at=now() WHERE id=$1 AND timeline_id=$2 AND EXISTS (SELECT 1 FROM timelines scoped_timeline WHERE scoped_timeline.id=$2 AND scoped_timeline.project_id=$5)`, versionID, timelineID, status, b.UserID, projectID)
 	if err != nil {
 		return nil, err
 	}
@@ -611,10 +619,100 @@ func (b *DurableBackend) SetTimelineVersionStatus(_ string, projectID, timelineI
 	return b.GetTimelineVersion("", projectID, versionID)
 }
 
+func (b *DurableBackend) ValidateTimeline(_ string, projectID, versionID string) (string, error) {
+	value, err := b.GetTimelineVersion("", projectID, versionID)
+	if err != nil {
+		return "", err
+	}
+	return domain.ValidateTimeline(value.Document, domain.TimelineValidationOptions{Resolver: b})
+}
+
+func (b *DurableBackend) CreateRenderProfile(_ string, profileKey string, version int, document map[string]any) (*product.RenderProfile, error) {
+	if profileKey == "" || version < 1 || len(document) == 0 {
+		return nil, errors.New("render profile key, positive version and document are required")
+	}
+	ctx := context.Background()
+	profileJSON := jsonBytes(document)
+	hash := jsonHash(profileJSON)
+	var value product.RenderProfile
+	err := b.SQL.DB.QueryRowContext(ctx, `INSERT INTO render_profiles(workspace_id,profile_key,version,status,schema_version,document,content_hash,created_by) VALUES($1,$2,$3,'draft','1.0',$4,$5,$6) RETURNING id::text,workspace_id::text,profile_key,version,status,schema_version,document,content_hash,created_at,updated_at`, b.Workspace, profileKey, version, profileJSON, hash, b.UserID).Scan(&value.ID, &value.WorkspaceID, &value.ProfileKey, &value.Version, &value.Status, &value.SchemaVersion, &profileJSON, &value.ContentHash, &value.CreatedAt, &value.UpdatedAt)
+	if err != nil {
+		return nil, err
+	}
+	value.Document = mapFromJSON(profileJSON)
+	return &value, nil
+}
+
+func (b *DurableBackend) GetRenderProfile(_ string, profileKey string, version int) (*product.RenderProfile, error) {
+	ctx := context.Background()
+	var value product.RenderProfile
+	var document []byte
+	err := b.SQL.DB.QueryRowContext(ctx, `SELECT id::text,workspace_id::text,profile_key,version,status,schema_version,document,content_hash,created_at,updated_at FROM render_profiles WHERE workspace_id=$1 AND profile_key=$2 AND version=$3`, b.Workspace, profileKey, version).Scan(&value.ID, &value.WorkspaceID, &value.ProfileKey, &value.Version, &value.Status, &value.SchemaVersion, &document, &value.ContentHash, &value.CreatedAt, &value.UpdatedAt)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, product.ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	value.Document = mapFromJSON(document)
+	return &value, nil
+}
+
+func (b *DurableBackend) UpdateRenderProfile(_ string, profileKey string, version int, document map[string]any) (*product.RenderProfile, error) {
+	current, err := b.GetRenderProfile("", profileKey, version)
+	if err != nil {
+		return nil, err
+	}
+	if current.Status != "draft" {
+		return nil, product.ErrConflict
+	}
+	if len(document) == 0 {
+		return nil, errors.New("render profile document is required")
+	}
+	ctx := context.Background()
+	profileJSON := jsonBytes(document)
+	hash := jsonHash(profileJSON)
+	var value product.RenderProfile
+	err = b.SQL.DB.QueryRowContext(ctx, `UPDATE render_profiles SET document=$4,content_hash=$5,updated_at=now() WHERE workspace_id=$1 AND profile_key=$2 AND version=$3 AND status='draft' RETURNING id::text,workspace_id::text,profile_key,version,status,schema_version,document,content_hash,created_at,updated_at`, b.Workspace, profileKey, version, profileJSON, hash).Scan(&value.ID, &value.WorkspaceID, &value.ProfileKey, &value.Version, &value.Status, &value.SchemaVersion, &profileJSON, &value.ContentHash, &value.CreatedAt, &value.UpdatedAt)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, product.ErrConflict
+	}
+	if err != nil {
+		return nil, err
+	}
+	value.Document = mapFromJSON(profileJSON)
+	return &value, nil
+}
+
+func (b *DurableBackend) SetRenderProfileStatus(_ string, profileKey string, version int, status string) (*product.RenderProfile, error) {
+	current, err := b.GetRenderProfile("", profileKey, version)
+	if err != nil {
+		return nil, err
+	}
+	if err := product.ValidateRenderProfileTransition(current.Status, status); err != nil {
+		return nil, product.ErrConflict
+	}
+	ctx := context.Background()
+	var value product.RenderProfile
+	var document []byte
+	err = b.SQL.DB.QueryRowContext(ctx, `UPDATE render_profiles SET status=$4,updated_at=now() WHERE workspace_id=$1 AND profile_key=$2 AND version=$3 AND status=$5 RETURNING id::text,workspace_id::text,profile_key,version,status,schema_version,document,content_hash,created_at,updated_at`, b.Workspace, profileKey, version, status, current.Status).Scan(&value.ID, &value.WorkspaceID, &value.ProfileKey, &value.Version, &value.Status, &value.SchemaVersion, &document, &value.ContentHash, &value.CreatedAt, &value.UpdatedAt)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, product.ErrConflict
+	}
+	if err != nil {
+		return nil, err
+	}
+	value.Document = mapFromJSON(document)
+	return &value, nil
+}
+
 func (b *DurableBackend) CreateRender(_ string, projectID, timelineVersionID, profileKey string, profileVersion int, request map[string]any) (*product.Render, error) {
 	ctx := context.Background()
 	if _, err := b.SQL.GetProject(ctx, b.UserID, b.Workspace, projectID); err != nil {
 		return nil, mapPersistenceError(err)
+	}
+	if _, err := b.ValidateTimeline("", projectID, timelineVersionID); err != nil {
+		return nil, err
 	}
 	var timelineStatus string
 	if err := b.SQL.DB.QueryRowContext(ctx, `SELECT status FROM timeline_versions v JOIN timelines t ON t.id=v.timeline_id WHERE v.id=$1 AND t.project_id=$2`, timelineVersionID, projectID).Scan(&timelineStatus); err != nil {
@@ -623,23 +721,28 @@ func (b *DurableBackend) CreateRender(_ string, projectID, timelineVersionID, pr
 	if timelineStatus != "approved" && timelineStatus != "locked" {
 		return nil, product.ErrConflict
 	}
-	profileDocument := jsonBytes(request)
-	profileHash := jsonHash(profileDocument)
-	var profileID string
-	err := b.SQL.DB.QueryRowContext(ctx, `SELECT id::text FROM render_profiles WHERE workspace_id=$1 AND profile_key=$2 AND version=$3`, b.Workspace, profileKey, profileVersion).Scan(&profileID)
+	var profileID, profileStatus, profileHash string
+	var profileDocument []byte
+	err := b.SQL.DB.QueryRowContext(ctx, `SELECT id::text,status,document,content_hash FROM render_profiles WHERE (workspace_id=$1 OR workspace_id IS NULL) AND profile_key=$2 AND version=$3 ORDER BY CASE WHEN workspace_id=$1 THEN 0 ELSE 1 END LIMIT 1`, b.Workspace, profileKey, profileVersion).Scan(&profileID, &profileStatus, &profileDocument, &profileHash)
 	if errors.Is(err, sql.ErrNoRows) {
-		err = b.SQL.DB.QueryRowContext(ctx, `INSERT INTO render_profiles(workspace_id,profile_key,version,status,schema_version,document,content_hash,created_by) VALUES($1,$2,$3,'active','1.0',$4,$5,$6) RETURNING id::text`, b.Workspace, profileKey, profileVersion, profileDocument, profileHash, b.UserID).Scan(&profileID)
+		return nil, product.ErrNotFound
 	}
 	if err != nil {
 		return nil, err
 	}
+	if profileStatus != "active" {
+		return nil, product.ErrConflict
+	}
 	requestJSON := jsonBytes(request)
 	var value product.Render
-	if err := b.SQL.DB.QueryRowContext(ctx, `INSERT INTO renders(project_id,timeline_version_id,render_profile_id,profile_snapshot,status,request_hash,request,created_by) VALUES($1,$2,$3,$4,'created',$5,$6,$7) RETURNING id::text,project_id::text,timeline_version_id::text,status,created_at`, projectID, timelineVersionID, profileID, profileDocument, profileHash, requestJSON, b.UserID).Scan(&value.ID, &value.ProjectID, &value.TimelineVersionID, &value.Status, &value.CreatedAt); err != nil {
+	requestHash := jsonHash(requestJSON)
+	if err := b.SQL.DB.QueryRowContext(ctx, `INSERT INTO renders(project_id,timeline_version_id,render_profile_id,profile_snapshot,status,request_hash,request,created_by) VALUES($1,$2,$3,$4,'created',$5,$6,$7) RETURNING id::text,project_id::text,timeline_version_id::text,status,created_at`, projectID, timelineVersionID, profileID, profileDocument, requestHash, requestJSON, b.UserID).Scan(&value.ID, &value.ProjectID, &value.TimelineVersionID, &value.Status, &value.CreatedAt); err != nil {
 		return nil, err
 	}
 	value.ProfileKey = profileKey
 	value.ProfileVersion = profileVersion
+	value.ProfileID = profileID
+	value.ProfileSnapshot = mapFromJSON(profileDocument)
 	jobCommand := cloneMap(request)
 	jobCommand["render_id"] = value.ID
 	jobRequest := jsonBytes(jobCommand)

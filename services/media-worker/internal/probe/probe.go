@@ -1,24 +1,29 @@
 package probe
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
+	"math"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
+	"time"
 )
 
 type Limits struct {
-	MaxBytes       int64
-	MaxDurationSec float64
-	MaxWidth       int
-	MaxHeight      int
-	MaxStreams     int
+	MaxBytes            int64
+	MaxDurationSec      float64
+	MaxWidth            int
+	MaxHeight           int
+	MaxStreams          int
+	MaxProbeOutputBytes int64
+	MaxProbeDuration    time.Duration
 }
 type Result struct {
 	SHA256      string  `json:"sha256"`
@@ -29,12 +34,22 @@ type Result struct {
 	Height      int     `json:"height"`
 	Streams     int     `json:"streams"`
 	Quarantined bool    `json:"quarantined"`
+	Validated   bool    `json:"validated"`
 	SafeReason  string  `json:"safe_reason,omitempty"`
 }
+
+// ProbeFunc is injectable only at this boundary so deterministic adversarial
+// fixtures can exercise the same validation decisions without depending on a
+// host-specific ffprobe binary or large media files.
+type ProbeFunc func(context.Context, string) ([]byte, error)
+
 type Validator struct {
 	FFprobePath string
 	Limits      Limits
+	Probe       ProbeFunc
 }
+
+const defaultMaxProbeOutputBytes int64 = 1 << 20
 
 func (v Validator) Validate(ctx context.Context, path string, declaredMIME string) (Result, error) {
 	if strings.TrimSpace(path) == "" {
@@ -61,10 +76,31 @@ func (v Validator) Validate(ctx context.Context, path string, declaredMIME strin
 	}
 	result.SHA256 = hash
 	if v.FFprobePath == "" {
-		return result, errors.New("ffprobe path is required")
+		if v.Probe == nil {
+			return result, errors.New("ffprobe path is required")
+		}
 	}
-	command := exec.CommandContext(ctx, v.FFprobePath, "-v", "error", "-of", "json", "-show_format", "-show_streams", path)
-	output, err := command.Output()
+	probeCtx := ctx
+	cancel := func() {}
+	if v.Limits.MaxProbeDuration > 0 {
+		probeCtx, cancel = context.WithTimeout(ctx, v.Limits.MaxProbeDuration)
+	}
+	defer cancel()
+	output, err, outputLimited := v.runProbe(probeCtx, path)
+	if outputLimited {
+		result.Quarantined = true
+		result.SafeReason = "ffprobe_output_limit"
+		return result, nil
+	}
+	if probeCtx.Err() != nil {
+		result.Quarantined = true
+		if errors.Is(probeCtx.Err(), context.DeadlineExceeded) {
+			result.SafeReason = "probe_timeout"
+		} else {
+			result.SafeReason = "probe_cancelled"
+		}
+		return result, nil
+	}
 	if err != nil {
 		result.Quarantined = true
 		result.SafeReason = "ffprobe_failed"
@@ -86,12 +122,27 @@ func (v Validator) Validate(ctx context.Context, path string, declaredMIME strin
 		return result, nil
 	}
 	result.Streams = len(probe.Streams)
+	if result.Streams == 0 {
+		result.Quarantined = true
+		result.SafeReason = "ffprobe_no_streams"
+		return result, nil
+	}
 	if v.Limits.MaxStreams > 0 && result.Streams > v.Limits.MaxStreams {
 		result.Quarantined = true
 		result.SafeReason = "stream_limit"
 		return result, nil
 	}
 	for _, stream := range probe.Streams {
+		if stream.CodecType != "audio" && stream.CodecType != "video" {
+			result.Quarantined = true
+			result.SafeReason = "ffprobe_invalid_stream"
+			return result, nil
+		}
+		if stream.CodecType == "video" && (stream.Width <= 0 || stream.Height <= 0) {
+			result.Quarantined = true
+			result.SafeReason = "ffprobe_invalid_stream"
+			return result, nil
+		}
 		if stream.Width > result.Width {
 			result.Width = stream.Width
 		}
@@ -105,13 +156,62 @@ func (v Validator) Validate(ctx context.Context, path string, declaredMIME strin
 		return result, nil
 	}
 	if probe.Format.Duration != "" {
-		_, _ = fmt.Sscanf(probe.Format.Duration, "%f", &result.DurationSec)
+		parsed, err := strconv.ParseFloat(probe.Format.Duration, 64)
+		if err != nil || math.IsNaN(parsed) || math.IsInf(parsed, 0) || parsed < 0 {
+			result.Quarantined = true
+			result.SafeReason = "ffprobe_invalid_duration"
+			return result, nil
+		}
+		result.DurationSec = parsed
 	}
 	if v.Limits.MaxDurationSec > 0 && result.DurationSec > v.Limits.MaxDurationSec {
 		result.Quarantined = true
 		result.SafeReason = "duration_limit"
+		return result, nil
 	}
+	result.Validated = true
 	return result, nil
+}
+
+type limitedBuffer struct {
+	bytes.Buffer
+	limit   int64
+	limited bool
+}
+
+func (b *limitedBuffer) Write(value []byte) (int, error) {
+	if b.limit <= 0 {
+		return len(value), nil
+	}
+	remaining := b.limit - int64(b.Len())
+	if remaining <= 0 {
+		b.limited = true
+		return len(value), nil
+	}
+	if int64(len(value)) > remaining {
+		_, _ = b.Buffer.Write(value[:remaining])
+		b.limited = true
+		return len(value), nil
+	}
+	_, err := b.Buffer.Write(value)
+	return len(value), err
+}
+
+func (v Validator) runProbe(ctx context.Context, path string) ([]byte, error, bool) {
+	limit := v.Limits.MaxProbeOutputBytes
+	if limit == 0 {
+		limit = defaultMaxProbeOutputBytes
+	}
+	if v.Probe != nil {
+		output, err := v.Probe(ctx, path)
+		return output, err, int64(len(output)) > limit
+	}
+	command := exec.CommandContext(ctx, v.FFprobePath, "-v", "error", "-of", "json", "-show_format", "-show_streams", path)
+	buffer := &limitedBuffer{limit: limit}
+	command.Stdout = buffer
+	command.Stderr = io.Discard
+	err := command.Run()
+	return buffer.Bytes(), err, buffer.limited
 }
 
 func hashAndCheckMagic(path, declaredMIME string) (string, error) {

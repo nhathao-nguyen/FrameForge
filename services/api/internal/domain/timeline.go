@@ -134,7 +134,10 @@ func ValidateTimeline(document json.RawMessage, options TimelineValidationOption
 			if kind == "subtitle" && clip["subtitle"] == nil {
 				return "", fmt.Errorf("subtitle track clip %q requires subtitle cue", clipID)
 			}
-			if narration, ok := clip["narration"].(map[string]any); ok && options.Resolver != nil {
+			if narration, ok := clip["narration"].(map[string]any); ok {
+				if options.Resolver == nil {
+					return "", errors.New("narration reference resolver is required")
+				}
 				narrationID, _ := narration["narration_id"].(string)
 				scriptVersionID, _ := narration["script_version_id"].(string)
 				ready, err := options.Resolver.ResolveNarration(narrationID, scriptVersionID, projectID)
@@ -195,8 +198,11 @@ func validateClipSource(clip map[string]any, projectID string, resolver Timeline
 		return errors.New("source is required")
 	}
 	typeName, _ := source["type"].(string)
-	if resolver == nil {
+	if typeName == "generated" || typeName == "none" {
 		return nil
+	}
+	if resolver == nil {
+		return errors.New("durable source reference resolver is required")
 	}
 	switch typeName {
 	case "asset":
@@ -216,8 +222,6 @@ func validateClipSource(clip map[string]any, projectID string, resolver Timeline
 		if err != nil || !committed {
 			return errors.New("artifact is not committed or not owned by the project")
 		}
-	case "generated", "none":
-		return nil
 	default:
 		return fmt.Errorf("unsupported source type %q", typeName)
 	}

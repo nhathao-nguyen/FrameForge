@@ -6,6 +6,19 @@ owner: repository owner / task assignee
 
 # Memory changelog
 
+## 2026-08-17 — Gate C+D specification repair before Gate E
+
+- Added deterministic media validation fixtures for malformed containers, invalid ffprobe output/
+  streams, pathological stream/output limits and probe timeout classification; rejected results never
+  become `Validated`.
+- Connected Timeline create/version/approval/lock/validate/render paths to fail-closed durable
+  Asset/Artifact/Scene/Narration resolution with Workspace/Project/state checks.
+- Added RenderProfile draft lifecycle service, active immutability/lifecycle migration guard and exact
+  profile snapshot lookup; Render creation no longer auto-creates profiles.
+- Reinstalled the pinned Rust 1.97.1 toolchain with cargo/rustfmt/clippy and installed Docker Desktop
+  4.87.0 per-user with WSL2; full canonical verification, 0008 migration repeat/app-role denial and
+  live private MinIO conformance now pass. T300/Gate E execution was not started.
+
 ## 2026-08-17 — T002/T003 pre-code bootstrap evidence
 
 - Pinned the validated Windows baseline with `.go-version`, `.python-version`, `.node-version`,

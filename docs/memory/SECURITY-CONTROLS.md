@@ -11,7 +11,7 @@ All controls are specified; implementation evidence is pending.
 | Control | Required behavior | Evidence/status |
 |---|---|---|
 | Upstream independence | normal build/test/runtime/deploy succeeds with no upstream checkout/package/image | T004 spec pass; T108 runtime gate pending |
-| Upload quarantine | staged bytes are checksum/MIME/magic/probe/scan validated before ready | T224/T600 pending |
+| Upload quarantine | staged bytes are checksum/MIME/magic/probe/scan validated before ready | T224 deterministic probe/quarantine corpus pass; worker scan/orchestration remains T300/T600 |
 | Direct upload | clients use short-lived scoped upload URLs; API does not proxy large media | T223 pending |
 | Path/symlink guards | normalize/contain paths and reject traversal/archive escapes | T224/T600 pending |
 | Sandbox | non-root, read-only, isolated workspace with CPU/RAM/PID/disk/time bounds | T313/T600 pending |

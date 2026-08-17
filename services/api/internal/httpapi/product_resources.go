@@ -504,7 +504,7 @@ func (s *Server) validateTimeline(w http.ResponseWriter, r *http.Request) {
 		s.storeError(w, r, err)
 		return
 	}
-	hash, validationErr := domain.ValidateTimeline(value.Document, domain.TimelineValidationOptions{})
+	hash, validationErr := s.Product.ValidateTimeline(principal.WorkspaceID, r.PathValue("project_id"), value.ID)
 	report := map[string]any{"valid": validationErr == nil, "content_hash": hash}
 	if validationErr != nil {
 		report["error"] = "timeline validation failed"
