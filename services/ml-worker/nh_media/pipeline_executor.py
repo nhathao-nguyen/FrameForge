@@ -56,22 +56,137 @@ from .gate_g import (
     transcribe_segments,
     translate_subtitles,
 )
+from .providers.contracts import ProviderDescriptor, ProviderError, ProviderRegistry
+from .providers.resolver import CircuitBreakerPolicy, ProviderResolver, RetryPolicy
 
 
 AI_NODES = {"research_metadata", "generate_script", "generate_narration", "analyze_scenes", "coverage_feedback", "translate_subtitles"}
 ML_NODES = {"align_audio", "detect_scenes", "extract_transcript", "detect_characters", "embed_media", "generate_match_candidates"}
 SYSTEM_NODES = {"review_script", "evaluate_candidates", "select_candidate", "generate_subtitle", "build_timeline", "review_timeline", "run_qa_gate"}
 
+_DEFAULT_PROVIDER_KEYS = {
+    ProviderKind.LLM: ("fake-llm",),
+    ProviderKind.VLM: ("fake-vlm",),
+    ProviderKind.TTS: ("fake-tts",),
+    ProviderKind.ASR: ("fake-asr",),
+    ProviderKind.EMBEDDING: ("fake-embedding",),
+}
 
-def execute_gate_g_node(command: dict[str, Any], artifacts: ArtifactIO) -> list[dict[str, Any]]:
+
+class _ResolverProvider:
+    """Typed provider facade that forces every call through ProviderResolver."""
+
+    def __init__(self, runtime: "GateGProviderRuntime", kind: ProviderKind) -> None:
+        self._runtime = runtime
+        self._kind = kind
+        self.descriptor = ProviderDescriptor(
+            f"resolver-{kind.value}", kind, "runtime-v1", ("resolver",), ("resolved",), "local"
+        )
+
+    def complete(self, context: ProviderCallContext, request: Any) -> Any:
+        return self._runtime.resolve(self._kind, request, context)
+
+    def analyze(self, context: ProviderCallContext, request: Any) -> Any:
+        return self._runtime.resolve(self._kind, request, context)
+
+    def synthesize(self, context: ProviderCallContext, request: Any) -> Any:
+        return self._runtime.resolve(self._kind, request, context)
+
+    def transcribe(self, context: ProviderCallContext, request: Any) -> Any:
+        return self._runtime.resolve(self._kind, request, context)
+
+    def embed(self, context: ProviderCallContext, request: Any) -> Any:
+        return self._runtime.resolve(self._kind, request, context)
+
+
+class GateGProviderRuntime:
+    """Local/test provider binding with the same registry/resolver path as production."""
+
+    def __init__(
+        self,
+        providers: tuple[Any, ...] | None = None,
+        *,
+        adapter_keys: dict[ProviderKind, tuple[str, ...]] | None = None,
+        configuration_id: str = "config_local_gate_g",
+        configuration_revision: int = 1,
+        retry_policy: RetryPolicy = RetryPolicy(),
+        circuit_policy: CircuitBreakerPolicy = CircuitBreakerPolicy(),
+        sleep: Any | None = None,
+        clock: Any | None = None,
+        random_value: Any | None = None,
+    ) -> None:
+        if not configuration_id or configuration_revision < 1:
+            raise ValueError("provider configuration snapshot is invalid")
+        self.configuration_id = configuration_id
+        self.configuration_revision = configuration_revision
+        self.adapter_keys = dict(adapter_keys or _DEFAULT_PROVIDER_KEYS)
+        selected = providers if providers is not None else tuple(
+            FakeProvider(kind, adapter_key) for kind, keys in self.adapter_keys.items() for adapter_key in keys if adapter_key.startswith("fake-")
+        )
+        self.registry = ProviderRegistry(selected)
+        resolver_kwargs: dict[str, Any] = {"retry_policy": retry_policy, "circuit_policy": circuit_policy}
+        if sleep is not None:
+            resolver_kwargs["sleep"] = sleep
+        if clock is not None:
+            resolver_kwargs["clock"] = clock
+        if random_value is not None:
+            resolver_kwargs["random_value"] = random_value
+        self.resolver = ProviderResolver(self.registry, **resolver_kwargs)
+        self._facades = {kind: _ResolverProvider(self, kind) for kind in ProviderKind}
+
+    @classmethod
+    def from_command(cls, command: dict[str, Any]) -> "GateGProviderRuntime":
+        policy_value = command.get("provider_policy")
+        if policy_value is None and isinstance(command.get("config"), dict):
+            policy_value = command["config"].get("provider_policy")
+        policy = dict(policy_value or {})
+        _reject_secret_policy_fields(policy)
+        raw_keys = policy.get("adapter_keys", _DEFAULT_PROVIDER_KEYS)
+        adapter_keys: dict[ProviderKind, tuple[str, ...]] = {}
+        if not isinstance(raw_keys, dict):
+            raise ValueError("provider adapter binding snapshot is invalid")
+        for kind in ProviderKind:
+            values = raw_keys.get(kind.value, _DEFAULT_PROVIDER_KEYS[kind])
+            if not isinstance(values, (list, tuple)) or not values or any(not isinstance(value, str) or not value or any(char.isspace() for char in value) for value in values):
+                raise ValueError("provider adapter fallback chain is invalid")
+            adapter_keys[kind] = tuple(values)
+        retry_value = dict(policy.get("retry", {}))
+        circuit_value = dict(policy.get("circuit", {}))
+        retry = RetryPolicy(**{key: retry_value[key] for key in ("max_attempts", "base_delay_sec", "max_delay_sec", "jitter_ratio") if key in retry_value})
+        circuit = CircuitBreakerPolicy(**{key: circuit_value[key] for key in ("failure_threshold", "recovery_timeout_sec") if key in circuit_value})
+        return cls(
+            adapter_keys=adapter_keys,
+            configuration_id=str(policy.get("configuration_id", "config_local_gate_g")),
+            configuration_revision=int(policy.get("configuration_revision", 1)),
+            retry_policy=retry,
+            circuit_policy=circuit,
+        )
+
+    def provider(self, kind: ProviderKind) -> Any:
+        return self._facades[kind]
+
+    def resolve(self, kind: ProviderKind, request: Any, context: ProviderCallContext) -> Any:
+        if context.provider_configuration_id != self.configuration_id or context.configuration_revision != self.configuration_revision:
+            raise ProviderError("invalid_request", "resolver", safe_message="Provider binding snapshot does not match the call context.")
+        return self.resolver.resolve(kind, self.adapter_keys[kind], request, context)
+
+
+def _reject_secret_policy_fields(value: dict[str, Any]) -> None:
+    forbidden = ("secret", "token", "password", "api_key", "authorization", "credential")
+    if any(any(word in str(key).lower() for word in forbidden) for key in value):
+        raise ValueError("provider policy contains a forbidden credential field")
+
+
+def execute_gate_g_node(command: dict[str, Any], artifacts: ArtifactIO, provider_runtime: GateGProviderRuntime | None = None) -> list[dict[str, Any]]:
     node = str(command["node_key"])
     capability = str(command["capability"])
     expected = "ai" if node in AI_NODES else "ml" if node in ML_NODES else "system" if node in SYSTEM_NODES else ""
     if expected != capability:
         raise ValueError("node is not enabled for this Python worker capability")
     state = _load_state(command, artifacts)
-    context = _provider_context(command)
-    llm = FakeProvider(ProviderKind.LLM)
+    runtime = provider_runtime or GateGProviderRuntime.from_command(command)
+    context = _provider_context(command, runtime)
+    llm = runtime.provider(ProviderKind.LLM)
     if node == "research_metadata":
         research = research_analysis("Create a concise movie recap.", tuple(ref["artifact_id"] for ref in command["input_refs"]), llm, context)
         return [_json_output(command, artifacts, "research_metadata", {"research": asdict(research)})]
@@ -85,7 +200,7 @@ def execute_gate_g_node(command: dict[str, Any], artifacts: ArtifactIO) -> list[
     if node == "generate_narration":
         script = _script(state["script"])
         store = MemoryArtifactStore()
-        narration = synthesize_narration(script, FakeProvider(ProviderKind.TTS), context, store, VoiceSnapshot("config_local_tts", 1, "fake-tts", "fake-v1", "voice-local", script.language))
+        narration = synthesize_narration(script, runtime.provider(ProviderKind.TTS), context, store, VoiceSnapshot(runtime.configuration_id, runtime.configuration_revision, "fake-tts", "fake-v1", "voice-local", script.language))
         audio = store.read(narration.audio_artifact.artifact_id)
         audio_ref = artifacts.stage(command, "audio", "narration_audio", audio, "audio/wav")
         manifest = asdict(narration)
@@ -94,12 +209,12 @@ def execute_gate_g_node(command: dict[str, Any], artifacts: ArtifactIO) -> list[
     if node == "align_audio":
         script = _script(state["script"])
         narration = _narration(state["narration"], _required_ref(command, "narration_audio"))
-        transcript = transcribe_segments(script.text, narration.duration_sec, FakeProvider(ProviderKind.ASR), context, audio_artifact_ref=narration.audio_artifact.artifact_id)
+        transcript = transcribe_segments(script.text, narration.duration_sec, runtime.provider(ProviderKind.ASR), context, audio_artifact_ref=narration.audio_artifact.artifact_id)
         alignment = align_audio(script, narration, transcript, tolerance_sec=0.75)
         return [_json_output(command, artifacts, "timing_alignment", {"alignment": asdict(alignment), "transcript": asdict(transcript)})]
     if node == "extract_transcript":
         source_audio = _required_ref(command, "prepared_audio")
-        transcript = transcribe_segments("Source dialogue.", 1.0, FakeProvider(ProviderKind.ASR), context, audio_artifact_ref=source_audio["artifact_id"])
+        transcript = transcribe_segments("Source dialogue.", 1.0, runtime.provider(ProviderKind.ASR), context, audio_artifact_ref=source_audio["artifact_id"])
         return [_json_output(command, artifacts, "transcript", {"source_transcript": asdict(transcript)})]
     if node == "detect_scenes":
         source = _required_ref(command, "prepared_video")
@@ -121,7 +236,7 @@ def execute_gate_g_node(command: dict[str, Any], artifacts: ArtifactIO) -> list[
     if node == "analyze_scenes":
         scenes = tuple(_scene(item) for item in state["scenes"])
         features = tuple(_features(item) for item in state["scene_features"])
-        scene_analyses = analyze_scenes(scenes, features, FakeProvider(ProviderKind.VLM), context)
+        scene_analyses = analyze_scenes(scenes, features, runtime.provider(ProviderKind.VLM), context)
         return [_json_output(command, artifacts, "scene_analysis", {"scene_analyses": [asdict(item) for item in scene_analyses]})]
     if node == "detect_characters":
         features = tuple(_features(item) for item in state["scene_features"])
@@ -133,7 +248,7 @@ def execute_gate_g_node(command: dict[str, Any], artifacts: ArtifactIO) -> list[
         analyses = tuple(_analysis(item) for item in state["scene_analyses"])
         items = [(segment.segment_id, segment.text, "text") for segment in script.segments]
         items.extend((analysis.scene_id, analysis.text or analysis.scene_id, "image") for analysis in analyses)
-        index = build_embedding_index(tuple(items), FakeProvider(ProviderKind.EMBEDDING), context, "fake-v1", dimension=16)
+        index = build_embedding_index(tuple(items), runtime.provider(ProviderKind.EMBEDDING), context, "fake-v1", dimension=16)
         return [_json_output(command, artifacts, "media_embeddings", {"embedding_index": asdict(index)})]
     if node == "generate_match_candidates":
         script = _script(state["script"])
@@ -188,8 +303,16 @@ def execute_gate_g_node(command: dict[str, Any], artifacts: ArtifactIO) -> list[
     raise ValueError("unsupported Gate G Python node")
 
 
-def _provider_context(command: dict[str, Any]) -> ProviderCallContext:
-    return ProviderCallContext(command["message_id"], command["job_id"], command["project_id"], command["job_id"], command["job_step_id"], "config_local_gate_g", 1, timeout_sec=120, privacy_policy="local_only")
+def _provider_context(command: dict[str, Any], runtime: GateGProviderRuntime) -> ProviderCallContext:
+    policy_value = command.get("provider_policy")
+    if policy_value is None and isinstance(command.get("config"), dict):
+        policy_value = command["config"].get("provider_policy")
+    policy = dict(policy_value or {})
+    timeout_sec = float(policy.get("timeout_sec", 120))
+    privacy_policy = str(policy.get("privacy_policy", "local_only"))
+    if privacy_policy not in {"local_only", "workspace_private"}:
+        raise ValueError("provider privacy policy is invalid")
+    return ProviderCallContext(command["message_id"], command["job_id"], command["project_id"], command["job_id"], command["job_step_id"], runtime.configuration_id, runtime.configuration_revision, timeout_sec=timeout_sec, privacy_policy=privacy_policy)
 
 
 def _load_state(command: dict[str, Any], artifacts: ArtifactIO) -> dict[str, Any]:
@@ -326,4 +449,4 @@ def _domain_id(value: str, prefix: str) -> str:
     return "-".join(parts)
 
 
-__all__ = ["AI_NODES", "ML_NODES", "SYSTEM_NODES", "execute_gate_g_node"]
+__all__ = ["AI_NODES", "GateGProviderRuntime", "ML_NODES", "SYSTEM_NODES", "execute_gate_g_node"]

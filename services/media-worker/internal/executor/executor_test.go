@@ -6,7 +6,22 @@ import (
 	"testing"
 
 	"github.com/nhathao-nguyen/NH-Media/packages/shared-contracts/go/worker"
+	"github.com/nhathao-nguyen/NH-Media/services/media-worker/internal/render"
 )
+
+func TestAutomaticClipRangeSkipsRejectedLeadingContent(t *testing.T) {
+	qa := render.QAReport{
+		DurationSec:   3,
+		BlackSegments: []render.MediaSegment{{StartSec: 0, EndSec: 0.96}},
+	}
+	start, end, err := automaticClipRange(qa)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if start != 0.96 || end != 1.96 {
+		t.Fatalf("automatic clip range=%v-%v, want 0.96-1.96", start, end)
+	}
+}
 
 func TestFailureResultClassifiesRetryBoundary(t *testing.T) {
 	t.Parallel()

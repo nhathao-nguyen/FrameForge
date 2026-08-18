@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 from nh_media.gate_g import (
     AudioMixPolicy,
     BGMTrack,
@@ -12,6 +14,7 @@ from nh_media.gate_g import (
     ProviderKind,
     ProviderRegistry,
     ScriptStyle,
+    SubjectTrack,
     analyze_reference_style,
     analyze_scenes,
     artifact_manifest,
@@ -144,3 +147,19 @@ def test_native_gate_g_workflow_is_traceable_and_reusable() -> None:
     assert auto_reframe("shorts_9_16", alignment.artifact_fingerprint, ((0.2, 0.2, 0.2, 0.4),)).mode == "subject_aware"
     manifest = artifact_manifest(tuple(blob for blob in store._blobs.values()))
     assert manifest["schema_version"] == "artifact-manifest/v1"
+
+
+def test_subject_aware_reframe_is_typed_deterministic_and_coordinate_sensitive() -> None:
+    left = SubjectTrack("subject-left", "source-v1", ((0.0, 0.05, 0.2, 0.1, 0.3),))
+    right = SubjectTrack("subject-right", "source-v1", ((0.0, 0.85, 0.2, 0.1, 0.3),))
+    first = auto_reframe("shorts_9_16", "timeline-profile-input", subject_tracks=(left,))
+    same = auto_reframe("shorts_9_16", "timeline-profile-input", subject_tracks=(left,))
+    other = auto_reframe("shorts_9_16", "timeline-profile-input", subject_tracks=(right,))
+    assert first.mode == "subject_aware"
+    assert first.plan_fingerprint == same.plan_fingerprint
+    assert first.plan_fingerprint != other.plan_fingerprint
+    assert first.subject_centers[0][0] < 0.5 < other.subject_centers[0][0]
+    with pytest.raises(ValueError, match="coordinates"):
+        auto_reframe("shorts_9_16", "timeline-profile-input", subject_tracks=(SubjectTrack("bad", "source-v1", ((0.0, 0.9, 0.9, 0.2, 0.1),)),))
+    with pytest.raises(ValueError, match="source revision"):
+        auto_reframe("shorts_9_16", "timeline-profile-input", subject_tracks=(left, SubjectTrack("other", "source-v2", ((0.0, 0.2, 0.2, 0.1, 0.1),))))

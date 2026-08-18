@@ -7,6 +7,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -256,7 +257,7 @@ func (e *Executor) validateDeliverable(ctx context.Context, command worker.Comma
 	if err != nil {
 		return nil, transferError(err)
 	}
-	report, err := render.Inspect(ctx, path, e.policy(root))
+	report, err := render.InspectWithRequirements(ctx, path, e.policy(root), true)
 	if err != nil || !report.Passed || !report.HasVideo || !report.HasAudio {
 		return nil, errors.New("deliverable QA failed")
 	}
@@ -276,7 +277,7 @@ func (e *Executor) exportClips(ctx context.Context, command worker.Command, root
 	if err != nil {
 		return nil, transferError(err)
 	}
-	qa, err := render.Inspect(ctx, source, e.policy(root))
+	qa, err := render.InspectWithRequirements(ctx, source, e.policy(root), true)
 	if err != nil || !qa.Passed {
 		return nil, errors.New("clip source QA failed")
 	}
@@ -285,9 +286,12 @@ func (e *Executor) exportClips(ctx context.Context, command worker.Command, root
 		return nil, err
 	}
 	outputPath := filepath.Join(root, "clip.mp4")
-	end := math.Min(qa.DurationSec, 1.0)
+	start, end, err := automaticClipRange(qa)
+	if err != nil {
+		return nil, err
+	}
 	manifest, err := render.ExportClips(ctx, []render.ClipExportRequest{{
-		SelectionID: "automatic_clip_001", SourcePath: source, StartSec: 0, EndSec: end,
+		SelectionID: "automatic_clip_001", SourcePath: source, StartSec: start, EndSec: end,
 		OutputPath: outputPath, Profile: profile,
 	}}, e.policy(root))
 	if err != nil {
@@ -299,6 +303,40 @@ func (e *Executor) exportClips(ctx context.Context, command worker.Command, root
 	}
 	manifestRef, err := e.artifacts.stageJSON(ctx, command, "clip_manifest", "clip_manifest", manifest, root)
 	return []worker.OutputRef{clip, manifestRef}, err
+}
+
+func automaticClipRange(qa render.QAReport) (float64, float64, error) {
+	if qa.DurationSec <= 0 {
+		return 0, 0, errors.New("clip source duration is invalid")
+	}
+	duration := math.Min(qa.DurationSec, 1.0)
+	maxStart := math.Max(0, qa.DurationSec-duration)
+	candidates := []float64{0}
+	for _, segment := range append(append([]render.MediaSegment{}, qa.BlackSegments...), qa.SilenceSegments...) {
+		if segment.EndSec > 0 && segment.EndSec <= maxStart+0.001 {
+			candidates = append(candidates, segment.EndSec)
+		}
+	}
+	sort.Float64s(candidates)
+	for index, start := range candidates {
+		if index > 0 && math.Abs(start-candidates[index-1]) <= 0.001 {
+			continue
+		}
+		end := math.Min(start+duration, qa.DurationSec)
+		if !clipOverlapsRejectedContent(start, end, qa.BlackSegments) && !clipOverlapsRejectedContent(start, end, qa.SilenceSegments) {
+			return start, end, nil
+		}
+	}
+	return 0, 0, errors.New("no QA-safe automatic clip range is available")
+}
+
+func clipOverlapsRejectedContent(start, end float64, segments []render.MediaSegment) bool {
+	for _, segment := range segments {
+		if segment.StartSec < end-0.001 && segment.EndSec > start+0.001 {
+			return true
+		}
+	}
+	return false
 }
 
 func (e *Executor) policy(root string) process.Policy {

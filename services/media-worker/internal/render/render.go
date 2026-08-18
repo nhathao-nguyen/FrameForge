@@ -15,6 +15,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -52,12 +53,13 @@ func DefaultProfile(key string) (RenderProfile, error) {
 }
 
 type CompileInput struct {
-	TimelineDocument []byte
-	Profile          RenderProfile
-	ArtifactPaths    map[string]string
-	OutputPath       string
-	SubjectTracks    []SubjectTrack
-	SubtitleFiles    map[string]string
+	TimelineDocument      []byte
+	Profile               RenderProfile
+	ArtifactPaths         map[string]string
+	OutputPath            string
+	SubjectTracks         []SubjectTrack
+	SubjectSourceRevision string
+	SubtitleFiles         map[string]string
 }
 
 type SubjectTrack struct {
@@ -75,17 +77,20 @@ type SubjectPoint struct {
 }
 
 type Plan struct {
-	Args                []string
-	InputPaths          []string
-	OutputPaths         []string
-	OutputPath          string
-	SourceFingerprint   string
-	PlanFingerprint     string
-	ProfileSnapshot     RenderProfile
-	ExpectedDurationSec float64
-	ProviderCallCount   int
-	RematchingPerformed bool
-	RequiresAudio       bool
+	Args                    []string
+	InputPaths              []string
+	OutputPaths             []string
+	OutputPath              string
+	SourceFingerprint       string
+	PlanFingerprint         string
+	ProfileSnapshot         RenderProfile
+	ExpectedDurationSec     float64
+	ProviderCallCount       int
+	RematchingPerformed     bool
+	RequiresAudio           bool
+	SubjectReframeMode      string
+	SubjectTrackIDs         []string
+	SubjectTrackFingerprint string
 }
 
 type RenderResult struct {
@@ -149,15 +154,66 @@ type ArtifactCommitter interface {
 }
 
 type QAReport struct {
-	Passed      bool
-	Errors      []string
-	DurationSec float64
-	Width       int
-	Height      int
-	HasVideo    bool
-	HasAudio    bool
-	VideoCodec  string
-	AudioCodec  string
+	Passed             bool               `json:"passed"`
+	Errors             []string           `json:"errors"`
+	DurationSec        float64            `json:"duration_sec"`
+	Width              int                `json:"width"`
+	Height             int                `json:"height"`
+	HasVideo           bool               `json:"has_video"`
+	HasAudio           bool               `json:"has_audio"`
+	VideoCodec         string             `json:"video_codec"`
+	AudioCodec         string             `json:"audio_codec"`
+	BlackDetected      bool               `json:"black_detected"`
+	BlackDurationSec   float64            `json:"black_duration_sec"`
+	BlackRatio         float64            `json:"black_ratio"`
+	BlackSegments      []MediaSegment     `json:"black_segments"`
+	BlackPolicy        BlackContentPolicy `json:"black_policy"`
+	SilenceDetected    bool               `json:"silence_detected"`
+	SilenceDurationSec float64            `json:"silence_duration_sec"`
+	SilenceRatio       float64            `json:"silence_ratio"`
+	SilenceSegments    []MediaSegment     `json:"silence_segments"`
+	SilencePolicy      SilencePolicy      `json:"silence_policy"`
+}
+
+type MediaSegment struct {
+	StartSec    float64 `json:"start_sec"`
+	EndSec      float64 `json:"end_sec"`
+	DurationSec float64 `json:"duration_sec"`
+}
+
+type BlackContentPolicy struct {
+	MinimumSegmentSec    float64 `json:"minimum_segment_sec"`
+	PixelThreshold       float64 `json:"pixel_threshold"`
+	MaximumRatio         float64 `json:"maximum_ratio"`
+	MaximumContinuousSec float64 `json:"maximum_continuous_sec"`
+}
+
+type SilencePolicy struct {
+	NoiseThresholdDB     float64 `json:"noise_threshold_db"`
+	MinimumSegmentSec    float64 `json:"minimum_segment_sec"`
+	MaximumRatio         float64 `json:"maximum_ratio"`
+	MaximumContinuousSec float64 `json:"maximum_continuous_sec"`
+}
+
+var defaultBlackContentPolicy = BlackContentPolicy{
+	MinimumSegmentSec:    0.15,
+	PixelThreshold:       0.10,
+	MaximumRatio:         0.35,
+	MaximumContinuousSec: 1.25,
+}
+
+var defaultSilencePolicy = SilencePolicy{
+	NoiseThresholdDB:     -50,
+	MinimumSegmentSec:    0.15,
+	MaximumRatio:         0.75,
+	MaximumContinuousSec: 0.75,
+}
+
+type subjectReframePlan struct {
+	CenterX     float64
+	CenterY     float64
+	TrackIDs    []string
+	Fingerprint string
 }
 
 type timelineDocument struct {
@@ -264,14 +320,12 @@ func Compile(input CompileInput) (Plan, error) {
 	if document.SchemaVersion != "1.0" || document.TimelineID == "" || document.TimelineVersionID == "" || document.ProjectID == "" || document.Version < 1 || document.DurationSec <= 0 || len(document.Tracks) == 0 {
 		return Plan{}, errors.New("timeline document does not satisfy the renderer contract")
 	}
+	var subjectReframe *subjectReframePlan
 	if input.Profile.AutoReframe {
-		if len(input.SubjectTracks) == 0 {
-			return Plan{}, errors.New("subject-aware reframe requires typed subject tracks")
-		}
-		for _, track := range input.SubjectTracks {
-			if track.ID == "" || track.SourceRevision == "" || len(track.Points) == 0 {
-				return Plan{}, errors.New("subject-aware reframe subject track is incomplete")
-			}
+		var err error
+		subjectReframe, err = buildSubjectReframePlan(input.SubjectTracks, input.SubjectSourceRevision, document.DurationSec)
+		if err != nil {
+			return Plan{}, err
 		}
 	}
 	videoClips := make([]timelineClip, 0)
@@ -373,7 +427,7 @@ func Compile(input CompileInput) (Plan, error) {
 			return Plan{}, errors.New("subtitle scratch path is invalid")
 		}
 	}
-	graph, videoLabel, audioLabel, err := compileFilterGraph(document, videoClips, inputIndex, input.Profile, input.SubtitleFiles)
+	graph, videoLabel, audioLabel, err := compileFilterGraph(document, videoClips, inputIndex, input.Profile, input.SubtitleFiles, subjectReframe)
 	if err != nil {
 		return Plan{}, err
 	}
@@ -395,14 +449,21 @@ func Compile(input CompileInput) (Plan, error) {
 	// create a new plan/output but must reuse every upstream AI/media Artifact.
 	sourceFingerprint := sha256JSON(canonicalJSON(input.TimelineDocument))
 	planFingerprint := sha256JSON(struct {
-		Source  string
-		Profile RenderProfile
-		Args    []string
-	}{Source: sourceFingerprint, Profile: input.Profile, Args: args})
-	return Plan{Args: args, InputPaths: inputPaths, OutputPaths: outputPaths, OutputPath: input.OutputPath, SourceFingerprint: sourceFingerprint, PlanFingerprint: planFingerprint, ProfileSnapshot: input.Profile, ExpectedDurationSec: expectedDuration, RequiresAudio: requiresAudio || audioLabel != ""}, nil
+		Source             string
+		Profile            RenderProfile
+		Args               []string
+		SubjectFingerprint string
+	}{Source: sourceFingerprint, Profile: input.Profile, Args: args, SubjectFingerprint: subjectFingerprint(subjectReframe)})
+	plan := Plan{Args: args, InputPaths: inputPaths, OutputPaths: outputPaths, OutputPath: input.OutputPath, SourceFingerprint: sourceFingerprint, PlanFingerprint: planFingerprint, ProfileSnapshot: input.Profile, ExpectedDurationSec: expectedDuration, RequiresAudio: requiresAudio || audioLabel != ""}
+	if subjectReframe != nil {
+		plan.SubjectReframeMode = "subject_aware"
+		plan.SubjectTrackIDs = append([]string(nil), subjectReframe.TrackIDs...)
+		plan.SubjectTrackFingerprint = subjectReframe.Fingerprint
+	}
+	return plan, nil
 }
 
-func compileFilterGraph(document timelineDocument, videoClips []timelineClip, inputIndex map[string]int, profile RenderProfile, subtitleFiles map[string]string) (string, string, string, error) {
+func compileFilterGraph(document timelineDocument, videoClips []timelineClip, inputIndex map[string]int, profile RenderProfile, subtitleFiles map[string]string, subjectReframe *subjectReframePlan) (string, string, string, error) {
 	parts := make([]string, 0, len(videoClips)*2)
 	videoLabels := make([]string, 0, len(videoClips))
 	audioLabels := make([]string, 0, len(videoClips))
@@ -419,7 +480,7 @@ func compileFilterGraph(document timelineDocument, videoClips []timelineClip, in
 			trimDuration = *clip.SourceOut - *clip.SourceIn
 		}
 		trim := fmt.Sprintf("trim=start=%s:duration=%s", formatSeconds(sourceIn(clip)), formatSeconds(trimDuration))
-		videoFilter := fmt.Sprintf("[%d:v]%s,setpts=PTS-STARTPTS,setpts=PTS/%s,%s", inputNumber, trim, formatSeconds(speed), scaleFilter(profile))
+		videoFilter := fmt.Sprintf("[%d:v]%s,setpts=PTS-STARTPTS,setpts=PTS/%s,%s", inputNumber, trim, formatSeconds(speed), scaleFilter(profile, subjectReframe))
 		if transition := clip.TransitionIn; transition != nil && transition.Kind == "fade" {
 			videoFilter += fmt.Sprintf(",fade=t=in:st=0:d=%s", formatSeconds(transition.Duration))
 		}
@@ -610,7 +671,7 @@ func Render(ctx context.Context, input CompileInput, policy process.Policy) (Ren
 		}
 		return RenderResult{}, err
 	}
-	qa, err := Inspect(ctx, plan.OutputPath, policy)
+	qa, err := InspectWithRequirements(ctx, plan.OutputPath, policy, plan.RequiresAudio)
 	if err != nil {
 		return RenderResult{}, err
 	}
@@ -687,7 +748,7 @@ func ExportClips(ctx context.Context, requests []ClipExportRequest, policy proce
 			"-hide_banner", "-loglevel", "error", "-y",
 			"-ss", formatSeconds(request.StartSec), "-i", request.SourcePath,
 			"-t", formatSeconds(request.EndSec - request.StartSec),
-			"-vf", scaleFilter(request.Profile), "-map", "0:v:0", "-map", "0:a?",
+			"-vf", scaleFilter(request.Profile, nil), "-map", "0:v:0", "-map", "0:a?",
 			"-c:v", request.Profile.VideoCodec, "-pix_fmt", request.Profile.PixelFormat,
 			"-c:a", request.Profile.AudioCodec, "-movflags", "+faststart", request.OutputPath,
 		}
@@ -748,6 +809,11 @@ func RenderAndCommit(ctx context.Context, input CompileInput, policy process.Pol
 }
 
 func Inspect(ctx context.Context, path string, policy process.Policy) (QAReport, error) {
+	return InspectWithRequirements(ctx, path, policy, false)
+}
+
+func InspectWithRequirements(ctx context.Context, path string, policy process.Policy, requireAudio bool) (QAReport, error) {
+	baseQA := QAReport{BlackPolicy: defaultBlackContentPolicy, SilencePolicy: defaultSilencePolicy}
 	if strings.TrimSpace(path) == "" {
 		return QAReport{}, errors.New("deliverable path is required")
 	}
@@ -756,7 +822,8 @@ func Inspect(ctx context.Context, path string, policy process.Policy) (QAReport,
 		return QAReport{}, fmt.Errorf("deliverable file is not readable: %w", err)
 	}
 	if stat.Size() <= 0 {
-		return QAReport{Errors: []string{"deliverable_empty"}}, nil
+		baseQA.Errors = []string{"deliverable_empty"}
+		return baseQA, nil
 	}
 	result, err := policy.Run(ctx, process.Spec{Tool: process.ToolFFprobe, Args: []string{"-v", "error", "-show_entries", "format=duration:stream=codec_type,codec_name,width,height", "-of", "json", path}, InputPaths: []string{path}, Timeout: policy.MaxDuration})
 	if err != nil {
@@ -778,9 +845,10 @@ func Inspect(ctx context.Context, path string, policy process.Policy) (QAReport,
 	}
 	duration, err := strconv.ParseFloat(probe.Format.Duration, 64)
 	if err != nil || duration <= 0 {
-		return QAReport{Errors: []string{"duration_missing_or_invalid"}}, nil
+		baseQA.Errors = []string{"duration_missing_or_invalid"}
+		return baseQA, nil
 	}
-	qa := QAReport{Passed: true, DurationSec: duration}
+	qa := QAReport{DurationSec: duration, BlackPolicy: defaultBlackContentPolicy, SilencePolicy: defaultSilencePolicy}
 	for _, stream := range probe.Streams {
 		switch stream.CodecType {
 		case "video":
@@ -797,11 +865,223 @@ func Inspect(ctx context.Context, path string, policy process.Policy) (QAReport,
 	if !qa.HasVideo {
 		qa.Errors = append(qa.Errors, "video_stream_missing")
 	}
+	if requireAudio && !qa.HasAudio {
+		qa.Errors = append(qa.Errors, "required_audio_stream_missing")
+	}
 	if qa.Width <= 0 || qa.Height <= 0 {
 		qa.Errors = append(qa.Errors, "video_dimensions_missing")
 	}
+	if qa.HasVideo {
+		segments, err := detectBlackSegments(ctx, path, policy, duration, qa.BlackPolicy)
+		if err != nil {
+			return QAReport{}, fmt.Errorf("black-content QA: %w", err)
+		}
+		qa.BlackSegments = segments
+		qa.BlackDetected = len(segments) > 0
+		for _, segment := range segments {
+			qa.BlackDurationSec += segment.DurationSec
+			if segment.DurationSec > qa.BlackPolicy.MaximumContinuousSec+0.001 {
+				qa.Errors = append(qa.Errors, "excessive_black_duration")
+			}
+		}
+		qa.BlackRatio = boundedRatio(qa.BlackDurationSec, duration)
+		if qa.BlackRatio > qa.BlackPolicy.MaximumRatio+0.001 {
+			qa.Errors = append(qa.Errors, "excessive_black_content")
+		}
+	}
+	if qa.HasAudio {
+		segments, err := detectSilenceSegments(ctx, path, policy, duration, qa.SilencePolicy)
+		if err != nil {
+			return QAReport{}, fmt.Errorf("silence QA: %w", err)
+		}
+		qa.SilenceSegments = segments
+		qa.SilenceDetected = len(segments) > 0
+		for _, segment := range segments {
+			qa.SilenceDurationSec += segment.DurationSec
+			if requireAudio && segment.DurationSec > qa.SilencePolicy.MaximumContinuousSec+0.001 {
+				qa.Errors = append(qa.Errors, "excessive_silence_duration")
+			}
+		}
+		qa.SilenceRatio = boundedRatio(qa.SilenceDurationSec, duration)
+		if requireAudio && qa.SilenceRatio > qa.SilencePolicy.MaximumRatio+0.001 {
+			qa.Errors = append(qa.Errors, "excessive_silence_content")
+		}
+	}
 	qa.Passed = len(qa.Errors) == 0
 	return qa, nil
+}
+
+func detectBlackSegments(ctx context.Context, path string, policy process.Policy, duration float64, blackPolicy BlackContentPolicy) ([]MediaSegment, error) {
+	result, err := policy.Run(ctx, process.Spec{
+		Tool:       process.ToolFFmpeg,
+		Args:       []string{"-hide_banner", "-loglevel", "info", "-i", path, "-vf", fmt.Sprintf("blackdetect=d=%s:pix_th=%s", formatSeconds(blackPolicy.MinimumSegmentSec), formatSeconds(blackPolicy.PixelThreshold)), "-an", "-f", "null", "-"},
+		InputPaths: []string{path},
+		Timeout:    policy.MaxDuration,
+	})
+	if err != nil {
+		return nil, err
+	}
+	segments := make([]MediaSegment, 0)
+	for _, line := range strings.Split(result.Diagnostic, "\n") {
+		start, end, ok := parseBlackSegment(line)
+		if !ok {
+			continue
+		}
+		segment, ok := normalizedSegment(start, end, duration, blackPolicy.MinimumSegmentSec)
+		if ok {
+			segments = append(segments, segment)
+		}
+	}
+	return mergeSegments(segments), nil
+}
+
+func detectSilenceSegments(ctx context.Context, path string, policy process.Policy, duration float64, silencePolicy SilencePolicy) ([]MediaSegment, error) {
+	result, err := policy.Run(ctx, process.Spec{
+		Tool:       process.ToolFFmpeg,
+		Args:       []string{"-hide_banner", "-loglevel", "info", "-i", path, "-af", fmt.Sprintf("silencedetect=noise=%sdB:d=%s", formatSeconds(silencePolicy.NoiseThresholdDB), formatSeconds(silencePolicy.MinimumSegmentSec)), "-vn", "-f", "null", "-"},
+		InputPaths: []string{path},
+		Timeout:    policy.MaxDuration,
+	})
+	if err != nil {
+		return nil, err
+	}
+	startPattern := regexp.MustCompile(`silence_start:\s*([0-9]+(?:\.[0-9]+)?)`)
+	endPattern := regexp.MustCompile(`silence_end:\s*([0-9]+(?:\.[0-9]+)?)`)
+	segments := make([]MediaSegment, 0)
+	var start *float64
+	for _, line := range strings.Split(result.Diagnostic, "\n") {
+		if match := startPattern.FindStringSubmatch(line); len(match) == 2 {
+			value, parseErr := strconv.ParseFloat(match[1], 64)
+			if parseErr == nil {
+				start = &value
+			}
+		}
+		if match := endPattern.FindStringSubmatch(line); len(match) == 2 && start != nil {
+			end, parseErr := strconv.ParseFloat(match[1], 64)
+			if parseErr == nil {
+				if segment, ok := normalizedSegment(*start, end, duration, silencePolicy.MinimumSegmentSec); ok {
+					segments = append(segments, segment)
+				}
+			}
+			start = nil
+		}
+	}
+	if start != nil {
+		if segment, ok := normalizedSegment(*start, duration, duration, silencePolicy.MinimumSegmentSec); ok {
+			segments = append(segments, segment)
+		}
+	}
+	return mergeSegments(segments), nil
+}
+
+func parseBlackSegment(line string) (float64, float64, bool) {
+	startPattern := regexp.MustCompile(`black_start:\s*([0-9]+(?:\.[0-9]+)?)`)
+	endPattern := regexp.MustCompile(`black_end:\s*([0-9]+(?:\.[0-9]+)?)`)
+	startMatch := startPattern.FindStringSubmatch(line)
+	endMatch := endPattern.FindStringSubmatch(line)
+	if len(startMatch) != 2 || len(endMatch) != 2 {
+		return 0, 0, false
+	}
+	start, startErr := strconv.ParseFloat(startMatch[1], 64)
+	end, endErr := strconv.ParseFloat(endMatch[1], 64)
+	return start, end, startErr == nil && endErr == nil
+}
+
+func normalizedSegment(start, end, duration, minimum float64) (MediaSegment, bool) {
+	if !finite(start) || !finite(end) || !finite(duration) || duration <= 0 {
+		return MediaSegment{}, false
+	}
+	start = math.Max(0, math.Min(start, duration))
+	end = math.Max(0, math.Min(end, duration))
+	if end <= start || end-start+0.001 < minimum {
+		return MediaSegment{}, false
+	}
+	return MediaSegment{StartSec: start, EndSec: end, DurationSec: end - start}, true
+}
+
+func mergeSegments(segments []MediaSegment) []MediaSegment {
+	if len(segments) < 2 {
+		return segments
+	}
+	sort.Slice(segments, func(left, right int) bool { return segments[left].StartSec < segments[right].StartSec })
+	merged := make([]MediaSegment, 0, len(segments))
+	for _, segment := range segments {
+		if len(merged) == 0 || segment.StartSec > merged[len(merged)-1].EndSec+0.001 {
+			merged = append(merged, segment)
+			continue
+		}
+		last := &merged[len(merged)-1]
+		last.EndSec = math.Max(last.EndSec, segment.EndSec)
+		last.DurationSec = last.EndSec - last.StartSec
+	}
+	return merged
+}
+
+func boundedRatio(value, duration float64) float64 {
+	if duration <= 0 {
+		return 0
+	}
+	return math.Max(0, math.Min(1, value/duration))
+}
+
+func buildSubjectReframePlan(tracks []SubjectTrack, expectedSourceRevision string, timelineDuration float64) (*subjectReframePlan, error) {
+	if len(tracks) == 0 {
+		return nil, errors.New("subject-aware reframe requires typed subject tracks")
+	}
+	seen := make(map[string]struct{}, len(tracks))
+	sourceRevision := ""
+	centerX, centerY := 0.0, 0.0
+	pointCount := 0
+	trackIDs := make([]string, 0, len(tracks))
+	for _, track := range tracks {
+		if track.ID == "" || track.SourceRevision == "" || len(track.Points) == 0 {
+			return nil, errors.New("subject-aware reframe subject track is incomplete")
+		}
+		if _, exists := seen[track.ID]; exists {
+			return nil, errors.New("subject-aware reframe subject track IDs must be unique")
+		}
+		seen[track.ID] = struct{}{}
+		if sourceRevision == "" {
+			sourceRevision = track.SourceRevision
+		}
+		if track.SourceRevision != sourceRevision || (expectedSourceRevision != "" && track.SourceRevision != expectedSourceRevision) {
+			return nil, errors.New("subject-aware reframe source revision mismatch")
+		}
+		previousTime := -1.0
+		for _, point := range track.Points {
+			values := []float64{point.TimeSec, point.X, point.Y, point.Width, point.Height}
+			for _, value := range values {
+				if !finite(value) {
+					return nil, errors.New("subject-aware reframe point contains a non-finite value")
+				}
+			}
+			if point.TimeSec < 0 || point.TimeSec > timelineDuration+0.001 || point.TimeSec < previousTime-0.001 || point.Width <= 0 || point.Height <= 0 || point.X < 0 || point.Y < 0 || point.X+point.Width > 1.000001 || point.Y+point.Height > 1.000001 {
+				return nil, errors.New("subject-aware reframe point coordinates or time ordering are invalid")
+			}
+			previousTime = point.TimeSec
+			centerX += point.X + point.Width/2
+			centerY += point.Y + point.Height/2
+			pointCount++
+		}
+		trackIDs = append(trackIDs, track.ID)
+	}
+	sort.Strings(trackIDs)
+	centerX /= float64(pointCount)
+	centerY /= float64(pointCount)
+	fingerprint := sha256JSON(struct {
+		SourceRevision string
+		Tracks         []SubjectTrack
+		CenterX        float64
+		CenterY        float64
+	}{sourceRevision, tracks, centerX, centerY})
+	return &subjectReframePlan{CenterX: centerX, CenterY: centerY, TrackIDs: trackIDs, Fingerprint: fingerprint}, nil
+}
+
+func subjectFingerprint(plan *subjectReframePlan) string {
+	if plan == nil {
+		return ""
+	}
+	return plan.Fingerprint
 }
 
 func validateProfile(profile RenderProfile) error {
@@ -885,11 +1165,20 @@ func expectedVideoCodec(codec string) string {
 	return codec
 }
 
-func scaleFilter(profile RenderProfile) string {
-	// The reviewed process policy rejects shell metacharacters.  The baseline
-	// uses deterministic top-left padding; subject-aware profile reframe is a
-	// separate typed intermediate and is never silently center-cropped here.
+func scaleFilter(profile RenderProfile, subjectReframe *subjectReframePlan) string {
+	if subjectReframe != nil {
+		return subjectCropFilter(profile, subjectReframe.CenterX, subjectReframe.CenterY)
+	}
 	return fmt.Sprintf("scale=%d:%d:force_original_aspect_ratio=decrease,pad=%d:%d:0:0:color=black", profile.Width, profile.Height, profile.Width, profile.Height)
+}
+
+func subjectCropFilter(profile RenderProfile, centerX, centerY float64) string {
+	ratio := formatSeconds(float64(profile.Width) / float64(profile.Height))
+	width := fmt.Sprintf("if(gt(iw/ih\\,%s)\\,ih*%s\\,iw)", ratio, ratio)
+	height := fmt.Sprintf("if(gt(iw/ih\\,%s)\\,ih\\,iw/%s)", ratio, ratio)
+	x := fmt.Sprintf("clip(%s*iw-ow/2\\,0\\,iw-ow)", formatSeconds(centerX))
+	y := fmt.Sprintf("clip(%s*ih-oh/2\\,0\\,ih-oh)", formatSeconds(centerY))
+	return fmt.Sprintf("crop=w=%s:h=%s:x=%s:y=%s,scale=%d:%d:force_original_aspect_ratio=decrease,pad=%d:%d:0:0:color=black", width, height, x, y, profile.Width, profile.Height, profile.Width, profile.Height)
 }
 
 func drawTextFilterLegacy(cue subtitleCue, in, out float64) (string, error) {

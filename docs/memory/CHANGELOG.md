@@ -6,6 +6,21 @@ owner: repository owner / task assignee
 
 # Memory changelog
 
+## 2026-08-18 — Gate G Prompt 6 final acceptance repair
+
+- Replaced placeholder media-content checks with real reviewed-FFmpeg `blackdetect` and
+  `silencedetect` QA policies; required-audio deliverables fail closed and failed QA cannot reach
+  the Artifact commit boundary.
+- Made subject-aware reframe coordinate-sensitive end to end: validated tracks produce different
+  allowlisted crop plans/fingerprints and different rendered pixels/SHA-256; invalid or missing
+  subject data fails closed. Automatic clip export now chooses a QA-safe window instead of exporting
+  a rejected black/silence opening segment.
+- Routed Gate G Python provider-backed nodes through `ProviderResolver`, keeping FakeProviders only
+  behind the allowlisted registry/adapter boundary. The full 29-test Python suite, Go suite and
+  Product API → PostgreSQL → Redis → actual Python/Go worker → render Artifact E2E pass.
+- Prompt 7/T600–T605, external provider/model quality, GPU quality, public production and deferred
+  matrix rows remain unclaimed.
+
 ## 2026-08-18 — Gate G worker execution and contract repair
 
 - Published immutable `movie_recap` v5 and connected every built-in system/AI/ML/probe/media/render

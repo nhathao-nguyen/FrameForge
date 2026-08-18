@@ -223,11 +223,10 @@ def generate_script(
         provider_snapshot = _meta(response).as_dict()
         status = "proposed"
     except ProviderError:
-        if not allow_fallback:
-            raise
-        text = f"{research.query.strip()}. {research.result.get('summary', '')}".strip()
-        provider_snapshot = {"adapter_key": "deterministic-fallback", "reason": "approved_fallback"}
-        status = "proposed_fallback"
+        # ProviderResolver owns bounded retry/fallback. A domain-level text
+        # fallback would mask auth, policy, cancellation and exhausted-provider
+        # errors and would lose the actual provider provenance.
+        raise
     if not text:
         raise ValueError("script provider returned empty content")
     segment = ScriptSegment("segment_001", text[:20000], 0.0, duration_sec)
@@ -1162,6 +1161,7 @@ class ReframePlan:
     reused_input_fingerprint: str
     degraded: bool
     subject_track_ids: tuple[str, ...] = ()
+    plan_fingerprint: str = ""
 
 
 @dataclass(frozen=True)
@@ -1180,10 +1180,33 @@ def auto_reframe(profile_key: str, input_fingerprint: str, subject_boxes: Sequen
         tracks = (SubjectTrack("fixture_subject_track", "fixture_source_revision", tuple((float(index), x, y, width, height) for index, (x, y, width, height) in enumerate(subject_boxes)), {"adapter": "deterministic-fixture"}),)
     if required and not tracks:
         raise ValueError("subject-aware auto-reframe requires tracked subject boxes")
-    if any(not track.track_id or not track.source_revision or not track.points for track in tracks):
-        raise ValueError("subject tracks must contain source revision and tracking points")
-    centers = tuple((round(x + width / 2.0, 4), round(y + height / 2.0, 4)) for track in tracks for _time, x, y, width, height in track.points)
-    return ReframePlan(profile_key, "subject_aware" if centers else "center_crop_degraded", centers, input_fingerprint, not bool(centers), tuple(track.track_id for track in tracks))
+    source_revisions: set[str] = set()
+    centers: list[tuple[float, float]] = []
+    normalized_tracks: list[JsonObject] = []
+    seen_ids: set[str] = set()
+    for track in tracks:
+        if not track.track_id or not track.source_revision or not track.points or track.track_id in seen_ids:
+            raise ValueError("subject tracks must contain unique identity, source revision and tracking points")
+        seen_ids.add(track.track_id)
+        source_revisions.add(track.source_revision)
+        previous_time = -1.0
+        normalized_points: list[list[float]] = []
+        for point in track.points:
+            if len(point) != 5:
+                raise ValueError("subject track points must contain time and normalized bounds")
+            time_sec, x, y, width, height = (float(value) for value in point)
+            if any(not math.isfinite(value) for value in (time_sec, x, y, width, height)) or time_sec < 0 or time_sec < previous_time - 0.001 or width <= 0 or height <= 0 or x < 0 or y < 0 or x + width > 1.000001 or y + height > 1.000001:
+                raise ValueError("subject track point coordinates or time ordering are invalid")
+            previous_time = time_sec
+            centers.append((round(x + width / 2.0, 4), round(y + height / 2.0, 4)))
+            normalized_points.append([time_sec, x, y, width, height])
+        normalized_tracks.append({"track_id": track.track_id, "source_revision": track.source_revision, "points": normalized_points, "model_snapshot": dict(track.model_snapshot)})
+    if len(source_revisions) > 1:
+        raise ValueError("subject tracks must use one source revision")
+    centers_value = tuple(centers)
+    mode = "subject_aware" if centers_value else "center_crop_degraded"
+    fingerprint = sha256_json({"profile_key": profile_key, "input_fingerprint": input_fingerprint, "mode": mode, "tracks": normalized_tracks})
+    return ReframePlan(profile_key, mode, centers_value, input_fingerprint, not bool(centers_value), tuple(sorted(seen_ids)), fingerprint)
 
 
 def artifact_manifest(blobs: Sequence[ProducedBlob]) -> JsonObject:

@@ -32,10 +32,10 @@ existing task was renumbered or replaced. `DEFER` rows from the matrix are inten
 | Loudness/ducking/audio mix | P5/IMPROVE | T530-S1 | `AudioMixPolicy`/report | LUFS/true-peak/fades/ducking report | implemented |
 | Timeline/video composition | P4–P5/REIMPLEMENT | T530 | Go `internal/render` | canonical TimelineVersion multi-clip plan with allowlisted transitions/audio/subtitles and no provider/rematch calls | implemented |
 | Templates/transitions/text effects | P5/REIMPLEMENT | T530-S1 | Go compiler allowlist | no raw FFmpeg args; unsafe effect/text rejected | implemented |
-| Rendering/deliverable QA | P5/REIMPLEMENT | T531/T531-S1 | Go `internal/render` | real FFmpeg output, ffprobe non-empty/dimension/codec/duration/audio QA, incomplete output rejected | implemented |
-| Clips/shorts export | P5/REIMPLEMENT | T531-S1 | render/export boundary | real FFmpeg selection, codec/profile QA and checksum manifest | implemented |
-| Subject-aware auto-reframe | P6/IMPROVE | T532-S1 | `nh_media.video.reframe` | missing subject boxes fails; typed intermediate/reuse fingerprint | implemented |
-| 16:9 / 9:16 / 1:1 reuse | P6/REIMPLEMENT | T532 | Go profiles | three real outputs reuse source fingerprint/no provider calls | implemented |
+| Rendering/deliverable QA | P5/REIMPLEMENT | T531/T531-S1 | Go `internal/render` | real FFmpeg output, ffprobe non-empty/dimension/codec/duration/audio QA, real blackdetect/silencedetect policy, incomplete output rejected | PASS |
+| Clips/shorts export | P5/REIMPLEMENT | T531-S1 | render/export boundary | real FFmpeg selection, content-safe clip range, codec/profile QA and checksum manifest | PASS |
+| Subject-aware auto-reframe | P6/IMPROVE | T532-S1 | `nh_media.video.reframe` + Go renderer | missing subject boxes fails; coordinate-sensitive crop plan/fingerprint changes rendered pixels | PASS |
+| 16:9 / 9:16 / 1:1 reuse | P6/REIMPLEMENT | T532 | Go profiles | three real outputs reuse source fingerprint/no provider calls | PASS |
 
 ## Intentionally deferred
 
@@ -59,3 +59,27 @@ Python dispatches research, script, TTS, ASR, VLM, embeddings, matching, candida
 Timeline-build and QA nodes; Go dispatches source probe/preparation, audio mix, Timeline render,
 deliverable QA and clip export. Internal authenticated transfer endpoints issue scoped direct object
 transfers, so Redis carries refs and checksums rather than media bytes or signed URLs.
+
+## Prompt 6 final audit
+
+Verified 2026-08-18 on `implementation/bootstrap` with the pinned local toolchain and the
+acceptance runner `tools/accept-gate-g.ps1`. Every scoped Gate G row below is PASS; this is
+deterministic/local-provider and reviewed-FFmpeg evidence, not external provider quality, GPU
+model quality, public production, or Prompt 7/T600–T605 evidence.
+
+| Task | Status | Current proof |
+|---|---|---|
+| T500 | PASS | Five typed provider ports use `ProviderResolver`; retry/backoff, Retry-After, circuit, auth/policy/permanent/cancel taxonomy, fallback and redaction tests pass through node-path runtime tests. |
+| T510 | PASS | Research, script generation and `ScriptStyle` perspective/control/density execute through the resolver boundary with immutable/provenance tests; provider errors are not masked by a node-local fallback. |
+| T511 | PASS | Resolver-selected TTS produces typed WAV/`ProducedBlob` output with measured duration and voice/config/style fingerprint. |
+| T512 / T512-S1 | PASS | Resolver-selected ASR and alignment validate word/speaker timing; subtitle generation, translation, bilingual composition and CPS/overlap/line-length QA pass. |
+| T520 / T520-S1 | PASS | Reviewed FFmpeg/ffprobe scene detection and frame-derived features are exercised on real media; filter reasons preserve inputs. |
+| T521 | PASS | VLM scene analysis uses the resolver-selected typed provider and preserves scene/keyframe/source/model provenance. |
+| T522 | PASS | Character appearance proposals preserve confirmed identities and remain explicitly proposal-scoped. |
+| T523 / T523-S1 | PASS | Text and visual/multimodal embeddings consume resolver-produced typed vectors; model-space mismatch and reload boundaries fail closed. |
+| T524 / T524-S1 | PASS | Match proposals, deterministic diversity/evidence and coverage rationale execute without mutating the approved script. |
+| T525 | PASS | Candidate generation/evaluation/selection uses immutable candidates, deterministic policy and explicit user selection. |
+| T526 | PASS | Reference style analysis enforces consent/scope and stores abstract traits without copied footage. |
+| T530 / T530-S1 | PASS | Go compiles canonical TimelineVersion/Profile data with allowlisted transitions/audio/subtitles/BGM rights; no provider/rematch decision or raw FFmpeg argv crosses the boundary. |
+| T531 / T531-S1 | PASS | Real render/ffprobe output passes dimensions/codecs/duration/audio plus black/silence content policy; failed QA cannot commit; clip export chooses a QA-safe range and emits checksum manifest. |
+| T532 / T532-S1 | PASS | 16:9/9:16/1:1 outputs reuse the upstream source fingerprint; subject-aware coordinates change crop args, plan fingerprints and real output SHA-256/pixels, while missing/invalid tracks fail closed. |

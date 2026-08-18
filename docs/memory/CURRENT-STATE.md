@@ -11,10 +11,10 @@ owner: repository owner / task assignee
 | Field | Value | Evidence |
 |---|---|---|
 | Working branch | `implementation/bootstrap` | `git branch --show-current` |
-| Baseline commit | `e72e847865a5938126487acfd583797e3e8839d0` (`docs: close Gate G push handoff`) | exact local/remote checkpoint before the worker-execution contract repair |
-| Acceptance checkpoint | `53e57c0add60e7ac1a1f1a042470c6a656bd0d1f` (`checkpoint: repair Gate G implementation contracts`) | implementation, E2E and full acceptance evidence checkpoint on `implementation/bootstrap` |
+| Baseline commit | `110aac8` (`docs: record Gate G contract repair checkpoint`) | exact local/remote source head before the final Prompt 6 repair |
+| Acceptance checkpoint | 2026-08-18 final Prompt 6 working-tree acceptance | full `tools/accept-gate-g.ps1` plus Product API/Redis/worker E2E passed; implementation commit is recorded at handoff |
 | Tracking branch | `origin/implementation/bootstrap` | `git status --short --branch` |
-| Push/merge action | checkpoint and handoff metadata pushed together to `origin/implementation/bootstrap` | explicitly authorized by the user; no branch switch or merge |
+| Push/merge action | final implementation/docs commit is authorized for `origin/implementation/bootstrap` | no branch switch or merge; final SHA is recorded after commit |
 
 ## Gate and phase
 
@@ -48,9 +48,13 @@ owner: repository owner / task assignee
   their system/AI/ML/probe/media/render Redis capabilities, passes upstream Artifact refs across each
   dependency frontier, and closes the Job only after real Timeline/render/QA/clip Artifacts commit.
   T500 now has bounded exponential backoff with jitter and provider-configuration/endpoint/capability-
-  scoped circuit breakers. Canonical Timeline `source_ref` now carries the same BGM rights fields that
-  semantic validation and the renderer require. Fake/local providers remain the accepted boundary
-  because no approved external provider credentials or model runtime were available.
+  scoped circuit breakers. Gate G node execution now reaches those policies through `ProviderResolver`,
+  while FakeProviders are confined to the adapter registry boundary. Canonical Timeline `source_ref`
+  now carries the same BGM rights fields that semantic validation and the renderer require. Go
+  deliverable QA uses real blackdetect/silencedetect and commit-after-QA; subject-aware reframe
+  coordinates change crop plans and rendered pixels; automatic clip selection avoids rejected
+  black/silence windows. Fake/local providers remain the accepted boundary because no approved
+  external provider credentials or model runtime were available.
 
 ## Current evidence
 
@@ -105,8 +109,9 @@ owner: repository owner / task assignee
 - Gate G native coverage includes provider ports, research/script/style, TTS, ASR/alignment,
   subtitles/translation/bilingual QA, scenes/filters/VLM/characters, text and visual embeddings,
   matching/coverage/candidates, reference style, typed audio/BGM policy, Timeline compilation,
-  real render/ffprobe QA, clip export and 16:9/9:16/1:1 profile reuse. Deferred matrix rows remain
-  deferred and are not silently promoted.
+  real render/ffprobe plus black/silence QA, content-safe clip export, subject-aware pixel reframe
+  and 16:9/9:16/1:1 profile reuse. Deferred matrix rows remain deferred and are not silently
+  promoted.
 - Gate E includes canonical transitions/events/outbox replay, Redis Streams QueuePort, DAG scheduling,
   leases/reconciliation, sandboxed media process, versioned Go/Python worker contracts, probe/thumbnail
   node, durable execution-graph bootstrap, Job/Run/Step/Review/Render commands, checkpoint/recovery,
@@ -125,12 +130,13 @@ vendors are later configuration choices.
   Task: Gate G — T500–T532 native media/AI capability slice
   Status: LOCAL ACCEPTANCE PASS; all 25 movie_recap v5 JobSteps execute through real Redis workers,
   typed provider retry/circuit contracts and canonical BGM rights pass, and the reviewed FFmpeg
-  Timeline/render/clip path plus full repository regression/security checks are current.
+  Timeline/render/clip path, real black/silence QA, subject-aware pixel reframe and full repository
+  regression/security checks are current.
   T434 signing remains a separate owner-controlled release boundary.
 Boundary: Canonical execution transitions/events, queue, scheduling, leases, media/AI worker contracts,
   durable graph bootstrap, controls, checkpoint/DLQ and SSE boundary
 Application code: API, persistence, media worker, Python worker, contracts, and execution adapters
 Upstream relationship: research/reference only; no operational dependency
   Next: preserve the evidence and await a separately approved T600 hardening task; do not begin T600
-  in this Gate G task.
+  or Prompt 7/T600–T605 work in this Gate G task.
 ```

@@ -35,6 +35,8 @@ try {
     Invoke-Checked $uv @('lock', '--project', 'services/ml-worker', '--check')
     Invoke-Checked $uv @('sync', '--frozen', '--project', 'services/ml-worker')
     Invoke-Checked $uv @('run', '--project', 'services/ml-worker', 'pytest')
+    Write-Output 'Gate G: explicit ProviderResolver node-path tests'
+    Invoke-Checked $uv @('run', '--project', 'services/ml-worker', 'pytest', 'services/ml-worker/tests/test_pipeline_executor_provider_runtime.py', '-q')
     Invoke-Checked $uv @('run', '--project', 'services/ml-worker', 'ruff', 'check', 'services/ml-worker/nh_media', 'services/ml-worker/tests')
     Invoke-Checked $uv @('run', '--project', 'services/ml-worker', 'mypy', 'services/ml-worker/nh_media', 'services/ml-worker/tests')
     Invoke-Checked $uv @('run', '--project', 'services/ml-worker', 'bandit', '-q', '-r', 'services/ml-worker/nh_media')
@@ -68,6 +70,9 @@ try {
         'services/media-worker/internal/executor/executor.go',
         'services/media-worker/internal/executor/executor_test.go',
         'services/media-worker/internal/executor/transfer.go',
+        'services/media-worker/internal/process/process.go',
+        'services/media-worker/internal/render/render.go',
+        'services/media-worker/internal/render/render_test.go',
         'services/media-worker/internal/integration/python_worker_test.go',
         'services/media-worker/internal/node/node_test.go',
         'services/media-worker/internal/runtime/controller.go',
@@ -77,7 +82,8 @@ try {
     if ($gofmtOutput.Count -gt 0) { throw ('gofmt required: ' + ($gofmtOutput -join ', ')) }
     Invoke-Checked go.exe @('vet', './...')
     Invoke-Checked go.exe @('test', './...')
-    Invoke-Checked go.exe @('test', '-run', 'TestRenderRealMediaAndReuseThreeProfiles|TestRenderRealMultiClipMovieWithAudioAndSubtitles|TestInspectRejectsMissingVideo', './services/media-worker/internal/render', '-count=1')
+    Write-Output 'Gate G: explicit black/silence QA and subject-aware reframe tests'
+    Invoke-Checked go.exe @('test', '-run', 'TestRenderRealMediaAndReuseThreeProfiles|TestRenderRealMultiClipMovieWithAudioAndSubtitles|TestInspectRejectsMissingVideo|TestDeliverableQARealBlackAndSilencePolicies|TestSubjectAwareReframeChangesRealPixels|TestCompileSubjectAwareReframeUsesTrackCoordinates|TestDurationAndQAFailuresPreventArtifactCommit', './services/media-worker/internal/render', '-count=1')
 
     Write-Output 'Gate G: exact Node/pnpm client checks'
     Invoke-Checked $node @($pnpmScript, '--recursive', '--if-present', 'run', 'typecheck')

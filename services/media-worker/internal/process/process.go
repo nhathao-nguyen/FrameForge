@@ -145,7 +145,7 @@ func validateArgs(args, inputs, outputs []string) error {
 			filterValue = false
 			continue
 		}
-		if arg == "-filter_complex" || arg == "-vf" {
+		if arg == "-filter_complex" || arg == "-vf" || arg == "-af" {
 			filterValue = true
 			continue
 		}
@@ -223,7 +223,10 @@ func (b *limitedBuffer) Write(value []byte) (int, error) {
 func trimDiagnostic(value string) string {
 	value = strings.TrimSpace(value)
 	if len(value) > 1024 {
-		value = value[:1024]
+		// Media QA filters emit their typed markers after ffmpeg's bounded input
+		// summary. Preserve both ends so blackdetect/silencedetect evidence is
+		// not discarded while keeping diagnostics strictly size-bounded.
+		value = value[:512] + "\n...[diagnostic truncated]...\n" + value[len(value)-512:]
 	}
 	return value
 }
