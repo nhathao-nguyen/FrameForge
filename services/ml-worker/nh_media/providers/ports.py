@@ -1,5 +1,44 @@
-"""Stable provider port names for Go/Python node authors."""
+"""Canonical typed provider ports for Gate G node authors."""
 
-from nh_media.gate_g import ProviderCallContext, ProviderDescriptor, ProviderError, ProviderKind, ProviderPort, ProviderResponse, ProviderResultMeta
+from .contracts import (
+    ASRProvider,
+    ASRRequest,
+    EmbeddingItem,
+    EmbeddingProvider,
+    EmbeddingRequest,
+    EmbeddingResponse,
+    EmbeddingVector,
+    LLMMessage,
+    LLMProvider,
+    LLMRequest,
+    LLMResponse,
+    ProducedBlob,
+    ProviderCallContext,
+    ProviderDescriptor,
+    ProviderError,
+    ProviderErrorCategory,
+    ProviderErrorCode,
+    ProviderKind,
+    ProviderRegistry,
+    ProviderResultMeta,
+    ProviderTranscript,
+    ProviderTranscriptSegment,
+    ProviderTranscriptWord,
+    TTSProvider,
+    TTSRequest,
+    TTSResponse,
+    VLMDescription,
+    VLMInput,
+    VLMProvider,
+    VLMRequest,
+    VLMResponse,
+    VoiceDescriptor,
+)
 
-__all__ = ["ProviderCallContext", "ProviderDescriptor", "ProviderError", "ProviderKind", "ProviderPort", "ProviderResponse", "ProviderResultMeta"]
+__all__ = [
+    "ASRProvider", "ASRRequest", "EmbeddingItem", "EmbeddingProvider", "EmbeddingRequest", "EmbeddingResponse", "EmbeddingVector",
+    "LLMMessage", "LLMProvider", "LLMRequest", "LLMResponse", "ProducedBlob", "ProviderCallContext", "ProviderDescriptor",
+    "ProviderError", "ProviderErrorCategory", "ProviderErrorCode", "ProviderKind", "ProviderRegistry", "ProviderResultMeta",
+    "ProviderTranscript", "ProviderTranscriptSegment", "ProviderTranscriptWord", "TTSProvider", "TTSRequest", "TTSResponse",
+    "VLMDescription", "VLMInput", "VLMProvider", "VLMRequest", "VLMResponse", "VoiceDescriptor",
+]

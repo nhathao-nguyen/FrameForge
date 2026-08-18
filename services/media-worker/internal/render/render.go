@@ -5,14 +5,17 @@ package render
 // never calls providers, rematches scenes or accepts raw FFmpeg arguments.
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -20,18 +23,19 @@ import (
 )
 
 type RenderProfile struct {
-	Key             string
-	Version         int
-	Width           int
-	Height          int
-	VideoCodec      string
-	AudioCodec      string
-	PixelFormat     string
-	Bitrate         string
-	FPS             int
-	AudioTargetLUFS float64
-	TruePeakDB      float64
-	AutoReframe     bool
+	Key              string
+	Version          int
+	Width            int
+	Height           int
+	VideoCodec       string
+	AudioCodec       string
+	PixelFormat      string
+	Bitrate          string
+	FPS              int
+	AudioTargetLUFS  float64
+	TruePeakDB       float64
+	AutoReframe      bool
+	SubtitleFontPath string
 }
 
 func DefaultProfile(key string) (RenderProfile, error) {
@@ -52,6 +56,22 @@ type CompileInput struct {
 	Profile          RenderProfile
 	ArtifactPaths    map[string]string
 	OutputPath       string
+	SubjectTracks    []SubjectTrack
+	SubtitleFiles    map[string]string
+}
+
+type SubjectTrack struct {
+	ID             string
+	SourceRevision string
+	Points         []SubjectPoint
+}
+
+type SubjectPoint struct {
+	TimeSec float64
+	X       float64
+	Y       float64
+	Width   float64
+	Height  float64
 }
 
 type Plan struct {
@@ -62,8 +82,10 @@ type Plan struct {
 	SourceFingerprint   string
 	PlanFingerprint     string
 	ProfileSnapshot     RenderProfile
+	ExpectedDurationSec float64
 	ProviderCallCount   int
 	RematchingPerformed bool
+	RequiresAudio       bool
 }
 
 type RenderResult struct {
@@ -139,17 +161,32 @@ type QAReport struct {
 }
 
 type timelineDocument struct {
-	SchemaVersion string          `json:"schema_version"`
-	DurationSec   float64         `json:"duration_sec"`
-	Tracks        []timelineTrack `json:"tracks"`
+	SchemaVersion     string          `json:"schema_version"`
+	TimelineID        string          `json:"timeline_id"`
+	TimelineVersionID string          `json:"timeline_version_id"`
+	ProjectID         string          `json:"project_id"`
+	Version           int             `json:"version"`
+	DurationSec       float64         `json:"duration_sec"`
+	FrameRate         map[string]any  `json:"frame_rate,omitempty"`
+	Canvas            map[string]any  `json:"canvas,omitempty"`
+	Tracks            []timelineTrack `json:"tracks"`
+	Markers           []any           `json:"markers,omitempty"`
+	Metadata          map[string]any  `json:"metadata,omitempty"`
 }
 
 type timelineTrack struct {
-	ID    string         `json:"id"`
-	Kind  string         `json:"kind"`
-	Clips []timelineClip `json:"clips"`
-	Mix   *audioMix      `json:"mix,omitempty"`
-	Style map[string]any `json:"style,omitempty"`
+	ID       string         `json:"id"`
+	Kind     string         `json:"kind"`
+	Name     string         `json:"name"`
+	Order    int            `json:"order"`
+	Clips    []timelineClip `json:"clips"`
+	Mix      *audioMix      `json:"mix,omitempty"`
+	Style    map[string]any `json:"style,omitempty"`
+	Muted    bool           `json:"muted,omitempty"`
+	Visible  bool           `json:"visible,omitempty"`
+	Locked   bool           `json:"locked,omitempty"`
+	Language string         `json:"language,omitempty"`
+	Metadata map[string]any `json:"metadata,omitempty"`
 }
 
 type timelineClip struct {
@@ -160,21 +197,39 @@ type timelineClip struct {
 	SourceOut     *float64       `json:"source_out_sec,omitempty"`
 	Source        sourceRef      `json:"source"`
 	Speed         float64        `json:"speed,omitempty"`
+	Loop          bool           `json:"loop,omitempty"`
+	FreezeFrame   bool           `json:"freeze_frame,omitempty"`
+	Transform     map[string]any `json:"transform,omitempty"`
+	Audio         *audioMix      `json:"audio,omitempty"`
 	TransitionIn  *transition    `json:"transition_in,omitempty"`
 	TransitionOut *transition    `json:"transition_out,omitempty"`
 	Style         map[string]any `json:"style,omitempty"`
 	Subtitle      *subtitleCue   `json:"subtitle,omitempty"`
+	Text          string         `json:"text,omitempty"`
+	Narration     map[string]any `json:"narration,omitempty"`
+	Confidence    *float64       `json:"confidence,omitempty"`
+	ProposalRef   string         `json:"proposal_ref,omitempty"`
+	ProposalRefs  []string       `json:"proposal_refs,omitempty"`
+	EvidenceRefs  []string       `json:"evidence_refs,omitempty"`
+	Metadata      map[string]any `json:"metadata,omitempty"`
 	Origin        string         `json:"origin"`
 }
 
 type sourceRef struct {
-	Type       string `json:"type"`
-	ArtifactID string `json:"artifact_id"`
+	Type           string            `json:"type"`
+	ArtifactID     string            `json:"artifact_id"`
+	AssetID        string            `json:"asset_id,omitempty"`
+	SceneID        string            `json:"scene_id,omitempty"`
+	InlineID       string            `json:"inline_id,omitempty"`
+	Role           string            `json:"role,omitempty"`
+	RightsStatus   string            `json:"rights_status,omitempty"`
+	RightsMetadata map[string]string `json:"rights_metadata,omitempty"`
 }
 
 type transition struct {
-	Kind     string  `json:"kind"`
-	Duration float64 `json:"duration_sec"`
+	Kind     string         `json:"kind"`
+	Duration float64        `json:"duration_sec"`
+	Params   map[string]any `json:"params,omitempty"`
 }
 
 type subtitleCue struct {
@@ -188,6 +243,7 @@ type audioMix struct {
 	GainDB          float64  `json:"gain_db,omitempty"`
 	FadeInSec       float64  `json:"fade_in_sec,omitempty"`
 	FadeOutSec      float64  `json:"fade_out_sec,omitempty"`
+	Pan             float64  `json:"pan,omitempty"`
 	DuckDB          float64  `json:"duck_db,omitempty"`
 	DuckUnderTracks []string `json:"duck_under_track_ids,omitempty"`
 }
@@ -200,18 +256,45 @@ func Compile(input CompileInput) (Plan, error) {
 		return Plan{}, err
 	}
 	var document timelineDocument
-	if err := json.Unmarshal(input.TimelineDocument, &document); err != nil {
+	decoder := json.NewDecoder(bytes.NewReader(input.TimelineDocument))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&document); err != nil {
 		return Plan{}, fmt.Errorf("timeline document is invalid: %w", err)
 	}
-	if document.SchemaVersion != "1.0" || document.DurationSec <= 0 || len(document.Tracks) == 0 {
+	if document.SchemaVersion != "1.0" || document.TimelineID == "" || document.TimelineVersionID == "" || document.ProjectID == "" || document.Version < 1 || document.DurationSec <= 0 || len(document.Tracks) == 0 {
 		return Plan{}, errors.New("timeline document does not satisfy the renderer contract")
 	}
+	if input.Profile.AutoReframe {
+		if len(input.SubjectTracks) == 0 {
+			return Plan{}, errors.New("subject-aware reframe requires typed subject tracks")
+		}
+		for _, track := range input.SubjectTracks {
+			if track.ID == "" || track.SourceRevision == "" || len(track.Points) == 0 {
+				return Plan{}, errors.New("subject-aware reframe subject track is incomplete")
+			}
+		}
+	}
 	videoClips := make([]timelineClip, 0)
+	videoTrackByClip := make(map[string]string)
 	inputPaths := make([]string, 0)
-	seenInputs := map[string]bool{}
+	inputIndex := make(map[string]int)
+	requiresAudio := false
 	for _, track := range document.Tracks {
 		if err := validateMix(track.Mix); err != nil {
 			return Plan{}, fmt.Errorf("track %q: %w", track.ID, err)
+		}
+		if track.Kind == "narration" || track.Kind == "music" || track.Kind == "sfx" {
+			requiresAudio = true
+		}
+		if track.Kind == "music" {
+			for _, clip := range track.Clips {
+				if clip.Source.RightsStatus != "owned" && clip.Source.RightsStatus != "cleared" {
+					return Plan{}, fmt.Errorf("music clip %q is rejected by the BGM rights policy", clip.ID)
+				}
+				if len(clip.Source.RightsMetadata) == 0 {
+					return Plan{}, fmt.Errorf("music clip %q is missing required rights metadata", clip.ID)
+				}
+			}
 		}
 		for _, clip := range track.Clips {
 			if err := validateClip(document.DurationSec, clip, input.ArtifactPaths); err != nil {
@@ -228,51 +311,86 @@ func Compile(input CompileInput) (Plan, error) {
 				}
 			}
 			if clip.Source.Type == "asset" || clip.Source.Type == "scene" || clip.Source.Type == "artifact" {
-				if !seenInputs[input.ArtifactPaths[clip.Source.ArtifactID]] {
-					inputPaths = append(inputPaths, input.ArtifactPaths[clip.Source.ArtifactID])
-					seenInputs[input.ArtifactPaths[clip.Source.ArtifactID]] = true
+				path := filepath.Clean(input.ArtifactPaths[clip.Source.ArtifactID])
+				if _, ok := inputIndex[path]; !ok {
+					inputIndex[path] = len(inputPaths)
+					inputPaths = append(inputPaths, path)
 				}
+				inputIndex[clip.Source.ArtifactID] = inputIndex[path]
 			}
 			if track.Kind == "video" {
 				videoClips = append(videoClips, clip)
+				videoTrackByClip[clip.ID] = track.ID
 			}
 			if track.Kind == "subtitle" && clip.Subtitle == nil {
 				return Plan{}, fmt.Errorf("subtitle clip %q has no typed cue", clip.ID)
 			}
-		}
-	}
-	if len(videoClips) == 0 || len(videoClips) > 1 {
-		return Plan{}, errors.New("the deterministic baseline requires exactly one video clip; multi-clip concat is a separate allowlisted plan")
-	}
-	if strings.TrimSpace(input.OutputPath) == "" || input.OutputPath == input.ArtifactPaths[videoClips[0].Source.ArtifactID] {
-		return Plan{}, errors.New("render output must be a distinct executor-scoped path")
-	}
-	clip := videoClips[0]
-	if input.Profile.AutoReframe {
-		return Plan{}, errors.New("subject-aware reframe must be compiled as a profile-specific intermediate artifact before render")
-	}
-	filter := scaleFilter(input.Profile)
-	if clip.Style != nil {
-		effect, _ := clip.Style["effect"].(string)
-		if effect != "" && effect != "none" && effect != "fade_in" && effect != "fade_out" {
-			return Plan{}, fmt.Errorf("effect %q is not allowlisted", effect)
-		}
-	}
-	for _, track := range document.Tracks {
-		if track.Kind == "subtitle" {
-			for _, subtitleClip := range track.Clips {
-				if subtitleClip.Subtitle != nil {
-					textFilter, err := drawTextFilter(*subtitleClip.Subtitle, subtitleClip.TimelineIn, subtitleClip.TimelineOut)
-					if err != nil {
-						return Plan{}, fmt.Errorf("subtitle clip %q: %w", subtitleClip.ID, err)
-					}
-					filter += "," + textFilter
-				}
+			if track.Kind != "subtitle" && (clip.Text != "" || clip.Subtitle != nil) {
+				return Plan{}, fmt.Errorf("clip %q contains text outside the subtitle track", clip.ID)
+			}
+			if clip.Transform != nil {
+				return Plan{}, fmt.Errorf("clip %q uses an unsupported transform; only profile scale/pad is compiled", clip.ID)
 			}
 		}
 	}
+	if len(videoClips) == 0 {
+		return Plan{}, errors.New("timeline must contain at least one video clip")
+	}
+	sort.SliceStable(videoClips, func(left, right int) bool { return videoClips[left].TimelineIn < videoClips[right].TimelineIn })
+	if math.Abs(videoClips[0].TimelineIn) > 0.001 {
+		return Plan{}, errors.New("video timeline must start at zero; gaps require an explicit generated background")
+	}
+	for index := 1; index < len(videoClips); index++ {
+		if math.Abs(videoClips[index].TimelineIn-videoClips[index-1].TimelineOut) > 0.001 {
+			return Plan{}, fmt.Errorf("video clips %q and %q are not contiguous; unsupported timeline gap/overlap", videoClips[index-1].ID, videoClips[index].ID)
+		}
+	}
+	expectedDuration := 0.0
+	for index, clip := range videoClips {
+		expectedDuration += clip.TimelineOut - clip.TimelineIn
+		if index > 0 {
+			transitionDuration := transitionDurationFor(clip, videoClips[index-1])
+			expectedDuration -= transitionDuration
+		}
+	}
+	if expectedDuration <= 0 || math.Abs(expectedDuration-document.DurationSec) > 0.05 {
+		return Plan{}, errors.New("video timeline duration does not match canonical TimelineVersion duration")
+	}
+	if strings.TrimSpace(input.OutputPath) == "" {
+		return Plan{}, errors.New("render output must be a distinct executor-scoped path")
+	}
+	for _, path := range inputPaths {
+		if filepath.Clean(input.OutputPath) == path {
+			return Plan{}, errors.New("render output must be distinct from every source Artifact")
+		}
+	}
+	for _, path := range input.SubtitleFiles {
+		cleanPath := filepath.Clean(path)
+		if filepath.Clean(input.OutputPath) == cleanPath {
+			return Plan{}, errors.New("subtitle scratch file must be distinct from the render output")
+		}
+		if strings.ContainsAny(cleanPath, "\x00\r\n&|$") {
+			return Plan{}, errors.New("subtitle scratch path is invalid")
+		}
+	}
+	graph, videoLabel, audioLabel, err := compileFilterGraph(document, videoClips, inputIndex, input.Profile, input.SubtitleFiles)
+	if err != nil {
+		return Plan{}, err
+	}
+	args := []string{"-hide_banner", "-loglevel", "error", "-y"}
+	for _, path := range inputPaths {
+		args = append(args, "-i", path)
+	}
+	args = append(args, "-filter_complex", graph, "-map", "["+videoLabel+"]")
+	if audioLabel != "" {
+		args = append(args, "-map", "["+audioLabel+"]")
+	}
+	args = append(args, "-c:v", input.Profile.VideoCodec, "-pix_fmt", input.Profile.PixelFormat, "-r", strconv.Itoa(input.Profile.FPS))
+	if audioLabel != "" {
+		args = append(args, "-c:a", input.Profile.AudioCodec)
+	}
+	args = append(args, "-movflags", "+faststart", input.OutputPath)
 	outputPaths := []string{input.OutputPath}
-	args := []string{"-hide_banner", "-loglevel", "error", "-y", "-i", input.ArtifactPaths[clip.Source.ArtifactID], "-ss", formatSeconds(sourceIn(clip)), "-t", formatSeconds(clip.TimelineOut - clip.TimelineIn), "-vf", filter, "-map", "0:v:0", "-map", "0:a?", "-c:v", input.Profile.VideoCodec, "-pix_fmt", input.Profile.PixelFormat, "-c:a", input.Profile.AudioCodec, "-movflags", "+faststart", input.OutputPath}
 	// This is deliberately profile-independent: a profile-only rerender may
 	// create a new plan/output but must reuse every upstream AI/media Artifact.
 	sourceFingerprint := sha256JSON(canonicalJSON(input.TimelineDocument))
@@ -281,10 +399,200 @@ func Compile(input CompileInput) (Plan, error) {
 		Profile RenderProfile
 		Args    []string
 	}{Source: sourceFingerprint, Profile: input.Profile, Args: args})
-	return Plan{Args: args, InputPaths: inputPaths, OutputPaths: outputPaths, OutputPath: input.OutputPath, SourceFingerprint: sourceFingerprint, PlanFingerprint: planFingerprint, ProfileSnapshot: input.Profile}, nil
+	return Plan{Args: args, InputPaths: inputPaths, OutputPaths: outputPaths, OutputPath: input.OutputPath, SourceFingerprint: sourceFingerprint, PlanFingerprint: planFingerprint, ProfileSnapshot: input.Profile, ExpectedDurationSec: expectedDuration, RequiresAudio: requiresAudio || audioLabel != ""}, nil
 }
 
+func compileFilterGraph(document timelineDocument, videoClips []timelineClip, inputIndex map[string]int, profile RenderProfile, subtitleFiles map[string]string) (string, string, string, error) {
+	parts := make([]string, 0, len(videoClips)*2)
+	videoLabels := make([]string, 0, len(videoClips))
+	audioLabels := make([]string, 0, len(videoClips))
+	durations := make([]float64, 0, len(videoClips))
+	for index, clip := range videoClips {
+		inputNumber := inputIndex[filepath.Clean(clip.Source.ArtifactID)]
+		duration := clip.TimelineOut - clip.TimelineIn
+		speed := clipSpeed(clip)
+		durations = append(durations, duration)
+		videoLabel := fmt.Sprintf("vclip%d", index)
+		videoLabels = append(videoLabels, videoLabel)
+		trimDuration := duration * speed
+		if clip.SourceOut != nil && clip.SourceIn != nil {
+			trimDuration = *clip.SourceOut - *clip.SourceIn
+		}
+		trim := fmt.Sprintf("trim=start=%s:duration=%s", formatSeconds(sourceIn(clip)), formatSeconds(trimDuration))
+		videoFilter := fmt.Sprintf("[%d:v]%s,setpts=PTS-STARTPTS,setpts=PTS/%s,%s", inputNumber, trim, formatSeconds(speed), scaleFilter(profile))
+		if transition := clip.TransitionIn; transition != nil && transition.Kind == "fade" {
+			videoFilter += fmt.Sprintf(",fade=t=in:st=0:d=%s", formatSeconds(transition.Duration))
+		}
+		if transition := clip.TransitionOut; transition != nil && transition.Kind == "fade" {
+			videoFilter += fmt.Sprintf(",fade=t=out:st=%s:d=%s", formatSeconds(maxFloat(0, duration-transition.Duration)), formatSeconds(transition.Duration))
+		}
+		parts = append(parts, videoFilter+"["+videoLabel+"]")
+		if inputNumber >= 0 {
+			audioLabel := fmt.Sprintf("aclip%d", index)
+			audioLabels = append(audioLabels, audioLabel)
+			parts = append(parts, fmt.Sprintf("[%d:a]atrim=start=%s:duration=%s,asetpts=PTS-STARTPTS,asetpts=PTS/%s[%s]", inputNumber, formatSeconds(sourceIn(clip)), formatSeconds(trimDuration), formatSeconds(speed), audioLabel))
+		}
+	}
+	videoOutput := "vcat"
+	if hasCrossfade(videoClips) {
+		current := videoLabels[0]
+		accumulated := durations[0]
+		for index := 1; index < len(videoLabels); index++ {
+			transitionDuration := transitionDurationFor(videoClips[index], videoClips[index-1])
+			if transitionDuration <= 0 {
+				transitionDuration = 0.001
+			}
+			next := fmt.Sprintf("vx%d", index)
+			parts = append(parts, fmt.Sprintf("[%s][%s]xfade=transition=fade:duration=%s:offset=%s[%s]", current, videoLabels[index], formatSeconds(transitionDuration), formatSeconds(maxFloat(0, accumulated-transitionDuration)), next))
+			current = next
+			accumulated += durations[index] - transitionDuration
+		}
+		videoOutput = current
+	} else {
+		concatInputs := ""
+		for _, label := range videoLabels {
+			concatInputs += "[" + label + "]"
+		}
+		parts = append(parts, fmt.Sprintf("%sconcat=n=%d:v=1:a=0[%s]", concatInputs, len(videoLabels), videoOutput))
+	}
+	subtitleIndex := 0
+	for _, track := range document.Tracks {
+		if track.Kind == "subtitle" {
+			for _, clip := range track.Clips {
+				if clip.Subtitle == nil {
+					return "", "", "", fmt.Errorf("subtitle clip %q has no typed cue", clip.ID)
+				}
+				filter, err := drawTextFilter(*clip.Subtitle, clip.TimelineIn, clip.TimelineOut)
+				if textPath := subtitleFiles[clip.ID]; textPath != "" {
+					filter, err = drawTextFileFilter(*clip.Subtitle, clip.TimelineIn, clip.TimelineOut, textPath, profile.SubtitleFontPath)
+				} else if profile.SubtitleFontPath != "" {
+					filter, err = drawTextFilterWithFont(*clip.Subtitle, clip.TimelineIn, clip.TimelineOut, profile.SubtitleFontPath)
+				}
+				if err != nil {
+					return "", "", "", fmt.Errorf("subtitle clip %q: %w", clip.ID, err)
+				}
+				next := fmt.Sprintf("vsubtitle%d", subtitleIndex)
+				subtitleIndex++
+				parts = append(parts, fmt.Sprintf("[%s]%s[%s]", videoOutput, filter, next))
+				videoOutput = next
+			}
+		}
+	}
+	if len(audioLabels) == 0 {
+		return strings.Join(parts, ";"), videoOutput, "", nil
+	}
+	audioOutput := ""
+	if hasCrossfade(videoClips) {
+		current := audioLabels[0]
+		for index := 1; index < len(audioLabels); index++ {
+			transitionDuration := transitionDurationFor(videoClips[index], videoClips[index-1])
+			if transitionDuration <= 0 {
+				transitionDuration = 0.001
+			}
+			next := fmt.Sprintf("ax%d", index)
+			parts = append(parts, fmt.Sprintf("[%s][%s]acrossfade=d=%s:c1=tri:c2=tri[%s]", current, audioLabels[index], formatSeconds(transitionDuration), next))
+			current = next
+		}
+		audioOutput = current
+	} else {
+		concatAudioInputs := ""
+		for _, label := range audioLabels {
+			concatAudioInputs += "[" + label + "]"
+		}
+		parts = append(parts, fmt.Sprintf("%sconcat=n=%d:v=0:a=1[acat]", concatAudioInputs, len(audioLabels)))
+		audioOutput = "acat"
+	}
+	extraIndex := 0
+	for trackIndex, track := range document.Tracks {
+		if track.Kind != "narration" && track.Kind != "music" && track.Kind != "sfx" {
+			continue
+		}
+		for _, clip := range track.Clips {
+			inputNumber, ok := inputIndex[filepath.Clean(clip.Source.ArtifactID)]
+			if !ok {
+				continue
+			}
+			label := "extra" + clip.ID
+			volume := 1.0
+			gainDB := 0.0
+			fadeIn := 0.0
+			fadeOut := 0.0
+			if track.Mix != nil {
+				if track.Mix.Enabled != nil && !*track.Mix.Enabled {
+					volume = 0
+				} else if track.Mix.Volume > 0 {
+					volume = track.Mix.Volume
+				}
+				gainDB = track.Mix.GainDB
+				fadeIn = track.Mix.FadeInSec
+				fadeOut = track.Mix.FadeOutSec
+				if track.Kind == "music" && track.Mix.DuckDB < 0 {
+					volume *= math.Pow(10, track.Mix.DuckDB/20)
+				}
+			}
+			filter := fmt.Sprintf("[%d:a]atrim=start=%s:duration=%s,asetpts=PTS-STARTPTS,adelay=%d|%d,volume=%s", inputNumber, formatSeconds(sourceIn(clip)), formatSeconds(clip.TimelineOut-clip.TimelineIn), int(clip.TimelineIn*1000), int(clip.TimelineIn*1000), formatSeconds(volume))
+			if gainDB != 0 {
+				filter += fmt.Sprintf(",volume=%sdB", formatSeconds(gainDB))
+			}
+			if fadeIn > 0 {
+				filter += fmt.Sprintf(",afade=t=in:st=0:d=%s", formatSeconds(fadeIn))
+			}
+			if fadeOut > 0 {
+				filter += fmt.Sprintf(",afade=t=out:st=%s:d=%s", formatSeconds(maxFloat(0, clip.TimelineOut-clip.TimelineIn-fadeOut)), formatSeconds(fadeOut))
+			}
+			parts = append(parts, filter+"["+label+"]")
+			mixedLabel := fmt.Sprintf("amixout%d", extraIndex+trackIndex)
+			extraIndex++
+			parts = append(parts, fmt.Sprintf("[%s][%s]amix=inputs=2:duration=longest:dropout_transition=0,loudnorm=I=%s:TP=%s:print_format=summary[%s]", audioOutput, label, formatSeconds(profile.AudioTargetLUFS), formatSeconds(profile.TruePeakDB), mixedLabel))
+			audioOutput = mixedLabel
+		}
+	}
+	return strings.Join(parts, ";"), videoOutput, audioOutput, nil
+}
+
+func clipSpeed(clip timelineClip) float64 {
+	if clip.Speed <= 0 {
+		return 1
+	}
+	return clip.Speed
+}
+func maxFloat(left, right float64) float64 {
+	if left > right {
+		return left
+	}
+	return right
+}
+func hasCrossfade(clips []timelineClip) bool {
+	for _, clip := range clips {
+		if clip.TransitionIn != nil && clip.TransitionIn.Kind == "crossfade" || clip.TransitionOut != nil && clip.TransitionOut.Kind == "crossfade" {
+			return true
+		}
+	}
+	return false
+}
+func transitionDurationFor(current, previous timelineClip) float64 {
+	if current.TransitionIn != nil && current.TransitionIn.Kind == "crossfade" {
+		return current.TransitionIn.Duration
+	}
+	if previous.TransitionOut != nil && previous.TransitionOut.Kind == "crossfade" {
+		return previous.TransitionOut.Duration
+	}
+	return 0
+}
 func Render(ctx context.Context, input CompileInput, policy process.Policy) (RenderResult, error) {
+	if input.Profile.SubtitleFontPath != "" {
+		if err := ensureSandboxPath(policy.SandboxRoot, input.Profile.SubtitleFontPath); err != nil {
+			return RenderResult{}, fmt.Errorf("subtitle font: %w", err)
+		}
+	}
+	subtitleFiles, err := prepareSubtitleFiles(input.TimelineDocument, policy.SandboxRoot)
+	if err != nil {
+		return RenderResult{}, err
+	}
+	for _, path := range subtitleFiles {
+		defer os.Remove(path)
+	}
+	input.SubtitleFiles = subtitleFiles
 	plan, err := Compile(input)
 	if err != nil {
 		return RenderResult{}, err
@@ -295,14 +603,33 @@ func Render(ctx context.Context, input CompileInput, policy process.Policy) (Ren
 	if err := os.MkdirAll(filepath.Dir(plan.OutputPath), 0o700); err != nil {
 		return RenderResult{}, fmt.Errorf("prepare render output: %w", err)
 	}
-	_, err = policy.Run(ctx, process.Spec{Tool: process.ToolFFmpeg, Args: plan.Args, InputPaths: plan.InputPaths, OutputPaths: plan.OutputPaths, Timeout: policy.MaxDuration})
+	processResult, err := policy.Run(ctx, process.Spec{Tool: process.ToolFFmpeg, Args: plan.Args, InputPaths: plan.InputPaths, OutputPaths: plan.OutputPaths, Timeout: policy.MaxDuration})
 	if err != nil {
+		if processResult.Diagnostic != "" {
+			return RenderResult{}, fmt.Errorf("render media process: %w: %s", err, processResult.Diagnostic)
+		}
 		return RenderResult{}, err
 	}
 	qa, err := Inspect(ctx, plan.OutputPath, policy)
 	if err != nil {
 		return RenderResult{}, err
 	}
+	if qa.Width != plan.ProfileSnapshot.Width || qa.Height != plan.ProfileSnapshot.Height {
+		qa.Errors = append(qa.Errors, "profile_dimensions_mismatch")
+	}
+	if plan.RequiresAudio && !qa.HasAudio {
+		qa.Errors = append(qa.Errors, "required_audio_stream_missing")
+	}
+	if qa.VideoCodec != expectedVideoCodec(plan.ProfileSnapshot.VideoCodec) {
+		qa.Errors = append(qa.Errors, "profile_video_codec_mismatch")
+	}
+	if plan.RequiresAudio && qa.AudioCodec != plan.ProfileSnapshot.AudioCodec {
+		qa.Errors = append(qa.Errors, "profile_audio_codec_mismatch")
+	}
+	if plan.ExpectedDurationSec > 0 && math.Abs(qa.DurationSec-plan.ExpectedDurationSec) > 0.15 {
+		qa.Errors = append(qa.Errors, "timeline_duration_mismatch")
+	}
+	qa.Passed = len(qa.Errors) == 0
 	if !qa.Passed {
 		return RenderResult{}, fmt.Errorf("deliverable QA failed: %s", strings.Join(qa.Errors, ", "))
 	}
@@ -424,6 +751,13 @@ func Inspect(ctx context.Context, path string, policy process.Policy) (QAReport,
 	if strings.TrimSpace(path) == "" {
 		return QAReport{}, errors.New("deliverable path is required")
 	}
+	stat, err := os.Stat(path)
+	if err != nil {
+		return QAReport{}, fmt.Errorf("deliverable file is not readable: %w", err)
+	}
+	if stat.Size() <= 0 {
+		return QAReport{Errors: []string{"deliverable_empty"}}, nil
+	}
 	result, err := policy.Run(ctx, process.Spec{Tool: process.ToolFFprobe, Args: []string{"-v", "error", "-show_entries", "format=duration:stream=codec_type,codec_name,width,height", "-of", "json", path}, InputPaths: []string{path}, Timeout: policy.MaxDuration})
 	if err != nil {
 		return QAReport{}, err
@@ -484,7 +818,7 @@ func validateProfile(profile RenderProfile) error {
 }
 
 func validateClip(timelineDuration float64, clip timelineClip, artifactPaths map[string]string) error {
-	if clip.ID == "" || clip.Origin == "" || clip.TimelineIn < 0 || clip.TimelineOut <= clip.TimelineIn || clip.TimelineOut > timelineDuration+0.001 {
+	if clip.ID == "" || clip.Origin == "" || !finite(clip.TimelineIn) || !finite(clip.TimelineOut) || clip.TimelineIn < 0 || clip.TimelineOut <= clip.TimelineIn || clip.TimelineOut > timelineDuration+0.001 {
 		return errors.New("clip identity or timeline range is invalid")
 	}
 	if clip.Source.Type != "asset" && clip.Source.Type != "scene" && clip.Source.Type != "artifact" {
@@ -496,21 +830,31 @@ func validateClip(timelineDuration float64, clip timelineClip, artifactPaths map
 	if clip.Source.ArtifactID == "" || strings.TrimSpace(artifactPaths[clip.Source.ArtifactID]) == "" {
 		return errors.New("render source Artifact handle is missing")
 	}
-	if clip.Speed < 0 || clip.Speed > 16 {
+	if !finite(clip.Speed) || clip.Speed < 0 || clip.Speed > 16 {
 		return errors.New("clip speed is invalid")
 	}
-	if clip.SourceIn != nil && *clip.SourceIn < 0 {
+	if clip.SourceIn != nil && (!finite(*clip.SourceIn) || *clip.SourceIn < 0) {
 		return errors.New("source range is invalid")
 	}
-	if clip.SourceOut != nil && (*clip.SourceOut <= 0 || clip.SourceIn == nil || *clip.SourceOut <= *clip.SourceIn) {
+	if clip.SourceOut != nil && (!finite(*clip.SourceOut) || *clip.SourceOut <= 0 || clip.SourceIn == nil || *clip.SourceOut <= *clip.SourceIn) {
 		return errors.New("source range is invalid")
+	}
+	if clip.SourceIn != nil && clip.SourceOut != nil && !clip.Loop && !clip.FreezeFrame {
+		effectiveSpeed := clip.Speed
+		if effectiveSpeed <= 0 {
+			effectiveSpeed = 1
+		}
+		expectedSourceDuration := (clip.TimelineOut - clip.TimelineIn) * effectiveSpeed
+		if math.Abs((*clip.SourceOut-*clip.SourceIn)-expectedSourceDuration) > 0.05 {
+			return errors.New("source range duration must match timeline duration unless loop or freeze_frame is explicit")
+		}
 	}
 	return nil
 }
 
 func validateTransition(value transition, duration float64) error {
 	switch value.Kind {
-	case "cut", "fade", "crossfade", "dip_to_black", "wipe":
+	case "cut", "fade", "crossfade":
 	default:
 		return errors.New("transition kind is not allowlisted")
 	}
@@ -530,6 +874,17 @@ func validateMix(mix *audioMix) error {
 	return nil
 }
 
+func finite(value float64) bool {
+	return !math.IsNaN(value) && !math.IsInf(value, 0)
+}
+
+func expectedVideoCodec(codec string) string {
+	if codec == "libx264" {
+		return "h264"
+	}
+	return codec
+}
+
 func scaleFilter(profile RenderProfile) string {
 	// The reviewed process policy rejects shell metacharacters.  The baseline
 	// uses deterministic top-left padding; subject-aware profile reframe is a
@@ -537,11 +892,76 @@ func scaleFilter(profile RenderProfile) string {
 	return fmt.Sprintf("scale=%d:%d:force_original_aspect_ratio=decrease,pad=%d:%d:0:0:color=black", profile.Width, profile.Height, profile.Width, profile.Height)
 }
 
-func drawTextFilter(cue subtitleCue, in, out float64) (string, error) {
+func drawTextFilterLegacy(cue subtitleCue, in, out float64) (string, error) {
 	if cue.Language == "" || cue.Text == "" || strings.ContainsAny(cue.Text, "'\\\n\r;|$`()") {
 		return "", errors.New("subtitle text contains unsafe characters")
 	}
-	return fmt.Sprintf("drawtext=text='%s':enable='between(t,%s,%s)'", cue.Text, formatSeconds(in), formatSeconds(out)), nil
+	escaped := strings.NewReplacer("\\", "\\\\", "'", "\\'", ":", "\\:", ";", "\\;", "[", "\\[", "]", "\\]").Replace(cue.Text)
+	return fmt.Sprintf("drawtext=text='%s':enable=between(t\\,%s\\,%s)", escaped, formatSeconds(in), formatSeconds(out)), nil
+}
+
+func drawTextFilter(cue subtitleCue, in, out float64) (string, error) {
+	if cue.Language == "" || cue.Text == "" || strings.ContainsAny(cue.Text, "\x00\n\r$()&|") {
+		return "", errors.New("subtitle text contains unsafe characters")
+	}
+	escaped := strings.NewReplacer("\\", "\\\\", "'", "\\'", ":", "\\:", ";", "\\;", "[", "\\[", "]", "\\]").Replace(cue.Text)
+	return fmt.Sprintf("drawtext=text='%s':enable=between(t\\,%s\\,%s)", escaped, formatSeconds(in), formatSeconds(out)), nil
+}
+
+func drawTextFilterWithFont(cue subtitleCue, in, out float64, fontPath string) (string, error) {
+	filter, err := drawTextFilter(cue, in, out)
+	if err != nil {
+		return "", err
+	}
+	font := strings.NewReplacer("\\", "/", ":", "\\:", "'", "\\'").Replace(fontPath)
+	return strings.Replace(filter, "drawtext=", "drawtext=fontfile='"+font+"':", 1), nil
+}
+
+func drawTextFileFilter(cue subtitleCue, in, out float64, textPath, fontPath string) (string, error) {
+	if cue.Language == "" || cue.Text == "" || strings.ContainsAny(textPath, "\x00\r\n&|$") {
+		return "", errors.New("subtitle text file boundary is invalid")
+	}
+	textFile := strings.NewReplacer("\\", "/", ":", "\\:", "'", "\\'").Replace(textPath)
+	fontPrefix := ""
+	if fontPath != "" {
+		font := strings.NewReplacer("\\", "/", ":", "\\:", "'", "\\'").Replace(fontPath)
+		fontPrefix = "fontfile='" + font + "':"
+	}
+	return fmt.Sprintf("drawtext=%stextfile='%s':reload=0:enable=between(t\\,%s\\,%s)", fontPrefix, textFile, formatSeconds(in), formatSeconds(out)), nil
+}
+
+func prepareSubtitleFiles(documentBytes []byte, sandboxRoot string) (map[string]string, error) {
+	files := make(map[string]string)
+	if len(documentBytes) == 0 || strings.TrimSpace(sandboxRoot) == "" {
+		return files, nil
+	}
+	var document timelineDocument
+	decoder := json.NewDecoder(bytes.NewReader(documentBytes))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&document); err != nil {
+		return nil, fmt.Errorf("timeline document is invalid: %w", err)
+	}
+	index := 0
+	for _, track := range document.Tracks {
+		if track.Kind != "subtitle" {
+			continue
+		}
+		for _, clip := range track.Clips {
+			if clip.Subtitle == nil {
+				continue
+			}
+			path := filepath.Join(sandboxRoot, fmt.Sprintf("subtitle-%03d.txt", index))
+			if err := ensureSandboxPath(sandboxRoot, path); err != nil {
+				return nil, err
+			}
+			if err := os.WriteFile(path, []byte(clip.Subtitle.Text), 0o600); err != nil {
+				return nil, fmt.Errorf("prepare subtitle scratch: %w", err)
+			}
+			files[clip.ID] = path
+			index++
+		}
+	}
+	return files, nil
 }
 
 func sourceIn(clip timelineClip) float64 {

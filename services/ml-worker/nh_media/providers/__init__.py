@@ -1,29 +1,6 @@
-"""Provider-neutral Gate G ports and deterministic adapters."""
+"""Typed provider-neutral Gate G ports and deterministic adapters."""
 
-from nh_media.gate_g import (
-    FakeProvider,
-    ProviderCallContext,
-    ProviderDescriptor,
-    ProviderError,
-    ProviderKind,
-    ProviderPort,
-    ProviderRegistry,
-    ProviderResponse,
-    ProviderResultMeta,
-    provider_conformance,
-    resolve_with_fallback,
-)
+from .contracts import *  # noqa: F403
+from .contracts import __all__ as _contracts_all
 
-__all__ = [
-    "FakeProvider",
-    "ProviderCallContext",
-    "ProviderDescriptor",
-    "ProviderError",
-    "ProviderKind",
-    "ProviderPort",
-    "ProviderRegistry",
-    "ProviderResponse",
-    "ProviderResultMeta",
-    "provider_conformance",
-    "resolve_with_fallback",
-]
+__all__ = list(_contracts_all)

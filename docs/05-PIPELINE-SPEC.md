@@ -371,3 +371,18 @@ For a capability identified through upstream research:
 
 Pipeline activation and normal CI must not import, execute, fetch or materialize Movie Narrator.
 The normative classification is in `UPSTREAM-CAPABILITY-MATRIX.md`.
+
+## 13. Gate G implementation evidence (2026-08-18)
+
+The current native implementation keeps provider decisions behind typed LLM, VLM, TTS, ASR and
+embedding ports. Provider results carry adapter/configuration/model provenance; normalized errors,
+allowlisted fallback and credential redaction are tested. Domain nodes do not call a universal
+untyped provider method.
+
+The Go renderer consumes the canonical TimelineVersion document and profile, compiles multiple
+video clips with allowlisted transitions, audio mixing and sandboxed subtitle files, and performs
+ffprobe QA for non-empty output, profile dimensions/codecs, duration and required audio before an
+Artifact commit is offered. Real reviewed FFmpeg/ffprobe tests cover Python scene detection and
+frame-derived features, three-clip render with audio/subtitles, clip export, and 16:9/9:16/1:1
+profile reuse. This is local deterministic/provider-free acceptance; external provider quality,
+GPU model execution and production deployment remain unclaimed.

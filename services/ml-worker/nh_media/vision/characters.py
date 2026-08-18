@@ -1,3 +1,3 @@
-from nh_media.gate_g import CharacterProposal, cluster_characters
+from nh_media.gate_g import AppearanceObservation, CharacterProposal, cluster_characters
 
-__all__ = ["CharacterProposal", "cluster_characters"]
+__all__ = ["AppearanceObservation", "CharacterProposal", "cluster_characters"]

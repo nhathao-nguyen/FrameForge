@@ -44,7 +44,7 @@ try {
     if ($gofmtOutput.Count -gt 0) { throw ('gofmt required: ' + ($gofmtOutput -join ', ')) }
     Invoke-Checked go.exe @('vet', './...')
     Invoke-Checked go.exe @('test', './...')
-    Invoke-Checked go.exe @('test', '-run', 'TestRenderRealMediaAndReuseThreeProfiles|TestInspectRejectsMissingVideo', './services/media-worker/internal/render', '-count=1')
+    Invoke-Checked go.exe @('test', '-run', 'TestRenderRealMediaAndReuseThreeProfiles|TestRenderRealMultiClipMovieWithAudioAndSubtitles|TestInspectRejectsMissingVideo', './services/media-worker/internal/render', '-count=1')
 
     Write-Output 'Gate G: exact Node/pnpm client checks'
     Invoke-Checked $node @($pnpmScript, '--recursive', '--if-present', 'run', 'typecheck')

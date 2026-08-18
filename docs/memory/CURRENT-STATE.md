@@ -11,10 +11,10 @@ owner: repository owner / task assignee
 | Field | Value | Evidence |
 |---|---|---|
 | Working branch | `implementation/bootstrap` | `git branch --show-current` |
-| Baseline commit | `695234da6a4153033027b418d6d9132f4101a550` (`checkpoint: close Gate F implementation audit`) | user-requested Gate G starting checkpoint; implementation changes remain uncommitted |
-| Acceptance checkpoint | `695234d` | user-requested starting checkpoint; no commit/push performed by this task |
+| Baseline commit | `7f889b65840631f7605c2d73c94b46a35c1a0a9d` (`checkpoint: close Gate G local acceptance`) | user-requested Gate G starting checkpoint; implementation changes are the current audit delta |
+| Acceptance checkpoint | pending checkpoint commit | created only after the current-tree implementation and full acceptance evidence are recorded |
 | Tracking branch | `origin/implementation/bootstrap` | `git status --short --branch` |
-| Push/merge action | none | working tree changes are intentionally uncommitted and unpushed |
+| Push/merge action | pending final checkpoint push | explicitly authorized by the Gate G task prompt; no branch switch or merge |
 
 ## Gate and phase
 
@@ -90,8 +90,9 @@ owner: repository owner / task assignee
   exercised upload and Job/event/SSE paths, proved no local backend dependency, and cleaned up.
 - Local Functional Acceptance is T550; Local/LAN Hardened Acceptance is T603; Internet/VPS
   production is T605.
-- Gate G evidence is in `docs/evidence/gate-g-dependency-preflight-20260818.md` and
-  `docs/evidence/gate-g-capability-coverage.md`; executable acceptance is `tools/accept-gate-g.ps1`.
+- Gate G evidence is in `docs/evidence/gate-g-dependency-preflight-20260818.md`,
+  `docs/evidence/gate-g-capability-coverage.md` and the current implementation audit entry in
+  `docs/memory/TEST-EVIDENCE.md`; executable acceptance is `tools/accept-gate-g.ps1`.
 - Gate G native coverage includes provider ports, research/script/style, TTS, ASR/alignment,
   subtitles/translation/bilingual QA, scenes/filters/VLM/characters, text and visual embeddings,
   matching/coverage/candidates, reference style, typed audio/BGM policy, Timeline compilation,
@@ -113,9 +114,9 @@ vendors are later configuration choices.
 
 ```text
   Task: Gate G — T500–T532 native media/AI capability slice
-  Status: LOCAL ACCEPTANCE PASS; current-machine dependency preflight, capability reconciliation,
-  deterministic Python workflow, real FFmpeg render/clip/profile QA and repository regression checks
-  are current and reviewable. T434 signing remains a separate owner-controlled release boundary.
+  Status: LOCAL ACCEPTANCE PASS; current-tree typed provider contracts, real FFmpeg scene/render/
+  clip/profile QA, full repository regression and security checks are current and reviewable.
+  T434 signing remains a separate owner-controlled release boundary.
 Boundary: Canonical execution transitions/events, queue, scheduling, leases, media/AI worker contracts,
   durable graph bootstrap, controls, checkpoint/DLQ and SSE boundary
 Application code: API, persistence, media worker, Python worker, contracts, and execution adapters

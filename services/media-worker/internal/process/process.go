@@ -111,7 +111,7 @@ func (p Policy) Run(ctx context.Context, spec Spec) (Result, error) {
 	}
 	if err != nil {
 		result.ExitCode = exitCode(err)
-		return result, fmt.Errorf("media process failed: exit code %d", result.ExitCode)
+		return result, fmt.Errorf("media process failed: exit code %d: %s", result.ExitCode, safeProcessError(err))
 	}
 	result.ExitCode = 0
 	return result, nil
@@ -133,9 +133,21 @@ func validateArgs(args, inputs, outputs []string) error {
 	for _, value := range append(append([]string{}, inputs...), outputs...) {
 		allowedPaths[filepath.Clean(value)] = struct{}{}
 	}
+	filterValue := false
 	for _, arg := range args {
 		if arg == "" || strings.ContainsAny(arg, "\x00\r\n") {
 			return fmt.Errorf("%w: empty or control-character argv", ErrPolicyViolation)
+		}
+		if filterValue {
+			if strings.ContainsAny(arg, "\x00\r\n&$") {
+				return fmt.Errorf("%w: unsafe generated media filter", ErrPolicyViolation)
+			}
+			filterValue = false
+			continue
+		}
+		if arg == "-filter_complex" || arg == "-vf" {
+			filterValue = true
+			continue
 		}
 		if strings.ContainsAny(arg, ";&|$`()") {
 			return fmt.Errorf("%w: shell syntax in argv", ErrPolicyViolation)
@@ -222,6 +234,17 @@ func exitCode(err error) int {
 		return exitErr.ExitCode()
 	}
 	return -1
+}
+
+func safeProcessError(err error) string {
+	if err == nil {
+		return "unknown process error"
+	}
+	message := strings.TrimSpace(err.Error())
+	if len(message) > 256 {
+		message = message[:256]
+	}
+	return message
 }
 
 var _ io.Writer = (*limitedBuffer)(nil)

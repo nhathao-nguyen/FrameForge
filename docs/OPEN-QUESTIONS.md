@@ -193,3 +193,11 @@ Python, FFmpeg processing, models/workers, PostgreSQL, Redis or provider/server 
 Exact VPS/provider, public domain, production OIDC vendor, production KMS/Vault, cloud S3 vendor,
 monitoring SaaS, public ingress and certificate automation are `DEFERRED-NONBLOCKING`. They belong to
 the Internet/VPS production profile and do not block Local Functional Acceptance or current coding.
+
+## Gate G implementation disposition — 2026-08-18
+
+The T500–T532 implementation audit is complete on the requested `implementation/bootstrap` baseline.
+No architecture question was reopened: typed provider contracts, local deterministic conformance,
+real reviewed FFmpeg/ffprobe media proof and post-QA Artifact boundaries follow the approved
+decisions above. External provider credentials/model quality, hardened T600–T603 work and public
+T605 deployment remain explicitly outside this Gate G acceptance.
