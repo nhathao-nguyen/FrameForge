@@ -98,10 +98,10 @@ func (s *SQLStore) BootstrapLocalInstallation(ctx context.Context, input Bootstr
 	return BootstrapResult{UserID: userID, WorkspaceID: workspaceID}, nil
 }
 
-// EnsureDefaultWorkflow seeds the native, non-executing workflow and the
-// declarative validation pipeline required for upload completion to enqueue a
-// durable asset-probe Job. It does not execute nodes or transition Job state;
-// those concerns remain Gate E/T300.
+// EnsureDefaultWorkflow seeds the native movie-recap graph and a separate
+// upload-validation graph. Upload validation is intentionally not stored as a
+// one-node movie-recap snapshot: the product workflow and the dedicated
+// asset-validation workflow are distinct durable contracts.
 func (s *SQLStore) EnsureDefaultWorkflow(ctx context.Context, userID string) error {
 	if userID == "" {
 		return errors.New("workflow seed requires creator")
@@ -109,35 +109,17 @@ func (s *SQLStore) EnsureDefaultWorkflow(ctx context.Context, userID string) err
 	if _, err := s.DB.ExecContext(ctx, `INSERT INTO workflows(workflow_key,name,description,status,created_by) VALUES('movie_recap','Movie recap','NH-Media native workflow definition','active',$1) ON CONFLICT DO NOTHING`, userID); err != nil {
 		return err
 	}
-	_, err := s.EnsurePipelineDefinition(ctx, PipelineDefinitionInput{
-		WorkflowKey:   "movie_recap",
-		WorkflowName:  "Movie recap",
-		Description:   "Native validation graph definition",
-		SchemaVersion: "1.0",
-		Definition:    json.RawMessage(`{"kind":"asset_validation","nodes":["asset_probe"]}`),
-		Version:       1,
-		Status:        "active",
-		CreatedBy:     userID,
-		Nodes: []PipelineNodeInput{{
-			NodeKey:               "asset_probe",
-			NodeType:              "asset_probe",
-			DisplayName:           "Validate uploaded asset",
-			ExecutionClass:        "probe",
-			FailureMode:           "hard",
-			ReviewPolicy:          "none",
-			InputSchema:           json.RawMessage(`{"type":"object"}`),
-			OutputSchema:          json.RawMessage(`{"type":"object"}`),
-			ProducedArtifactRoles: json.RawMessage(`[]`),
-			Config:                json.RawMessage(`{"purpose":"upload_validation"}`),
-			TimeoutSec:            900,
-			MaxAttempts:           1,
-			RetryPolicy:           json.RawMessage(`{"retryable":false}`),
-			CheckpointPolicy:      json.RawMessage(`{"enabled":false}`),
-			ResourceRequirements:  json.RawMessage(`{"network":"none"}`),
-			IdempotencyPolicy:     json.RawMessage(`{"key":"asset_id"}`),
-			ProgressWeight:        1,
-		}},
-	})
+	movieRecap, err := nativeMovieRecapInput(userID)
+	if err != nil {
+		return err
+	}
+	if _, err := s.EnsurePipelineDefinition(ctx, movieRecap); err != nil {
+		return err
+	}
+	if _, err = s.EnsurePipelineDefinition(ctx, nativeAssetValidationInput(userID)); err != nil {
+		return err
+	}
+	_, err = s.EnsurePipelineDefinition(ctx, nativeAcceptanceAnalysisInput(userID))
 	return err
 }
 
@@ -274,6 +256,9 @@ func (s *SQLStore) EnsurePipelineDefinition(ctx context.Context, input PipelineD
 	if input.Status != "draft" && input.Status != "active" && input.Status != "deprecated" && input.Status != "disabled" {
 		return "", errors.New("invalid pipeline status")
 	}
+	if err := validatePipelineDefinitionInput(input); err != nil {
+		return "", err
+	}
 	definition, err := canonicalJSON(input.Definition)
 	if err != nil {
 		return "", fmt.Errorf("pipeline definition: %w", err)
@@ -299,6 +284,11 @@ func (s *SQLStore) EnsurePipelineDefinition(ctx context.Context, input PipelineD
 		if strings.TrimSpace(existingHash) != contentHash {
 			return "", fmt.Errorf("pipeline version %d already contains different content", input.Version)
 		}
+		if input.Status == "active" {
+			if _, err := tx.ExecContext(ctx, `UPDATE pipelines SET status='deprecated',updated_at=now() WHERE workflow_id=$1 AND status='active' AND id<>$2`, workflowID, pipelineID); err != nil {
+				return "", err
+			}
+		}
 		if err := tx.Commit(); err != nil {
 			return "", err
 		}
@@ -306,6 +296,15 @@ func (s *SQLStore) EnsurePipelineDefinition(ctx context.Context, input PipelineD
 	}
 	if !errors.Is(err, sql.ErrNoRows) {
 		return "", err
+	}
+	if input.Status == "active" {
+		// There is one canonical active version per system workflow. The
+		// database trigger permits only the immutable active -> deprecated
+		// lifecycle transition, so an older active graph cannot remain a
+		// competing scheduler candidate after a native upgrade.
+		if _, err := tx.ExecContext(ctx, `UPDATE pipelines SET status='deprecated',updated_at=now() WHERE workflow_id=$1 AND status='active'`, workflowID); err != nil {
+			return "", err
+		}
 	}
 	if err = tx.QueryRowContext(ctx, `INSERT INTO pipelines(workflow_id,version,status,schema_version,definition,content_hash,created_by,activated_at) VALUES($1,$2,$3,$4,$5,$6,$7,CASE WHEN $3='active' THEN now() END) RETURNING id::text`, workflowID, input.Version, input.Status, input.SchemaVersion, definition, contentHash, input.CreatedBy).Scan(&pipelineID); err != nil {
 		return "", err
@@ -477,7 +476,8 @@ func (s *SQLStore) CreateProjectJob(ctx context.Context, userID, workspaceID, pr
 	if kind != "pipeline" && kind != "render" && kind != "asset_probe" && kind != "analysis" && kind != "export" {
 		return JobRecord{}, errors.New("invalid job kind")
 	}
-	if _, err := s.GetProject(ctx, userID, workspaceID, projectID); err != nil {
+	project, err := s.GetProject(ctx, userID, workspaceID, projectID)
+	if err != nil {
 		return JobRecord{}, err
 	}
 	if len(command) == 0 {
@@ -486,9 +486,19 @@ func (s *SQLStore) CreateProjectJob(ctx context.Context, userID, workspaceID, pr
 	if len(inputSnapshot) == 0 {
 		inputSnapshot = command
 	}
+	requestedWorkflow := ""
+	var commandEnvelope struct {
+		WorkflowKey string `json:"workflow_key"`
+	}
+	if err := json.Unmarshal(command, &commandEnvelope); err == nil {
+		requestedWorkflow = strings.TrimSpace(commandEnvelope.WorkflowKey)
+	}
+	if requestedWorkflow != "" && requestedWorkflow != project.WorkflowKey {
+		return JobRecord{}, fmt.Errorf("workflow_key %q is not the project's active workflow", requestedWorkflow)
+	}
 	var workflowID, pipelineID string
 	var pipelineSnapshot json.RawMessage
-	err := s.DB.QueryRowContext(ctx, `SELECT w.id::text,p.id::text,jsonb_build_object('pipeline_id',p.id::text,'version',p.version,'schema_version',p.schema_version,'definition',p.definition,'nodes',COALESCE((SELECT jsonb_agg(jsonb_build_object('node_key',n.node_key,'node_type',n.node_type,'execution_class',n.execution_class,'config',n.config) ORDER BY n.node_key) FROM pipeline_nodes n WHERE n.pipeline_id=p.id),'[]'::jsonb)) FROM projects pr JOIN workflows w ON w.id=pr.workflow_id JOIN pipelines p ON p.workflow_id=w.id AND p.status='active' WHERE pr.id=$1 AND pr.workspace_id=$2 ORDER BY p.version DESC LIMIT 1`, projectID, workspaceID).Scan(&workflowID, &pipelineID, &pipelineSnapshot)
+	err = s.DB.QueryRowContext(ctx, `SELECT w.id::text,p.id::text,jsonb_build_object('pipeline_id',p.id::text,'version',p.version,'schema_version',p.schema_version,'definition',p.definition,'nodes',COALESCE((SELECT jsonb_agg(jsonb_build_object('node_key',n.node_key,'node_type',n.node_type,'execution_class',n.execution_class,'config',n.config) ORDER BY n.node_key) FROM pipeline_nodes n WHERE n.pipeline_id=p.id),'[]'::jsonb)) FROM projects pr JOIN workflows project_workflow ON project_workflow.id=pr.workflow_id JOIN workflows w ON w.workflow_key=project_workflow.workflow_key AND w.status='active' AND (w.workspace_id IS NULL OR w.workspace_id=$2) JOIN pipelines p ON p.workflow_id=w.id AND p.status='active' WHERE pr.id=$1 AND pr.workspace_id=$2 ORDER BY p.version DESC LIMIT 1`, projectID, workspaceID).Scan(&workflowID, &pipelineID, &pipelineSnapshot)
 	if errors.Is(err, sql.ErrNoRows) {
 		return JobRecord{}, ErrNotFound
 	}
@@ -551,7 +561,7 @@ func (s *SQLStore) CompleteUploadAndCreateProbeJob(ctx context.Context, userID, 
 	}
 	var workflowID, pipelineID string
 	var pipelineSnapshot json.RawMessage
-	err = tx.QueryRowContext(ctx, `SELECT w.id::text,p.id::text,jsonb_build_object('pipeline_id',p.id::text,'version',p.version,'schema_version',p.schema_version,'definition',p.definition,'nodes',COALESCE((SELECT jsonb_agg(jsonb_build_object('node_key',n.node_key,'node_type',n.node_type,'execution_class',n.execution_class,'config',n.config) ORDER BY n.node_key) FROM pipeline_nodes n WHERE n.pipeline_id=p.id),'[]'::jsonb)) FROM projects pr JOIN workflows w ON w.id=pr.workflow_id JOIN pipelines p ON p.workflow_id=w.id AND p.status='active' WHERE pr.id=$1 AND pr.workspace_id=$2 ORDER BY p.version DESC LIMIT 1`, projectID, workspaceID).Scan(&workflowID, &pipelineID, &pipelineSnapshot)
+	err = tx.QueryRowContext(ctx, `SELECT w.id::text,p.id::text,jsonb_build_object('pipeline_id',p.id::text,'version',p.version,'schema_version',p.schema_version,'definition',p.definition,'nodes',COALESCE((SELECT jsonb_agg(jsonb_build_object('node_key',n.node_key,'node_type',n.node_type,'execution_class',n.execution_class,'config',n.config) ORDER BY n.node_key) FROM pipeline_nodes n WHERE n.pipeline_id=p.id),'[]'::jsonb)) FROM projects pr JOIN workflows w ON w.workflow_key='asset_validation' AND w.status='active' AND (w.workspace_id IS NULL OR w.workspace_id=$2) JOIN pipelines p ON p.workflow_id=w.id AND p.status='active' WHERE pr.id=$1 AND pr.workspace_id=$2 ORDER BY p.version DESC LIMIT 1`, projectID, workspaceID).Scan(&workflowID, &pipelineID, &pipelineSnapshot)
 	if errors.Is(err, sql.ErrNoRows) {
 		return UploadRecord{}, JobRecord{}, ErrNotFound
 	}

@@ -1,8 +1,9 @@
 {
   "name": "@nh-media/sdk",
   "private": true,
+  "type": "module",
   "version": "0.1.0-foundation",
-  "scripts": { "typecheck": "tsc --noEmit" },
+  "scripts": { "typecheck": "tsc --noEmit", "test": "node --experimental-strip-types --test test/client.test.ts" },
   "exports": { ".": { "types": "./src/index.ts", "default": "./src/index.ts" } },
   "devDependencies": { "typescript": "5.8.3" }
 }

@@ -6,6 +6,49 @@ owner: repository owner / task assignee
 
 # Memory changelog
 
+## 2026-08-18 — Gate F current physical-client closure
+
+- Verified new external run `lan-client-1353be68-e9ba-41d7-9ee1-b2f97340452e` from
+  `DESKTOP-92ICS6C` (`192.168.1.29`) against server `192.168.1.18`.
+- The current script hash matched the working-tree script; authentication, Workspace/Project,
+  upload, completed Job, REST replay, SSE snapshot/reconnect, no-local-backend and cleanup all
+  passed with `external_to_server=true`.
+- With current T434 signed N/N+1 acceptance already passing, Gate F is now `PASS` for T400–T434 and
+  T550. T603/hardened and public-production gates remain separate.
+
+## 2026-08-18 — Current-tree T434 signed acceptance
+
+- Built and verified `t434-current` and `t434-current-next` with the owner key and exact LAN origin;
+  the fresh per-user NSIS harness passed signature identity, install/launch, update/launch, tamper
+  rejection and rollback-pointer checks.
+- Copied the current LAN client acceptance script to the reachable second-device share at
+  `\\192.168.1.29\Users\Public\accept-lan-client-current.ps1`; RPC/WinRM is unavailable, so the
+  client must be launched locally on that physical Windows device.
+- Gate F remains `NOT PASS` only for the current physical second-device T550 run.
+
+## 2026-08-18 — Current-tree T550 recovery rerun
+
+- Reissued the native policy-complete MovieRecap graph as immutable `movie_recap` v3 because the
+  durable developer database already contained a different v2 content hash; no pipeline version
+  was mutated in place.
+- Reran current-tree local and exact-LAN server acceptance with tracked API/Go/Python/web restart
+  recovery. Both durable Jobs and the SSE snapshot remained `completed`/recoverable; same-host LAN
+  traffic still is not physical second-device evidence.
+- Gate F remains `NOT PASS`: current-tree T434 install/update evidence with owner signing input and
+  a controlled physical second-device T550 run are still outstanding.
+
+## 2026-08-18 — Current-tree Gate F repair audit
+
+- Repaired pipeline schema/policy validation, fail-closed timeout/retry/soft-dependency runtime,
+  canonical native workflow persistence, exact review-resource validation, structural-vs-durable
+  timeline validation, immutable timeline commands, direct artifact upload/download boundaries and
+  web/SDK review/editor flows.
+- Current live acceptance passed for T550 Local and exact LAN server-path: direct storage upload,
+  dedicated Go validation/Artifact Job, SSE snapshot/live/reconnect and Product API → Redis Streams
+  → Python `nh_media` analysis Job all reached exact `completed`.
+- Gate F remains `NOT PASS`: current-tree T434 NSIS install/update evidence has not run with owner
+  signing input, and no controlled physical second-device T550 run was performed in this turn.
+
 ## 2026-08-18 — Gate F physical-client acceptance closure
 
 - Captured sanitized physical-client evidence from `DESKTOP-92ICS6C` (`192.168.1.29`) against LAN

@@ -7,13 +7,33 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"regexp"
 	"sort"
+	"strings"
 )
 
 const DefinitionSchemaVersion = "pipeline-definition/v1"
 
 var keyPattern = regexp.MustCompile(`^[a-z][a-z0-9_]{1,63}$`)
+
+var registeredNodeTypes = map[string]bool{
+	"fake": true, "analysis": true, "asset_probe": true, "resolve_source_asset": true,
+	"prepare_media_assets": true, "research_metadata": true, "generate_script": true,
+	"review_script": true, "generate_narration": true, "align_audio": true,
+	"detect_scenes": true, "extract_transcript": true, "analyze_scenes": true,
+	"detect_characters": true, "embed_media": true, "generate_match_candidates": true,
+	"evaluate_candidates": true, "select_candidate": true, "coverage_feedback": true,
+	"translate_subtitles": true, "generate_subtitle": true, "build_timeline": true,
+	"review_timeline": true, "mix_audio": true, "run_qa_gate": true,
+	"render_timeline": true, "validate_deliverable": true, "export_clips": true,
+}
+
+var dependencyConditions = map[string]bool{
+	"success":                  true,
+	"soft":                     true,
+	"success_or_declared_soft": true,
+}
 
 type Definition struct {
 	SchemaVersion string     `json:"schema_version"`
@@ -141,11 +161,17 @@ func (d Definition) Validate(capabilities CapabilitySet) error {
 	dependants := make(map[string][]string, len(nodes))
 	for _, node := range d.Nodes {
 		indegree[node.Key] = 0
-		if !keyPattern.MatchString(node.Key) || node.Type == "" || node.DisplayName == "" {
+		if !keyPattern.MatchString(node.Key) || !registeredNodeTypes[node.Type] || node.DisplayName == "" {
 			return ValidationError{"nodes." + node.Key, "key, type and display_name are required"}
 		}
 		if node.InputContract == "" || node.OutputContract == "" || len(node.InputSchema) == 0 || len(node.OutputSchema) == 0 {
 			return ValidationError{"nodes." + node.Key, "input/output contracts and schemas are required"}
+		}
+		if err := validateJSONSchema(node.InputSchema, "nodes."+node.Key+".input_schema"); err != nil {
+			return ValidationError{"nodes." + node.Key + ".input_schema", err.Error()}
+		}
+		if err := validateJSONSchema(node.OutputSchema, "nodes."+node.Key+".output_schema"); err != nil {
+			return ValidationError{"nodes." + node.Key + ".output_schema", err.Error()}
 		}
 		if node.ExecutionClass == "" || !capabilities[node.ExecutionClass] {
 			return ValidationError{"nodes." + node.Key, "execution capability is unavailable"}
@@ -162,15 +188,22 @@ func (d Definition) Validate(capabilities CapabilitySet) error {
 		if node.HumanGate != (node.ReviewPolicy != "none") {
 			return ValidationError{"nodes." + node.Key, "human_gate must match review_policy"}
 		}
-		if node.Timeout.WallTimeSec < 1 || node.Timeout.KillGraceSec < 0 || node.Retry.MaxAttempts < 1 || node.Retry.MaxDelayMS < node.Retry.BaseDelayMS || node.Progress.Unit == "" || node.Progress.TotalSource == "" || node.Progress.EmitInterval <= 0 || node.Checkpoint.Mode == "" || node.Idempotency.SideEffects == "" || len(node.Idempotency.FingerprintFields) == 0 {
+		if node.Timeout.WallTimeSec < 1 || node.Timeout.IdleTimeSec < 0 || node.Timeout.KillGraceSec < 0 || node.Retry.MaxAttempts < 1 || node.Retry.BaseDelayMS < 0 || node.Retry.MaxDelayMS < node.Retry.BaseDelayMS || (node.Retry.MaxAttempts > 1 && len(node.Retry.RetryableCategories) == 0) || node.Progress.Unit == "" || node.Progress.TotalSource == "" || node.Progress.EmitInterval <= 0 || node.Checkpoint.Mode == "" || node.Idempotency.SideEffects == "" || len(node.Idempotency.FingerprintFields) == 0 || len(node.ResourceRequirements) == 0 {
 			return ValidationError{"nodes." + node.Key + ".policy", "timeout/retry/progress/checkpoint/idempotency policy is incomplete"}
+		}
+		seenRetryCategories := map[string]bool{}
+		for _, category := range node.Retry.RetryableCategories {
+			if strings.TrimSpace(category) == "" || seenRetryCategories[category] {
+				return ValidationError{"nodes." + node.Key + ".retry_policy", "retryable categories must be non-empty and unique"}
+			}
+			seenRetryCategories[category] = true
 		}
 		if weight, ok := d.Policies.ProgressWeights[node.Key]; !ok || weight <= 0 {
 			return ValidationError{"policies.progress_weights." + node.Key, "weight must be positive"}
 		}
 		seenDependencies := map[string]bool{}
 		for _, dependency := range node.DependsOn {
-			if dependency.NodeKey == node.Key || nodes[dependency.NodeKey].Key == "" || dependency.Condition == "" || seenDependencies[dependency.NodeKey] {
+			if dependency.NodeKey == node.Key || nodes[dependency.NodeKey].Key == "" || !dependencyConditions[dependency.Condition] || seenDependencies[dependency.NodeKey] {
 				return ValidationError{"nodes." + node.Key + ".depends_on", "dependency is missing, duplicated or self-referential"}
 			}
 			seenDependencies[dependency.NodeKey] = true
@@ -225,6 +258,162 @@ func validateBoundaries(values []string, nodes map[string]Node, name string) err
 
 func contractsCompatible(output, input string) bool {
 	return output == input || input == "context/v1" || output == "context/v1"
+}
+
+// validateJSONSchema validates the declared subset of JSON Schema used by
+// PipelineNode contracts. It intentionally stays dependency-free, but rejects
+// malformed and structurally impossible schemas before a definition can be
+// activated. Unknown extension keywords remain allowed for forward
+// compatibility; known keywords are type-checked recursively.
+func validateJSONSchema(raw json.RawMessage, path string) error {
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.UseNumber()
+	var value any
+	if err := decoder.Decode(&value); err != nil {
+		return fmt.Errorf("%s is not valid JSON: %w", path, err)
+	}
+	var extra any
+	if err := decoder.Decode(&extra); err != io.EOF {
+		return fmt.Errorf("%s contains trailing JSON", path)
+	}
+	if _, ok := value.(map[string]any); !ok {
+		return fmt.Errorf("%s must be a JSON object", path)
+	}
+	root := value.(map[string]any)
+	if _, hasType := root["type"]; !hasType {
+		if _, hasRef := root["$ref"]; !hasRef && root["oneOf"] == nil && root["anyOf"] == nil && root["allOf"] == nil {
+			return fmt.Errorf("%s must declare type, $ref or a schema composition", path)
+		}
+	}
+	return validateSchemaValue(value, path, 0)
+}
+
+func validateSchemaValue(value any, path string, depth int) error {
+	if depth > 32 {
+		return fmt.Errorf("%s exceeds schema nesting limit", path)
+	}
+	object, ok := value.(map[string]any)
+	if !ok {
+		return fmt.Errorf("%s must be a schema object", path)
+	}
+	if ref, exists := object["$ref"]; exists {
+		value, ok := ref.(string)
+		if !ok || strings.TrimSpace(value) == "" {
+			return fmt.Errorf("%s.$ref must be a non-empty string", path)
+		}
+	}
+	if rawType, exists := object["type"]; exists {
+		switch typed := rawType.(type) {
+		case string:
+			if !validSchemaType(typed) {
+				return fmt.Errorf("%s.type is unsupported", path)
+			}
+		case []any:
+			if len(typed) == 0 {
+				return fmt.Errorf("%s.type must not be empty", path)
+			}
+			seen := map[string]bool{}
+			for index, entry := range typed {
+				name, ok := entry.(string)
+				if !ok || !validSchemaType(name) || seen[name] {
+					return fmt.Errorf("%s.type[%d] is invalid or duplicated", path, index)
+				}
+				seen[name] = true
+			}
+		default:
+			return fmt.Errorf("%s.type must be a string or string array", path)
+		}
+	}
+	if properties, exists := object["properties"]; exists {
+		propertyMap, ok := properties.(map[string]any)
+		if !ok {
+			return fmt.Errorf("%s.properties must be an object", path)
+		}
+		for name, schema := range propertyMap {
+			if strings.TrimSpace(name) == "" {
+				return fmt.Errorf("%s.properties contains an empty key", path)
+			}
+			if err := validateSchemaValue(schema, path+".properties."+name, depth+1); err != nil {
+				return err
+			}
+		}
+	}
+	if required, exists := object["required"]; exists {
+		values, ok := required.([]any)
+		if !ok {
+			return fmt.Errorf("%s.required must be a string array", path)
+		}
+		seen := map[string]bool{}
+		for index, value := range values {
+			name, ok := value.(string)
+			if !ok || strings.TrimSpace(name) == "" || seen[name] {
+				return fmt.Errorf("%s.required[%d] is invalid or duplicated", path, index)
+			}
+			seen[name] = true
+		}
+	}
+	if additional, exists := object["additionalProperties"]; exists {
+		switch typed := additional.(type) {
+		case bool:
+		case map[string]any:
+			if err := validateSchemaValue(typed, path+".additionalProperties", depth+1); err != nil {
+				return err
+			}
+		default:
+			return fmt.Errorf("%s.additionalProperties must be boolean or schema", path)
+		}
+	}
+	if items, exists := object["items"]; exists {
+		if err := validateSchemaValue(items, path+".items", depth+1); err != nil {
+			return err
+		}
+	}
+	for _, keyword := range []string{"oneOf", "anyOf", "allOf"} {
+		if raw, exists := object[keyword]; exists {
+			values, ok := raw.([]any)
+			if !ok || len(values) == 0 {
+				return fmt.Errorf("%s.%s must be a non-empty schema array", path, keyword)
+			}
+			for index, schema := range values {
+				if err := validateSchemaValue(schema, fmt.Sprintf("%s.%s[%d]", path, keyword, index), depth+1); err != nil {
+					return err
+				}
+			}
+		}
+	}
+	if enum, exists := object["enum"]; exists {
+		if values, ok := enum.([]any); !ok || len(values) == 0 {
+			return fmt.Errorf("%s.enum must be a non-empty array", path)
+		}
+	}
+	if pattern, exists := object["pattern"]; exists {
+		value, ok := pattern.(string)
+		if !ok {
+			return fmt.Errorf("%s.pattern must be a string", path)
+		}
+		if _, err := regexp.Compile(value); err != nil {
+			return fmt.Errorf("%s.pattern is invalid: %w", path, err)
+		}
+	}
+	for _, keyword := range []string{"minimum", "maximum", "exclusiveMinimum", "exclusiveMaximum", "multipleOf"} {
+		if raw, exists := object[keyword]; exists {
+			if number, ok := raw.(json.Number); !ok {
+				return fmt.Errorf("%s.%s must be a number", path, keyword)
+			} else if _, err := number.Float64(); err != nil {
+				return fmt.Errorf("%s.%s is not finite", path, keyword)
+			}
+		}
+	}
+	return nil
+}
+
+func validSchemaType(value string) bool {
+	switch value {
+	case "null", "boolean", "object", "array", "number", "integer", "string":
+		return true
+	default:
+		return false
+	}
 }
 
 func (d Definition) Hash() (string, error) {

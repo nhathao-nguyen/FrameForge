@@ -22,29 +22,38 @@ function Invoke-Api([string]$Method, [string]$Path, [string]$Token = '', [object
     return Invoke-RestMethod @params
 }
 
-function Invoke-JsonProcess([string]$FilePath, [string[]]$Arguments, [string]$InputText) {
-    $info = [Diagnostics.ProcessStartInfo]::new()
-    $info.FileName = $FilePath
-    $info.WorkingDirectory = $repoRoot
-    $info.UseShellExecute = $false
-    $info.RedirectStandardInput = $true
-    $info.RedirectStandardOutput = $true
-    $info.RedirectStandardError = $true
-    if ($null -ne $info.ArgumentList) {
-        foreach ($argument in $Arguments) { [void]$info.ArgumentList.Add($argument) }
-    } else {
-        $info.Arguments = $Arguments -join ' '
+function Read-SseFrame([string]$Project, [string]$Job, [int64]$LastEventId, [string]$Token) {
+    Add-Type -AssemblyName System.Net.Http -ErrorAction Stop
+    $handler = [System.Net.Http.HttpClientHandler]::new()
+    $handler.UseProxy = $false
+    $http = [System.Net.Http.HttpClient]::new($handler)
+    $http.Timeout = [TimeSpan]::FromSeconds(15)
+    $request = [System.Net.Http.HttpRequestMessage]::new([System.Net.Http.HttpMethod]::Get, ($apiRoot + '/projects/' + $Project + '/jobs/' + $Job + '/events/stream'))
+    $request.Headers.Authorization = [System.Net.Http.Headers.AuthenticationHeaderValue]::new('Bearer', $Token)
+    $request.Headers.Add('Last-Event-ID', [string]$LastEventId)
+    $request.Headers.Accept.Add([System.Net.Http.Headers.MediaTypeWithQualityHeaderValue]::new('text/event-stream'))
+    $response = $null
+    $reader = $null
+    try {
+        $response = $http.SendAsync($request, [System.Net.Http.HttpCompletionOption]::ResponseHeadersRead).GetAwaiter().GetResult()
+        if (-not $response.IsSuccessStatusCode) { throw ('SSE returned HTTP ' + [int]$response.StatusCode) }
+        $reader = [IO.StreamReader]::new($response.Content.ReadAsStreamAsync().GetAwaiter().GetResult())
+        $lines = [Collections.Generic.List[string]]::new()
+        for ($index = 0; $index -lt 16; $index++) {
+            $readTask = $reader.ReadLineAsync()
+            if (-not $readTask.Wait(15000)) { throw 'SSE frame read timed out.' }
+            $line = $readTask.GetAwaiter().GetResult()
+            if ($null -eq $line) { break }
+            [void]$lines.Add($line)
+            if ($line -eq '') { break }
+        }
+        return ($lines -join "`n")
+    } finally {
+        if ($null -ne $reader) { $reader.Dispose() }
+        if ($null -ne $response) { $response.Dispose() }
+        if ($null -ne $request) { $request.Dispose() }
+        $http.Dispose()
     }
-    $process = [Diagnostics.Process]::new()
-    $process.StartInfo = $info
-    [void]$process.Start()
-    $process.StandardInput.WriteLine($InputText)
-    $process.StandardInput.Close()
-    $stdout = $process.StandardOutput.ReadToEnd()
-    $stderr = $process.StandardError.ReadToEnd()
-    $process.WaitForExit()
-    if ($process.ExitCode -ne 0) { throw ($FilePath + ' failed: ' + $stderr) }
-    return @{ output = $stdout; diagnostics = $stderr }
 }
 
 try {
@@ -93,28 +102,71 @@ try {
                 if ($uploadCurrent.status -in @('completed', 'failed', 'dead_lettered', 'cancelled')) { $uploadTerminal = $uploadCurrent; break }
             }
             $results.upload_go_worker_completed = $null -ne $uploadTerminal -and $uploadTerminal.status -eq 'completed'
+            if (-not $results.upload_go_worker_completed) { throw 'Upload validation Job did not reach the exact completed state.' }
         }
     } finally {
         if (Test-Path -LiteralPath $fixture) { Remove-Item -LiteralPath $fixture -Force }
     }
-    $job = Invoke-Api 'POST' ('/projects/' + $project.id + '/jobs') $token @{ kind = 'asset_probe'; mode = 'automatic'; input = @{ mode = 'deterministic' }; auto_start = $true } @{'Idempotency-Key' = 'accept-job-' + [guid]::NewGuid().ToString()}
+    $job = if ($null -ne $complete.validation_job_id) { Invoke-Api 'GET' ('/projects/' + $project.id + '/jobs/' + $complete.validation_job_id) $token } else { $null }
     $results.durable_job_created = $null -ne $job.id
-    $terminal = $null
-    for ($attempt = 0; $attempt -lt 60; $attempt++) {
-        Start-Sleep -Milliseconds 500
-        $current = Invoke-Api 'GET' ('/projects/' + $project.id + '/jobs/' + $job.id) $token
-        if ($current.status -in @('completed', 'failed', 'dead_lettered', 'cancelled')) { $terminal = $current; break }
-    }
+    $terminal = $job
     $results.go_worker_artifact_path = $null -ne $terminal -and $terminal.status -eq 'completed'
+    if (-not $results.go_worker_artifact_path) { throw 'Go worker Job did not reach the exact completed state.' }
     $events = Invoke-Api 'GET' ('/projects/' + $project.id + '/jobs/' + $job.id + '/events?after_sequence=0&limit=100') $token
     $results.sse_replay_source = $null -ne $events.items
-    $uv = (Get-Command uv.exe -ErrorAction Stop).Source
-    $pythonCommand = '{"schema_version":"worker-command/v1","message_id":"msg_accept_python_001","capability":"analysis","project_id":"project_accept_python_001","job_id":"job_accept_python_001","pipeline_run_id":"run_accept_python_001","job_step_id":"step_accept_python_001","attempt":1,"input_refs":[],"config":{"mode":"deterministic"}}'
-    $pythonResult = Invoke-JsonProcess $uv @('run', '--project', 'services/ml-worker', 'python', '-m', 'nh_media.worker') $pythonCommand
-    $pythonText = [string]$pythonResult['output']
-    if ([string]::IsNullOrWhiteSpace($pythonText)) { throw 'Python worker returned no protocol result.' }
-    $parsedPython = $pythonText.Trim() | ConvertFrom-Json
-    $results.python_worker_result = $parsedPython.status -eq 'completed' -and $null -ne $parsedPython.output_refs
+    $lastSequence = [int64]0
+    foreach ($event in @($events.items)) { if ([int64]$event.sequence -gt $lastSequence) { $lastSequence = [int64]$event.sequence } }
+    $firstFrame = Read-SseFrame ([string]$project.id) ([string]$job.id) 0 $token
+    $reconnectCursor = if ($lastSequence -gt 0) { $lastSequence - 1 } else { 0 }
+    $secondFrame = Read-SseFrame ([string]$project.id) ([string]$job.id) $reconnectCursor $token
+    $results.sse_snapshot = $firstFrame -match 'stream\.snapshot'
+    $results.sse_live = $firstFrame -match 'job\.' -or $secondFrame -match 'job\.'
+    $results.sse_reconnect = $secondFrame -match 'id: ' -and ($secondFrame -match 'event: ')
+    if (-not $results.sse_snapshot -or -not $results.sse_live -or -not $results.sse_reconnect) { throw 'SSE snapshot/live/reconnect evidence was incomplete.' }
+
+    # The Python hop must be created through Product API and consumed from
+    # Redis Streams by the running ml-worker. Direct worker stdio is not an
+    # acceptance path because it bypasses Job/Run/Step, leases and artifacts.
+    $pythonProject = Invoke-Api 'POST' '/projects' $token @{ name = 'python-redis-acceptance-' + (Get-Date -Format 'yyyyMMddHHmmss'); workflow_key = 'acceptance_analysis' } @{'Idempotency-Key' = 'accept-python-project-' + [guid]::NewGuid().ToString()}
+    $results.python_project_created = $null -ne $pythonProject.id
+    $pythonJob = Invoke-Api 'POST' ('/projects/' + $pythonProject.id + '/jobs') $token @{ kind = 'analysis'; mode = 'automatic'; input = @{ mode = 'deterministic' }; auto_start = $true } @{'Idempotency-Key' = 'accept-python-job-' + [guid]::NewGuid().ToString()}
+    $pythonTerminal = $null
+    for ($attempt = 0; $attempt -lt 120; $attempt++) {
+        Start-Sleep -Milliseconds 500
+        $pythonCurrent = Invoke-Api 'GET' ('/projects/' + $pythonProject.id + '/jobs/' + $pythonJob.id) $token
+        if ($pythonCurrent.status -in @('completed', 'failed', 'dead_lettered', 'cancelled')) { $pythonTerminal = $pythonCurrent; break }
+    }
+    $results.python_worker_terminal_status = if ($null -eq $pythonTerminal) { '' } else { [string]$pythonTerminal.status }
+    $results.python_worker_redis_result = $null -ne $pythonTerminal -and $pythonTerminal.status -eq 'completed'
+    if (-not $results.python_worker_redis_result) { throw 'Python Redis worker Job did not reach the exact completed state.' }
+
+    # Recovery is part of T550, not an optional unit-test claim. Restart the
+    # tracked API/Go/Python/web process set while preserving Docker volumes,
+    # then re-authenticate and read the same canonical Job rows and SSE stream.
+    $devScript = Join-Path $repoRoot 'tools\dev.ps1'
+    $restartArgs = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $devScript, '-Profile', $Profile, '-Action', 'restart')
+    if ($Profile -eq 'lan') {
+        $apiUri = [Uri]$ApiBaseUrl
+        if ($apiUri.Host -eq 'localhost' -or $apiUri.Host -eq '127.0.0.1' -or $apiUri.Host -eq '::1') { throw 'LAN recovery requires the actual private-LAN API address.' }
+        $restartArgs += @('-LanServerIp', $apiUri.Host)
+    }
+    & powershell.exe @restartArgs
+    if ($LASTEXITCODE -ne 0) { throw 'Tracked application restart failed during T550 recovery acceptance.' }
+    $relogin = Invoke-Api 'POST' '/auth/local/login' '' @{ username = $env:NH_API_ADMIN_USERNAME; password = $env:NH_API_ADMIN_PASSWORD }
+    $token = $relogin.access_token
+    if ([string]::IsNullOrWhiteSpace($token)) { throw 'LocalAuth did not recover after application restart.' }
+    $recoveredGoJob = Invoke-Api 'GET' ('/projects/' + $project.id + '/jobs/' + $job.id) $token
+    $recoveredPythonJob = Invoke-Api 'GET' ('/projects/' + $pythonProject.id + '/jobs/' + $pythonJob.id) $token
+    $results.recovery_go_job_completed = [string]$recoveredGoJob.status -eq 'completed'
+    $results.recovery_python_job_completed = [string]$recoveredPythonJob.status -eq 'completed'
+    $recoveryFrame = Read-SseFrame ([string]$project.id) ([string]$job.id) 0 $token
+    $results.recovery_sse_snapshot = $recoveryFrame -match 'stream\.snapshot'
+    if (-not $results.recovery_go_job_completed -or -not $results.recovery_python_job_completed -or -not $results.recovery_sse_snapshot) {
+        throw 'Canonical Job or SSE state was not recovered after the tracked application restart.'
+    }
+
+    $required = @('live','ready','local_auth','default_workspace','project_created','ffmpeg_ffprobe_path','upload_session_created','upload_completed','upload_validation_job_created','upload_go_worker_completed','durable_job_created','go_worker_artifact_path','sse_replay_source','sse_snapshot','sse_live','sse_reconnect','python_project_created','python_worker_redis_result','recovery_go_job_completed','recovery_python_job_completed','recovery_sse_snapshot')
+    foreach ($name in $required) { if ($results[$name] -ne $true) { throw ('Acceptance check failed: ' + $name) } }
     if ($Profile -eq 'lan') {
         if ([string]::IsNullOrWhiteSpace($LanBaseUrl)) { $LanBaseUrl = $env:NH_ACCEPT_LAN_BASE_URL }
         if ([string]::IsNullOrWhiteSpace($LanBaseUrl)) {

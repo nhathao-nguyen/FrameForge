@@ -38,13 +38,10 @@ owner: repository owner / task assignee
   snapshot/replay/reconnect tests pass against the current working tree.
   T400/Gate F and desktop T550 acceptance were explicitly outside that Gate E checkpoint; their
   current status is recorded below. Hardened T603 and public/VPS T605 remain future work.
-- Gate F status: PASS. T400–T433 remain implemented; T550 local and LAN-server acceptance pass; the
-  physical Windows client run `lan-client-a384adea-f665-4cd0-ba01-1035e8acfef2` records `status=PASS`,
-  `external_to_server=true`, completed Job visibility, SSE snapshot/reconnect and cleanup from
-  `DESKTOP-92ICS6C` (`192.168.1.29`) against server `192.168.1.18`. T434 is complete for the current
-  tree with exact-IP LAN CSP/frontend endpoint, matching Tauri CORS origin, externally signed NSIS
-  staging, signature/manifest verification, tamper rejection and rollback-pointer checks.
-  T550 result: `LOCAL FUNCTIONAL ACCEPTANCE: PASS`.
+- Gate F status: PASS for the current T400–T434 and T550 scope. Current-tree T434 signed
+  install/update/tamper/rollback passes, and the current LAN client script has now passed from the
+  controlled physical second device `DESKTOP-92ICS6C` at `192.168.1.29` against server
+  `192.168.1.18` with `external_to_server=true`.
 
 ## Current evidence
 
@@ -58,8 +55,9 @@ owner: repository owner / task assignee
   PostgreSQL/MinIO, Python restart/XAUTOCLAIM, and transient retry/redelivery harnesses. T330–T332
   have durable queued-frontier/crash-lease recovery, review/pause/partial resume, cancel/exhaustion/
   DLQ/replay evidence; T340 has durable authenticated SSE snapshot/replay/terminal reconnect,
-  bounded replay, REST equivalence and invalid-cursor coverage. T550 now has local, LAN-server and
-  physical second-device evidence; hardened/public release gates are not claimed.
+  bounded replay, REST equivalence and invalid-cursor coverage. T550 now has current local,
+  LAN-server and controlled physical second-device acceptance evidence. Hardened/public release
+  gates are not claimed.
 - Gate B evidence covers repository boundaries, shared primitives, redaction/config boundaries, private
   PostgreSQL/Redis/MinIO Compose services, Go API shell, health/readiness, CI and independence scans.
 - Gate C+D evidence includes eight PostgreSQL migrations, the checksum/dirty migration runner, scoped SQL
@@ -76,16 +74,12 @@ owner: repository owner / task assignee
   hashed `auth_sessions` row; direct multipart PUT to private MinIO returned an ETag, complete created a
   durable `asset_probe` Job, `asset_uploads.status=completed`, and Asset status `validating`; duplicate
   Project request replayed the same response with one database row.
-- Gate F evidence (2026-08-18) covers the native immutable DAG catalog/runtime, durable typed review
-  decisions, timeline builder, web SDK/editor, Tauri remote-only shell, static web-to-Tauri build,
-  signed NSIS staging bundle, external public-key signature verification, tamper rejection, signed
-  rollback pointer, source/checksum/security staging boundary, local/LAN startup and the
-  upload-to-MinIO/Go-worker/Python/FFmpeg acceptance harness. It does not claim real provider/ML
-  execution. The current `t434-lan-signed` package pins `http://192.168.1.18:8080` and passes external
-  signature, tamper and rollback verification. The sanitized physical-client evidence is retained at
-  `docs/evidence/t550-lan-client-pass-20260818.json`; it proves an external Windows PowerShell 5.1
-  client completed reachability, authentication, Project/upload/Job/event replay, SSE reconnect and
-  cleanup without a local backend.
+- Gate F evidence in this working tree covers the native immutable DAG catalog/runtime, durable typed
+  review decisions, timeline builder, web SDK/editor, Tauri remote-only shell, artifact signed URL
+  boundary, direct browser upload, local/LAN startup and the upload-to-MinIO/Go-worker/Python/FFmpeg
+  acceptance harness, current-tree signed NSIS install/update/tamper/rollback, and the current
+  physical-client T550 run. The external client authenticated, created Workspace/Project data,
+  exercised upload and Job/event/SSE paths, proved no local backend dependency, and cleaned up.
 - Local Functional Acceptance is T550; Local/LAN Hardened Acceptance is T603; Internet/VPS
   production is T605.
 - Gate E includes canonical transitions/events/outbox replay, Redis Streams QueuePort, DAG scheduling,
@@ -104,11 +98,12 @@ vendors are later configuration choices.
 
 ```text
 Task: Gate F — T400–T434 and T550 client/local acceptance slice
-Status: PASS; T400–T434, T550 local/LAN server and physical second-device acceptance are complete
+  Status: PASS; T400–T434 implementation/evidence and T550 local/LAN/physical-client acceptance
+  are current and reviewable
 Boundary: Canonical execution transitions/events, queue, scheduling, leases, media/AI worker contracts,
   durable graph bootstrap, controls, checkpoint/DLQ and SSE boundary
   Application code: API, persistence, media worker, Python worker, contracts, and execution adapters
 Upstream relationship: research/reference only; no operational dependency
-Next: checkpoint the reviewed Gate F change and push it, then begin Prompt 6 / Gate G only in a fresh
-session when the owner explicitly requests it.
+  Next: preserve the evidence and proceed only with a separately approved later gate; do not begin
+  Prompt 6 / Gate G as part of this task.
 ```

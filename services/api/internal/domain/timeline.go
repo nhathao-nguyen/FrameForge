@@ -23,6 +23,10 @@ type TimelineReferenceResolver interface {
 type TimelineValidationOptions struct {
 	Resolver            TimelineReferenceResolver
 	ReplaceUserOverride bool
+	// StructuralOnly is used while applying a command. Durable references are
+	// checked for identity and shape here, then resolved against project-owned
+	// current state by the persistence boundary before the version is stored.
+	StructuralOnly bool
 }
 
 func CanonicalJSON(value any) ([]byte, error) {
@@ -128,18 +132,24 @@ func ValidateTimeline(document json.RawMessage, options TimelineValidationOption
 				// The command layer must authorize this flag. The validator accepts it
 				// only as an explicit option, never as an implicit proposal merge.
 			}
-			if err := validateClipSource(clip, projectID, options.Resolver); err != nil {
+			if err := validateClipSource(clip, projectID, options); err != nil {
 				return "", fmt.Errorf("clip %q: %w", clipID, err)
 			}
 			if kind == "subtitle" && clip["subtitle"] == nil {
 				return "", fmt.Errorf("subtitle track clip %q requires subtitle cue", clipID)
 			}
 			if narration, ok := clip["narration"].(map[string]any); ok {
-				if options.Resolver == nil {
-					return "", errors.New("narration reference resolver is required")
-				}
 				narrationID, _ := narration["narration_id"].(string)
 				scriptVersionID, _ := narration["script_version_id"].(string)
+				if strings.TrimSpace(narrationID) == "" || strings.TrimSpace(scriptVersionID) == "" {
+					return "", errors.New("narration reference identity is required")
+				}
+				if options.Resolver == nil {
+					if options.StructuralOnly {
+						continue
+					}
+					return "", errors.New("narration reference resolver is required")
+				}
 				ready, err := options.Resolver.ResolveNarration(narrationID, scriptVersionID, projectID)
 				if err != nil || !ready {
 					return "", errors.New("narration reference is not ready or not owned by the project")
@@ -192,33 +202,63 @@ func validateTimelineSafety(value any, path string) error {
 	return nil
 }
 
-func validateClipSource(clip map[string]any, projectID string, resolver TimelineReferenceResolver) error {
+func validateClipSource(clip map[string]any, projectID string, options TimelineValidationOptions) error {
 	source, ok := clip["source"].(map[string]any)
 	if !ok {
 		return errors.New("source is required")
 	}
 	typeName, _ := source["type"].(string)
-	if typeName == "generated" || typeName == "none" {
+	if typeName == "generated" {
+		if stringValue(source, "generator_ref") == "" {
+			return errors.New("generated source requires generator_ref")
+		}
 		return nil
 	}
-	if resolver == nil {
+	if typeName == "none" {
+		if stringValue(source, "inline_id") == "" {
+			return errors.New("none source requires inline_id")
+		}
+		return nil
+	}
+	if options.Resolver == nil && !options.StructuralOnly {
 		return errors.New("durable source reference resolver is required")
 	}
 	switch typeName {
 	case "asset":
-		ready, duration, width, height, err := resolver.ResolveAssetArtifact(stringValue(source, "asset_id"), stringValue(source, "artifact_id"), projectID)
+		assetID, artifactID := stringValue(source, "asset_id"), stringValue(source, "artifact_id")
+		if assetID == "" || artifactID == "" {
+			return errors.New("asset source requires asset_id and artifact_id")
+		}
+		if options.Resolver == nil {
+			return validateSourceRange(clip, 0, 0, 0)
+		}
+		ready, duration, width, height, err := options.Resolver.ResolveAssetArtifact(assetID, artifactID, projectID)
 		if err != nil || !ready {
 			return errors.New("asset/artifact is not ready or not owned by the project")
 		}
 		return validateSourceRange(clip, duration, width, height)
 	case "scene":
-		ready, start, end, err := resolver.ResolveScene(stringValue(source, "scene_id"), stringValue(source, "asset_id"), stringValue(source, "artifact_id"), projectID)
+		sceneID, assetID, artifactID := stringValue(source, "scene_id"), stringValue(source, "asset_id"), stringValue(source, "artifact_id")
+		if sceneID == "" || assetID == "" || artifactID == "" {
+			return errors.New("scene source requires scene_id, asset_id and artifact_id")
+		}
+		if options.Resolver == nil {
+			return validateSourceRange(clip, 0, 0, 0)
+		}
+		ready, start, end, err := options.Resolver.ResolveScene(sceneID, assetID, artifactID, projectID)
 		if err != nil || !ready {
 			return errors.New("scene source is not ready or not owned by the project")
 		}
 		return validateSourceRange(clip, end-start, 0, 0)
 	case "artifact":
-		committed, err := resolver.ResolveArtifact(stringValue(source, "artifact_id"), projectID)
+		artifactID := stringValue(source, "artifact_id")
+		if artifactID == "" {
+			return errors.New("artifact source requires artifact_id")
+		}
+		if options.Resolver == nil {
+			return validateSourceRange(clip, 0, 0, 0)
+		}
+		committed, err := options.Resolver.ResolveArtifact(artifactID, projectID)
 		if err != nil || !committed {
 			return errors.New("artifact is not committed or not owned by the project")
 		}
@@ -341,13 +381,18 @@ func ApplyTimelineCommand(document json.RawMessage, command TimelineCommand) (js
 		if !ok || trackID == "" {
 			return nil, "", errors.New("AddClip requires track_id and clip")
 		}
+		foundTrack := false
 		for _, rawTrack := range tracks {
 			track, _ := rawTrack.(map[string]any)
 			if stringValue(track, "id") == trackID {
+				foundTrack = true
 				clips, _ := track["clips"].([]any)
 				track["clips"] = append(clips, clip)
 				break
 			}
+		}
+		if !foundTrack {
+			return nil, "", fmt.Errorf("track %q not found", trackID)
 		}
 	case "RemoveClip":
 		track, _, err := findClip(stringValue(command.Payload, "clip_id"))
@@ -369,6 +414,9 @@ func ApplyTimelineCommand(document json.RawMessage, command TimelineCommand) (js
 			return nil, "", err
 		}
 		toID := stringValue(command.Payload, "track_id")
+		if toID == "" {
+			return nil, "", errors.New("MoveClip requires track_id")
+		}
 		clips, _ := from["clips"].([]any)
 		id := stringValue(command.Payload, "clip_id")
 		filtered := clips[:0]
@@ -378,14 +426,40 @@ func ApplyTimelineCommand(document json.RawMessage, command TimelineCommand) (js
 			}
 		}
 		from["clips"] = filtered
+		foundTarget := false
 		for _, rawTrack := range tracks {
 			track, _ := rawTrack.(map[string]any)
 			if stringValue(track, "id") == toID {
+				foundTarget = true
 				target, _ := track["clips"].([]any)
 				track["clips"] = append(target, clip)
 				break
 			}
 		}
+		if !foundTarget {
+			return nil, "", fmt.Errorf("track %q not found", toID)
+		}
+	case "ReplaceClip":
+		_, clip, err := findClip(stringValue(command.Payload, "clip_id"))
+		if err != nil {
+			return nil, "", err
+		}
+		replacement, ok := command.Payload["clip"].(map[string]any)
+		if !ok {
+			return nil, "", errors.New("ReplaceClip requires clip")
+		}
+		if replacementID := stringValue(replacement, "id"); replacementID != "" && replacementID != stringValue(clip, "id") {
+			return nil, "", errors.New("ReplaceClip cannot change clip id")
+		}
+		for key, value := range replacement {
+			switch key {
+			case "id", "origin", "proposal_refs", "evidence_refs":
+				continue
+			default:
+				clip[key] = value
+			}
+		}
+		clip["origin"] = "user"
 	case "TrimClip":
 		_, clip, err := findClip(stringValue(command.Payload, "clip_id"))
 		if err != nil {
@@ -412,19 +486,35 @@ func ApplyTimelineCommand(document json.RawMessage, command TimelineCommand) (js
 	case "ChangeTrackOrder":
 		trackID := stringValue(command.Payload, "track_id")
 		order := command.Payload["order"]
+		foundTrack := false
 		for _, rawTrack := range tracks {
 			track, _ := rawTrack.(map[string]any)
 			if stringValue(track, "id") == trackID {
+				foundTrack = true
 				track["order"] = order
 				break
 			}
+		}
+		if !foundTrack {
+			return nil, "", fmt.Errorf("track %q not found", trackID)
 		}
 	case "UpdateScene":
 		_, clip, err := findClip(stringValue(command.Payload, "clip_id"))
 		if err != nil {
 			return nil, "", err
 		}
-		clip["metadata"] = command.Payload["metadata"]
+		metadata, ok := command.Payload["metadata"].(map[string]any)
+		if !ok {
+			return nil, "", errors.New("UpdateScene requires metadata")
+		}
+		existingMetadata, _ := clip["metadata"].(map[string]any)
+		if existingMetadata == nil {
+			existingMetadata = map[string]any{}
+		}
+		for key, value := range metadata {
+			existingMetadata[key] = value
+		}
+		clip["metadata"] = existingMetadata
 		clip["origin"] = "user"
 	default:
 		return nil, "", fmt.Errorf("unsupported timeline command %q", command.Kind)
@@ -436,6 +526,6 @@ func ApplyTimelineCommand(document json.RawMessage, command TimelineCommand) (js
 	if err != nil {
 		return nil, "", err
 	}
-	hash, err := ValidateTimeline(result, TimelineValidationOptions{ReplaceUserOverride: command.ReplaceUserOverride})
+	hash, err := ValidateTimeline(result, TimelineValidationOptions{ReplaceUserOverride: command.ReplaceUserOverride, StructuralOnly: true})
 	return result, hash, err
 }

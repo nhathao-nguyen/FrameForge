@@ -86,8 +86,20 @@ func (r *Runtime) Run(ctx context.Context, request Request) RunResult {
 	if ctx == nil {
 		ctx = context.Background()
 	}
+	if err := r.Definition.Validate(allCapabilities()); err != nil {
+		result.Outcome = Failed
+		result.Nodes = append(result.Nodes, NodeResult{Key: "runtime", Outcome: Failed, Error: &NodeError{Category: "permanent", Message: "pipeline definition is invalid: " + err.Error()}})
+		result.Fingerprint = runFingerprint(result)
+		return result
+	}
 	state := State{JobID: request.JobID, RunID: request.RunID, Inputs: cloneMap(request.Inputs), NodeOutputs: map[string]map[string]any{}, Attempts: map[string]int{}}
 	nodes := r.Definition.NodeMap()
+	if (request.StartFrom != "" && nodes[request.StartFrom].Key == "") || (request.StopAfter != "" && nodes[request.StopAfter].Key == "") {
+		result.Outcome = Failed
+		result.Nodes = append(result.Nodes, NodeResult{Key: "runtime", Outcome: Failed, Error: &NodeError{Category: "invalid_user_input", Message: "execution boundary is not in the pipeline definition"}})
+		result.Fingerprint = runFingerprint(result)
+		return result
+	}
 	completed := map[string]bool{}
 	for _, node := range r.Definition.Nodes {
 		if request.StartFrom != "" && node.Key != request.StartFrom && !hasPathTo(node.Key, request.StartFrom, nodes) {
@@ -146,21 +158,35 @@ func (r *Runtime) Run(ctx context.Context, request Request) RunResult {
 				state.Attempts[node.Key] = attempt
 				invokeCtx := ctx
 				var cancel context.CancelFunc
-				if node.Timeout.WallTimeSec > 0 {
-					invokeCtx, cancel = context.WithTimeout(ctx, time.Duration(node.Timeout.WallTimeSec)*time.Second)
+				timeoutSeconds := node.Timeout.WallTimeSec
+				// Executors currently expose no heartbeat stream. Treat the idle
+				// budget as a fail-closed execution deadline until that protocol is
+				// available; a worker that never reports progress must not run
+				// indefinitely.
+				if node.Timeout.IdleTimeSec > 0 && (timeoutSeconds == 0 || node.Timeout.IdleTimeSec < timeoutSeconds) {
+					timeoutSeconds = node.Timeout.IdleTimeSec
+				}
+				if timeoutSeconds > 0 {
+					invokeCtx, cancel = context.WithTimeout(ctx, time.Duration(timeoutSeconds)*time.Second)
 				}
 				value := executor.Execute(invokeCtx, node, state)
 				if cancel != nil {
 					cancel()
 				}
-				if invokeCtx.Err() == context.DeadlineExceeded && value.Outcome == "" {
-					value = Result{Outcome: Failed, Error: &NodeError{Category: "timeout", Message: "node exceeded wall-time policy", Retryable: true}}
+				if err := ValidateResult(value); err != nil {
+					value = Result{Outcome: Failed, Error: &NodeError{Category: "permanent", Message: err.Error()}}
+				}
+				if invokeCtx.Err() == context.DeadlineExceeded {
+					value = Result{Outcome: Failed, Error: &NodeError{Category: "timeout", Message: "node exceeded timeout policy", Retryable: true}}
+				}
+				if ctx.Err() != nil {
+					value = Result{Outcome: Cancelled, Error: &NodeError{Category: "cancellation", Message: "run cancelled"}}
 				}
 				nodeResult = NodeResult{Key: node.Key, Outcome: value.Outcome, Attempts: attempt, Outputs: cloneMap(value.Outputs), Checkpoint: cloneMap(value.Checkpoint), Error: value.Error, Review: cloneMap(value.Review)}
 				if value.Outcome == Completed || value.Outcome == Skipped || value.Outcome == WaitingForReview || value.Outcome == Paused || value.Outcome == Cancelled {
 					break
 				}
-				if value.Error == nil || !value.Error.Retryable || attempt == maxAttempts {
+				if !retryAllowed(node.Retry, value.Error) || attempt == maxAttempts {
 					break
 				}
 			}
@@ -211,6 +237,10 @@ func (r *Runtime) Run(ctx context.Context, request Request) RunResult {
 
 func readyNodes(def []Node, completed map[string]bool, results []NodeResult) []Node {
 	known := map[string]NodeResult{}
+	nodes := make(map[string]Node, len(def))
+	for _, node := range def {
+		nodes[node.Key] = node
+	}
 	for _, value := range results {
 		known[value.Key] = value
 	}
@@ -225,12 +255,10 @@ func readyNodes(def []Node, completed map[string]bool, results []NodeResult) []N
 				ok = false
 				break
 			}
-			if dependency.Required {
-				value := known[dependency.NodeKey]
-				if value.Outcome != Completed && value.Outcome != Skipped {
-					ok = false
-					break
-				}
+			value := known[dependency.NodeKey]
+			if !dependencySatisfied(dependency, nodes[dependency.NodeKey], value) {
+				ok = false
+				break
 			}
 		}
 		if ok {
@@ -239,6 +267,35 @@ func readyNodes(def []Node, completed map[string]bool, results []NodeResult) []N
 	}
 	sort.Slice(ready, func(i, j int) bool { return ready[i].Key < ready[j].Key })
 	return ready
+}
+
+func dependencySatisfied(dependency Dependency, upstream Node, result NodeResult) bool {
+	if !dependency.Required && (result.Outcome == Completed || result.Outcome == Skipped || result.Outcome == Failed) {
+		return true
+	}
+	switch dependency.Condition {
+	case "success":
+		return result.Outcome == Completed || result.Outcome == Skipped
+	case "soft", "success_or_declared_soft":
+		if result.Outcome == Completed || result.Outcome == Skipped {
+			return true
+		}
+		return result.Outcome == Failed && upstream.Soft
+	default:
+		return false
+	}
+}
+
+func retryAllowed(policy RetryPolicy, failure *NodeError) bool {
+	if failure == nil || !failure.Retryable || failure.Category == "" {
+		return false
+	}
+	for _, category := range policy.RetryableCategories {
+		if category == failure.Category {
+			return true
+		}
+	}
+	return false
 }
 
 func hasPathTo(key, target string, nodes map[string]Node) bool {

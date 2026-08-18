@@ -81,6 +81,19 @@ type Backend interface {
 	UpdateProvider(string, string, int64, string, string, string, map[string]any, map[string]any, *string) (*ProviderConfiguration, error)
 }
 
+// ArtifactDownloadBackend is an optional durable capability exposed by the
+// Product API. The API returns a short-lived signed URL; it never proxies
+// artifact bytes or exposes a worker-local path.
+type ArtifactDownloadBackend interface {
+	PresignArtifactDownload(context.Context, string, string, string) (ArtifactDownload, error)
+}
+
+type ArtifactDownload struct {
+	ArtifactID string    `json:"artifact_id"`
+	URL        string    `json:"url"`
+	ExpiresAt  time.Time `json:"expires_at"`
+}
+
 type Store struct {
 	mu           sync.RWMutex
 	workspaceID  string
@@ -408,6 +421,20 @@ func newStore(workspaceID string, backend storage.StoragePort) *Store {
 }
 
 func (s *Store) WorkspaceID() string { return s.workspaceID }
+
+func (s *Store) PresignArtifactDownload(_ context.Context, workspaceID, projectID, artifactID string) (ArtifactDownload, error) {
+	if workspaceID != s.workspaceID {
+		return ArtifactDownload{}, ErrNotFound
+	}
+	if _, err := s.GetProject(workspaceID, projectID); err != nil {
+		return ArtifactDownload{}, err
+	}
+	// The in-memory backend intentionally has no durable artifact catalogue.
+	// Returning not-found prevents fixtures from manufacturing a URL that could
+	// bypass the committed-artifact boundary.
+	_ = artifactID
+	return ArtifactDownload{}, ErrNotFound
+}
 func newID(prefix string) string {
 	raw := make([]byte, 12)
 	if _, err := rand.Read(raw); err != nil {

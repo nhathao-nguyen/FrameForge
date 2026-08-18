@@ -210,7 +210,7 @@ try {
     $projects = Invoke-Api 'GET' '/projects' $script:token $null @{} 'project_list'
     $results.checks.project_list = $null -ne $projects.items
 
-    $project = Invoke-Api 'POST' '/projects' $script:token @{ name = 'lan-client-' + (Get-Date -Format 'yyyyMMdd-HHmmss'); workflow_key = 'movie_recap' } @{'Idempotency-Key' = $runId + '-project'} 'project_create'
+    $project = Invoke-Api 'POST' '/projects' $script:token @{ name = 'lan-client-' + (Get-Date -Format 'yyyyMMdd-HHmmss'); workflow_key = 'acceptance_analysis' } @{'Idempotency-Key' = $runId + '-project'} 'project_create'
     $projectId = [string]$project.id
     if ([string]::IsNullOrWhiteSpace($projectId)) { throw 'The LAN client could not create a Project.' }
     $results.checks.project_path = $true
@@ -237,6 +237,7 @@ try {
         if ($current.status -in @('completed', 'failed', 'dead_lettered', 'cancelled')) { $terminal = $current; break }
     }
     if ($null -eq $terminal) { throw 'The LAN Job did not reach a terminal state within 60 seconds.' }
+    if ([string]$terminal.status -ne 'completed') { throw ('The LAN Job reached non-success terminal state: ' + [string]$terminal.status) }
     $results.checks.job_status_visibility = $true
     $results.checks.job_terminal_status = [string]$terminal.status
     $events = Invoke-Api 'GET' ('/projects/' + $projectId + '/jobs/' + $jobId + '/events?after_sequence=0&limit=100') $script:token $null @{} 'event_replay'

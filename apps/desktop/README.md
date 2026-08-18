@@ -24,3 +24,9 @@ in the current process; `tools/package-desktop.ps1 -Action package` signs bundle
 checksums and refuses to stage or roll back an unsigned package. LAN desktop builds must use an
 exact external CSP origin overlay for the selected server IP; the package manifest records that API
 origin and verification rejects a different requested LAN target.
+
+T434 signed staging acceptance is separate from unsigned development validation. After an owner
+builds two signed versions with the same external identity, run
+`tools/accept-t434-install-update.ps1` to verify NSIS install and launch, N-to-N+1 update, tamper
+rejection and staging-pointer rollback. The harness uses a fresh per-user test directory and
+refuses to overwrite an existing directory or accept unsigned/mixed-key packages.

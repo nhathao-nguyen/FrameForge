@@ -73,9 +73,9 @@ reviewable evidence is recorded.
 | T430 | Web shell/SDK | T210, T230, T340 | complete | `packages/sdk/src/client.ts`, Next web shell, in-memory auth token, REST/SSE Last-Event-ID reconnect, `pnpm typecheck` | T431 |
 | T431 | Script editor | T231, T410, T430 | complete | web ScriptVersion form with If-Match revision, immutable server submission and safe JSON validation | T432 |
 | T432 | Timeline/Scene editor | T233–T234, T410, T420, T430 | complete | web `UpdateScene` command form with based-on version and expected document version conflict path | T433 |
-| T433 | Tauri client | T223, T340, T430 | complete | thin remote-only commands/capability manifest; build-time exact LAN API CSP/frontend endpoint and packaged `http://tauri.localhost` CORS origin are implemented; cargo fmt/check and LAN acceptance pass | T434/T550 complete |
-| T550 | Local Functional Acceptance | T323, T340, T430, T433 | complete | `LOCAL FUNCTIONAL ACCEPTANCE: PASS`; local and LAN server-path PASS plus sanitized physical-client evidence `lan-client-a384adea-f665-4cd0-ba01-1035e8acfef2`: external Windows PowerShell 5.1 client proves reachability/auth/Workspace/Project/upload/Job completion/REST replay/SSE reconnect/cleanup with `external_to_server=true` | Gate F complete |
-| T434 | Desktop packaging/security | T433 | complete | current `t434-lan-signed` NSIS pins the exact LAN API origin in frontend/CSP; external signature, manifest/public-key fingerprint, tamper rejection and rollback-pointer verification pass | Gate F complete |
+| T433 | Tauri client | T223, T340, T430 | complete | thin remote-only commands/capability manifest, exact LAN origin, direct browser upload, signed artifact-download URL, remote review/editor UI and current-tree LAN desktop bundle checks pass | T550 physical client |
+| T550 | Local Functional Acceptance | T323, T340, T430, T433 | complete | current local, exact-LAN server-path and controlled physical second-device runs pass the real Go/Redis/Python/SSE/upload flow; external run `lan-client-1353be68-e9ba-41d7-9ee1-b2f97340452e` reports `external_to_server=true` and current script hash match | T603 hardened acceptance |
+| T434 | Desktop packaging/security | T433 | complete | current-tree two-version signed NSIS packages pass external signature verification, fresh install/launch, N→N+1 update/launch, tamper rejection and rollback-pointer checks | Gate F physical client |
 | T500 | Provider ports/resolver | T235, T401 | blocked | none | after dependencies |
 | T510 | Research/script nodes | T402, T500 | blocked | none | after dependencies |
 | T511 | TTS/Narration | T231, T500, T510 | blocked | none | after dependencies |
@@ -98,6 +98,6 @@ reviewable evidence is recorded.
 | T605 | Internet/VPS production release | T603 | blocked | none | explicit production approval |
 
 Gate C+D, Gate E T300–T350 and the Gate F implementation are present in the current working tree.
-The physical-client bounded SSE run and current exact-origin signed LAN desktop package both pass
-with sanitized evidence recorded above. Overall Gate F is therefore PASS; hardened/public Gate G
-work remains separate and is not claimed.
+T400–T434 and T550 local/LAN/physical-client functional acceptance, including current-tree T434
+signed install/update/tamper/rollback, pass. Gate F is PASS for this scope; T603 hardened and public
+production gates remain separate.

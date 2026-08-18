@@ -108,6 +108,10 @@ export class ProductApiClient {
     return this.request<Record<string, unknown>>("/projects/" + encode(projectId) + "/jobs/" + encode(jobId));
   }
 
+  async resumeJob(projectId: string, jobId: string): Promise<Record<string, unknown>> {
+    return this.request<Record<string, unknown>>("/projects/" + encode(projectId) + "/jobs/" + encode(jobId) + "/resume", { method: "POST", body: {} });
+  }
+
   async createJob(projectId: string, input: Record<string, unknown>): Promise<Record<string, unknown>> {
     return this.request<Record<string, unknown>>("/projects/" + encode(projectId) + "/jobs", {
       method: "POST",
@@ -137,6 +141,10 @@ export class ProductApiClient {
     });
   }
 
+  async downloadArtifact(projectId: string, artifactId: string): Promise<{ artifact_id: string; url: string; expires_at: string }> {
+    return this.request<{ artifact_id: string; url: string; expires_at: string }>("/projects/" + encode(projectId) + "/artifacts/" + encode(artifactId) + "/download");
+  }
+
   async approveReview(projectId: string, jobId: string, stepId: string, selectedResourceType: string, selectedResourceId: string, selectedResourceRevision: number): Promise<Record<string, unknown>> {
     return this.request<Record<string, unknown>>("/projects/" + encode(projectId) + "/jobs/" + encode(jobId) + "/reviews/" + encode(stepId) + "/approve", {
       method: "POST",
@@ -151,12 +159,27 @@ export class ProductApiClient {
     });
   }
 
-  async timelineCommand(projectId: string, timelineId: string, versionId: string, command: Record<string, unknown>): Promise<Record<string, unknown>> {
+  async getTimeline(projectId: string, timelineId: string): Promise<Record<string, unknown>> {
+    return this.request<Record<string, unknown>>("/projects/" + encode(projectId) + "/timelines/" + encode(timelineId));
+  }
+
+  async timelineCommand(projectId: string, timelineId: string, versionId: string, command: Record<string, unknown>, expectedRevision?: number): Promise<Record<string, unknown>> {
+    const revision = expectedRevision ?? (typeof command.expected_revision === "number" ? command.expected_revision : undefined);
     return this.request<Record<string, unknown>>("/projects/" + encode(projectId) + "/timelines/" + encode(timelineId) + "/commands", {
       method: "POST",
       body: { ...command, based_on_version_id: versionId },
-      ifMatch: command.expected_version ? "\"" + command.expected_version + "\"" : undefined,
+      ifMatch: typeof revision === "number" ? "\"" + revision + "\"" : undefined,
     });
+  }
+
+  async createScript(projectId: string, body: Record<string, unknown>): Promise<Record<string, unknown>> {
+    return this.request<Record<string, unknown>>("/projects/" + encode(projectId) + "/scripts", {
+      method: "POST", body, idempotencyKey: "web-script-" + crypto.randomUUID(),
+    });
+  }
+
+  async getScript(projectId: string, scriptId: string): Promise<Record<string, unknown>> {
+    return this.request<Record<string, unknown>>("/projects/" + encode(projectId) + "/scripts/" + encode(scriptId));
   }
 
   async createScriptVersion(projectId: string, scriptId: string, body: Record<string, unknown>, expectedRevision?: number): Promise<Record<string, unknown>> {
@@ -171,6 +194,10 @@ export class ProductApiClient {
     return this.request<Record<string, unknown>>("/projects/" + encode(projectId) + "/scripts/" + encode(scriptId) + "/versions/" + encode(versionId) + "/approve", { method: "POST" });
   }
 
+  async getScriptVersion(projectId: string, scriptId: string, versionId: string): Promise<Record<string, unknown>> {
+    return this.request<Record<string, unknown>>("/projects/" + encode(projectId) + "/scripts/" + encode(scriptId) + "/versions/" + encode(versionId));
+  }
+
   async rejectScriptVersion(projectId: string, scriptId: string, versionId: string, reason?: string): Promise<Record<string, unknown>> {
     return this.request<Record<string, unknown>>("/projects/" + encode(projectId) + "/scripts/" + encode(scriptId) + "/versions/" + encode(versionId) + "/reject", { method: "POST", body: { reason } });
   }
@@ -181,6 +208,10 @@ export class ProductApiClient {
 
   async getTimelineVersion(projectId: string, timelineId: string, versionId: string): Promise<Record<string, unknown>> {
     return this.request<Record<string, unknown>>("/projects/" + encode(projectId) + "/timelines/" + encode(timelineId) + "/versions/" + encode(versionId));
+  }
+
+  async approveTimelineVersion(projectId: string, timelineId: string, versionId: string): Promise<Record<string, unknown>> {
+    return this.request<Record<string, unknown>>("/projects/" + encode(projectId) + "/timelines/" + encode(timelineId) + "/versions/" + encode(versionId) + "/approve", { method: "POST", body: {} });
   }
 
   async *events<T = unknown>(projectId: string, jobId: string, signal?: AbortSignal): AsyncGenerator<SseEnvelope<T>> {

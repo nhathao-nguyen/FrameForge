@@ -52,3 +52,32 @@ func TestTimelineRejectsExternalPathsAndSensitiveFields(t *testing.T) {
 		}
 	}
 }
+
+func TestTimelineCommandSeparatesStructuralAndDurableReferenceValidation(t *testing.T) {
+	document := []byte(`{"schema_version":"1.0","timeline_id":"tl_1","timeline_version_id":"tlv_1","project_id":"proj_1","version":1,"duration_sec":10,"tracks":[{"id":"track_1","kind":"video","name":"Footage","order":0,"clips":[{"id":"clip_1","timeline_in_sec":0,"timeline_out_sec":4,"source":{"type":"asset","asset_id":"asset_1","artifact_id":"artifact_1"},"origin":"ai","proposal_refs":["proposal_1"],"evidence_refs":["evidence_1"]}]}]}`)
+	command := TimelineCommand{Kind: "ReplaceClip", SchemaVersion: "1.0", ExpectedVersion: 1, Payload: map[string]any{
+		"clip_id": "clip_1", "clip": map[string]any{"id": "clip_1", "timeline_in_sec": 1.0, "timeline_out_sec": 5.0, "source": map[string]any{"type": "asset", "asset_id": "asset_1", "artifact_id": "artifact_1"}},
+	}}
+	updated, _, err := ApplyTimelineCommand(document, command)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ValidateTimeline(updated, TimelineValidationOptions{StructuralOnly: true}); err != nil {
+		t.Fatalf("structural command result was rejected: %v", err)
+	}
+	if _, err := ValidateTimeline(updated, TimelineValidationOptions{}); err == nil {
+		t.Fatal("durable reference was accepted without the resolver")
+	}
+	var root map[string]any
+	if err := json.Unmarshal(updated, &root); err != nil {
+		t.Fatal(err)
+	}
+	clip := root["tracks"].([]any)[0].(map[string]any)["clips"].([]any)[0].(map[string]any)
+	if clip["origin"] != "user" || len(clip["proposal_refs"].([]any)) != 1 || len(clip["evidence_refs"].([]any)) != 1 {
+		t.Fatalf("ReplaceClip lost provenance: %#v", clip)
+	}
+	command.ExpectedVersion = 1
+	if _, _, err := ApplyTimelineCommand(updated, command); err == nil {
+		t.Fatal("stale timeline command was accepted")
+	}
+}

@@ -34,7 +34,7 @@ func TestDurableCreateRenderFailsWithoutExistingProfileAndNeverAutoCreates(t *te
 	}
 	document, _ := json.Marshal(map[string]any{
 		"schema_version": "1.0", "timeline_id": "tl_client", "timeline_version_id": "tlv_client", "project_id": "project_1", "version": 1, "duration_sec": 10,
-		"tracks": []any{map[string]any{"id": "track", "kind": "video", "name": "Footage", "order": 0, "clips": []any{map[string]any{"id": "clip", "timeline_in_sec": 0, "timeline_out_sec": 1, "source": map[string]any{"type": "none"}, "origin": "user"}}}},
+		"tracks": []any{map[string]any{"id": "track", "kind": "video", "name": "Footage", "order": 0, "clips": []any{map[string]any{"id": "clip", "timeline_in_sec": 0, "timeline_out_sec": 1, "source": map[string]any{"type": "none", "inline_id": "silence"}, "origin": "user"}}}},
 	})
 	expectDurableRenderTimelinePrerequisites(mock, "approved", document)
 	mock.ExpectQuery("SELECT id::text,status,document,content_hash FROM render_profiles").WithArgs("ws_1", "missing", 1).WillReturnError(sql.ErrNoRows)
@@ -57,7 +57,7 @@ func TestDurableCreateRenderRejectsDraftProfileBeforeRenderInsert(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	document := []byte(`{"schema_version":"1.0","timeline_id":"tl_client","timeline_version_id":"tlv_client","project_id":"project_1","version":1,"duration_sec":10,"tracks":[{"id":"track","kind":"video","name":"Footage","order":0,"clips":[{"id":"clip","timeline_in_sec":0,"timeline_out_sec":1,"source":{"type":"none"},"origin":"user"}]}]}`)
+	document := []byte(`{"schema_version":"1.0","timeline_id":"tl_client","timeline_version_id":"tlv_client","project_id":"project_1","version":1,"duration_sec":10,"tracks":[{"id":"track","kind":"video","name":"Footage","order":0,"clips":[{"id":"clip","timeline_in_sec":0,"timeline_out_sec":1,"source":{"type":"none","inline_id":"silence"},"origin":"user"}]}]}`)
 	expectDurableRenderTimelinePrerequisites(mock, "approved", document)
 	mock.ExpectQuery("SELECT id::text,status,document,content_hash FROM render_profiles").WithArgs("ws_1", "draft", 1).WillReturnRows(sqlmock.NewRows([]string{"id", "status", "document", "content_hash"}).AddRow("profile_1", "draft", []byte(`{"width":640}`), "hash"))
 	_, err = backend.CreateRender("ws_1", "project_1", "timeline_version_1", "draft", 1, nil)

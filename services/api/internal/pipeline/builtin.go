@@ -44,12 +44,13 @@ func MovieRecap() Definition {
 		for _, dep := range entry.deps {
 			deps = append(deps, Dependency{NodeKey: dep, Required: true, Condition: "success_or_declared_soft"})
 		}
+		timeout, retry := nativePolicy(entry.class)
 		node := Node{
 			Key: entry.key, Type: entry.typ, DisplayName: entry.key, DependsOn: deps,
 			InputContract: entry.in, OutputContract: entry.out, ExecutionClass: entry.class,
 			ResourceRequirements: map[string]any{"network": "deny_by_default", "sandbox": true},
-			Timeout:              TimeoutPolicy{WallTimeSec: 120, KillGraceSec: 10},
-			Retry:                RetryPolicy{MaxAttempts: 1, RetryableCategories: []string{"transient"}},
+			Timeout:              timeout,
+			Retry:                retry,
 			Progress:             ProgressPolicy{Unit: "item", TotalSource: "declared_inputs", EmitInterval: 1},
 			Checkpoint:           CheckpointPolicy{Mode: "terminal", ResumeCompatibility: "exact_inputs", InvalidationInputs: []string{"input_refs", "config_snapshot"}},
 			Idempotency:          IdempotencyPolicy{FingerprintFields: []string{"node_config", "pipeline_version", "input_revisions", "provider_snapshot"}, Reuse: true, SideEffects: "artifact_commit"},
@@ -60,9 +61,29 @@ func MovieRecap() Definition {
 		weights[entry.key] = 1
 	}
 	return Definition{
-		SchemaVersion: DefinitionSchemaVersion, WorkflowKey: "movie_recap", Version: 2, Nodes: nodes,
+		// Version 2 is already durable in developer databases. Keep it
+		// immutable and publish the current policy-complete graph as the next
+		// native version instead of attempting an in-place content mutation.
+		SchemaVersion: DefinitionSchemaVersion, WorkflowKey: "movie_recap", Version: 3, Nodes: nodes,
 		Policies:   Policies{Strict: false, Checkpoint: true, ArtifactRetention: "protected_until_explicit_delete", ProgressWeights: weights},
 		Provenance: Provenance{NHMediaRelease: "0.1.0-gate-f", ContractVersion: "worker/v1"},
+	}
+}
+
+func nativePolicy(executionClass string) (TimeoutPolicy, RetryPolicy) {
+	switch executionClass {
+	case "probe":
+		return TimeoutPolicy{WallTimeSec: 600, IdleTimeSec: 120, KillGraceSec: 15}, RetryPolicy{MaxAttempts: 2, BaseDelayMS: 250, MaxDelayMS: 4000, RetryableCategories: []string{"storage_interruption", "worker_lost", "transient"}}
+	case "ai":
+		return TimeoutPolicy{WallTimeSec: 300, IdleTimeSec: 120, KillGraceSec: 10}, RetryPolicy{MaxAttempts: 3, BaseDelayMS: 250, MaxDelayMS: 4000, RetryableCategories: []string{"timeout", "rate_limit", "provider_unavailable"}}
+	case "ml":
+		return TimeoutPolicy{WallTimeSec: 3600, IdleTimeSec: 300, KillGraceSec: 30}, RetryPolicy{MaxAttempts: 2, BaseDelayMS: 500, MaxDelayMS: 5000, RetryableCategories: []string{"worker_lost", "transient", "oom_other_capability"}}
+	case "media":
+		return TimeoutPolicy{WallTimeSec: 1800, IdleTimeSec: 300, KillGraceSec: 30}, RetryPolicy{MaxAttempts: 2, BaseDelayMS: 500, MaxDelayMS: 5000, RetryableCategories: []string{"storage_interruption", "process_interruption", "transient"}}
+	case "render":
+		return TimeoutPolicy{WallTimeSec: 14400, IdleTimeSec: 600, KillGraceSec: 60}, RetryPolicy{MaxAttempts: 2, BaseDelayMS: 1000, MaxDelayMS: 10000, RetryableCategories: []string{"worker_lost", "storage_interruption", "encoder_interruption", "transient"}}
+	default:
+		return TimeoutPolicy{WallTimeSec: 120, KillGraceSec: 10}, RetryPolicy{MaxAttempts: 1, BaseDelayMS: 0, MaxDelayMS: 0, RetryableCategories: nil}
 	}
 }
 

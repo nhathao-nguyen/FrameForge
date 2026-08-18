@@ -37,6 +37,14 @@ type ClipOverride struct {
 	Fields map[string]any
 }
 
+type DegradedInput struct {
+	NodeKey      string
+	Reason       string
+	Consequence  string
+	Soft         bool
+	EvidenceRefs []string
+}
+
 type BuildTimelineInput struct {
 	TimelineID        string
 	TimelineVersionID string
@@ -45,6 +53,7 @@ type BuildTimelineInput struct {
 	DurationSec       float64
 	Tracks            []TimelineTrack
 	Overrides         []ClipOverride
+	Degraded          []DegradedInput
 	Metadata          map[string]any
 }
 
@@ -68,6 +77,16 @@ func BuildTimeline(input BuildTimelineInput, resolver domain.TimelineReferenceRe
 			return BuiltTimeline{}, errors.New("timeline overrides must have unique clip IDs and fields")
 		}
 		overrides[override.ClipID] = cloneMap(override.Fields)
+	}
+	degraded := make([]any, 0, len(input.Degraded))
+	for _, item := range input.Degraded {
+		if item.NodeKey == "" || item.Reason == "" || item.Consequence == "" {
+			return BuiltTimeline{}, errors.New("degraded input requires node, reason and consequence")
+		}
+		degraded = append(degraded, map[string]any{
+			"node_key": item.NodeKey, "reason": item.Reason, "consequence": item.Consequence,
+			"soft": item.Soft, "evidence_refs": append([]string(nil), item.EvidenceRefs...),
+		})
 	}
 	trackIDs := map[string]bool{}
 	clipIDs := map[string]bool{}
@@ -112,16 +131,27 @@ func BuildTimeline(input BuildTimelineInput, resolver domain.TimelineReferenceRe
 		}
 		tracks = append(tracks, map[string]any{"id": track.ID, "kind": track.Kind, "name": track.Name, "order": track.Order, "clips": clips})
 	}
+	metadata := cloneMap(input.Metadata)
+	if metadata == nil {
+		metadata = map[string]any{}
+	}
 	document := map[string]any{
 		"schema_version": "1.0", "timeline_id": input.TimelineID, "timeline_version_id": input.TimelineVersionID,
 		"project_id": input.ProjectID, "version": input.Version, "duration_sec": input.DurationSec,
-		"tracks": tracks, "metadata": cloneMap(input.Metadata),
+		"tracks": tracks, "degraded": degraded, "metadata": metadata,
 	}
 	canonical, err := domain.CanonicalJSON(document)
 	if err != nil {
 		return BuiltTimeline{}, err
 	}
-	hash, err := domain.ValidateTimeline(canonical, domain.TimelineValidationOptions{Resolver: resolver})
+	validation := domain.TimelineValidationOptions{Resolver: resolver}
+	if resolver == nil {
+		// Proposal compilation is a structural step. The persistence/API
+		// boundary performs the project-owned durable-reference resolution
+		// before accepting the immutable TimelineVersion.
+		validation.StructuralOnly = true
+	}
+	hash, err := domain.ValidateTimeline(canonical, validation)
 	if err != nil {
 		return BuiltTimeline{}, err
 	}

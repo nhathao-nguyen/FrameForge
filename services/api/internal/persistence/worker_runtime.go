@@ -53,8 +53,13 @@ func (s *SQLStore) QueueReadySteps(ctx context.Context, workspaceID, projectID, 
 		  AND NOT EXISTS (
 			SELECT 1 FROM pipeline_node_dependencies d
 			JOIN job_steps dependency_step ON dependency_step.pipeline_run_id=s.pipeline_run_id AND dependency_step.pipeline_node_id=d.depends_on_node_id
+			JOIN pipeline_nodes dependency_node ON dependency_node.id=d.depends_on_node_id
 			WHERE d.pipeline_id=n.pipeline_id AND d.node_id=s.pipeline_node_id
-			  AND dependency_step.status NOT IN ('completed','skipped')
+			  AND NOT (
+				dependency_step.status='completed'
+				OR (dependency_step.status='skipped' AND (NOT d.required OR COALESCE(CASE WHEN jsonb_typeof(d.condition)='string' THEN d.condition #>> '{}' ELSE COALESCE(d.condition->>'kind',d.condition->>'value') END,'success') IN ('soft','success_or_declared_soft')))
+				OR (dependency_step.status='failed' AND (NOT d.required OR (dependency_node.failure_mode='soft' AND COALESCE(CASE WHEN jsonb_typeof(d.condition)='string' THEN d.condition #>> '{}' ELSE COALESCE(d.condition->>'kind',d.condition->>'value') END,'success') IN ('soft','success_or_declared_soft'))))
+			  )
 		  )
 		ORDER BY s.node_key
 		FOR UPDATE OF s`, workspaceID, projectID, jobID, runID)

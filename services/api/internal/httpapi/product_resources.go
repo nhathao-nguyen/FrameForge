@@ -22,6 +22,7 @@ func (s *Server) registerProjectRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v1/projects/{project_id}/assets/upload-sessions", s.createUpload)
 	mux.HandleFunc("GET /api/v1/projects/{project_id}/assets", s.listAssets)
 	mux.HandleFunc("GET /api/v1/projects/{project_id}/assets/{asset_id}", s.getAsset)
+	mux.HandleFunc("GET /api/v1/projects/{project_id}/artifacts/{artifact_id}/download", s.downloadArtifact)
 	mux.HandleFunc("PATCH /api/v1/projects/{project_id}/assets/{asset_id}", s.patchAsset)
 	mux.HandleFunc("DELETE /api/v1/projects/{project_id}/assets/{asset_id}", s.deleteAsset)
 	mux.HandleFunc("POST /api/v1/projects/{project_id}/assets/{asset_id}/upload-sessions/{upload_id}/parts", s.uploadParts)
@@ -607,6 +608,24 @@ func (s *Server) getAsset(w http.ResponseWriter, r *http.Request) {
 	}
 	s.writeRevisionJSON(w, r, http.StatusOK, value, value.Revision)
 }
+
+func (s *Server) downloadArtifact(w http.ResponseWriter, r *http.Request) {
+	principal, ok := requirePrincipal(s, w, r)
+	if !ok {
+		return
+	}
+	backend, ok := s.Product.(product.ArtifactDownloadBackend)
+	if !ok {
+		s.writeError(w, r, http.StatusServiceUnavailable, "ARTIFACT_DOWNLOAD_UNAVAILABLE", "Artifact download is not configured for this backend.")
+		return
+	}
+	value, err := backend.PresignArtifactDownload(r.Context(), principal.WorkspaceID, r.PathValue("project_id"), r.PathValue("artifact_id"))
+	if err != nil {
+		s.storeError(w, r, err)
+		return
+	}
+	s.writeJSON(w, r, http.StatusOK, value)
+}
 func (s *Server) patchAsset(w http.ResponseWriter, r *http.Request) {
 	principal, ok := requirePrincipal(s, w, r)
 	if !ok {
@@ -920,6 +939,11 @@ func (s *Server) timelineCommand(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	revision, valid := ifMatch(r)
+	if !valid {
+		s.writeError(w, r, http.StatusPreconditionFailed, "ETAG_REQUIRED", "If-Match is required.")
+		return
+	}
 	var command domain.TimelineCommand
 	if !s.decodeResource(w, r, &command) {
 		return
@@ -934,18 +958,22 @@ func (s *Server) timelineCommand(w http.ResponseWriter, r *http.Request) {
 		s.storeError(w, r, err)
 		return
 	}
+	if base.TimelineID != timeline.ID {
+		s.writeError(w, r, http.StatusPreconditionFailed, "VERSION_CONFLICT", "The base version does not belong to this timeline.")
+		return
+	}
 	document, hash, err := domain.ApplyTimelineCommand(base.Document, command)
 	if err != nil {
 		s.storeError(w, r, err)
 		return
 	}
 	_ = hash
-	value, err := s.Product.AddTimelineVersion(principal.WorkspaceID, r.PathValue("project_id"), timeline.ID, base.ID, "user", document, timeline.Revision)
+	value, err := s.Product.AddTimelineVersion(principal.WorkspaceID, r.PathValue("project_id"), timeline.ID, base.ID, "user", document, revision)
 	if err != nil {
 		s.storeError(w, r, err)
 		return
 	}
-	s.writeJSON(w, r, http.StatusCreated, value)
+	s.writeRevisionJSON(w, r, http.StatusCreated, value, revision+1)
 }
 func (s *Server) approveTimeline(w http.ResponseWriter, r *http.Request) {
 	principal, ok := requirePrincipal(s, w, r)

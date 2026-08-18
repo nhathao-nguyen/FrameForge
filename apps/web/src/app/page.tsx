@@ -16,14 +16,27 @@ export default function HomePage() {
   const [selectedProject, setSelectedProject] = useState<Record<string, unknown> | null>(null);
   const [selectedJob, setSelectedJob] = useState<Record<string, unknown> | null>(null);
   const [projectName, setProjectName] = useState("");
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [artifactId, setArtifactId] = useState("");
+  const [downloadUrl, setDownloadUrl] = useState("");
   const [scriptId, setScriptId] = useState("");
-  const [scriptBasedOn, setScriptBasedOn] = useState("");
-  const [scriptRevision, setScriptRevision] = useState("0");
+  const [scriptState, setScriptState] = useState<Record<string, unknown> | null>(null);
+  const [scriptVersion, setScriptVersion] = useState<Record<string, unknown> | null>(null);
   const [scriptContent, setScriptContent] = useState('{"title":"Draft script","blocks":[]}');
   const [timelineId, setTimelineId] = useState("");
   const [timelineVersionId, setTimelineVersionId] = useState("");
   const [timelineClipId, setTimelineClipId] = useState("");
-  const [timelineExpectedVersion, setTimelineExpectedVersion] = useState("0");
+  const [timelineState, setTimelineState] = useState<Record<string, unknown> | null>(null);
+  const [timelineDocument, setTimelineDocument] = useState<Record<string, unknown> | null>(null);
+  const [timelineHistory, setTimelineHistory] = useState<Record<string, unknown>[]>([]);
+  const [timelineEditKind, setTimelineEditKind] = useState("UpdateScene");
+  const [timelineTargetTrack, setTimelineTargetTrack] = useState("");
+  const [scenes, setScenes] = useState<Record<string, unknown>[]>([]);
+  const [reviewStepId, setReviewStepId] = useState("");
+  const [reviewResourceType, setReviewResourceType] = useState("timeline_version");
+  const [reviewResourceId, setReviewResourceId] = useState("");
+  const [reviewResourceRevision, setReviewResourceRevision] = useState("1");
+  const [steps, setSteps] = useState<Record<string, unknown>[]>([]);
   const [status, setStatus] = useState("Sign in to connect to Product API.");
   const [error, setError] = useState("");
 
@@ -83,7 +96,63 @@ export default function HomePage() {
     setSelectedJob(null);
     const result = await api.listJobs(stringValue(project.id));
     setJobs(result.items || []);
+    const sceneResult = await api.listScenes(stringValue(project.id));
+    setScenes(sceneResult.items || []);
     setStatus("Project loaded from server-authoritative state.");
+  }
+
+  async function loadScriptState() {
+    if (!selectedProject || !scriptId.trim()) return;
+    setError("");
+    try {
+      const projectId = stringValue(selectedProject.id);
+      const script = await api.getScript(projectId, scriptId.trim());
+      setScriptState(script);
+      const versionId = stringValue(script.current_version_id);
+      if (versionId) {
+        const version = await api.getScriptVersion(projectId, scriptId.trim(), versionId);
+        setScriptVersion(version);
+        setScriptContent(JSON.stringify(version.content || {}, null, 2));
+      }
+      setStatus("Script and current immutable ScriptVersion loaded from Product API.");
+    } catch (value) {
+      setError(safeMessage(value));
+    }
+  }
+
+  async function loadTimelineState() {
+    if (!selectedProject || !timelineId.trim()) return;
+    setError("");
+    try {
+      const projectId = stringValue(selectedProject.id);
+      const timeline = await api.getTimeline(projectId, timelineId.trim());
+      const versionId = stringValue(timeline.current_version_id);
+      if (!versionId) throw new Error("Timeline has no current TimelineVersion.");
+      const version = await api.getTimelineVersion(projectId, timelineId.trim(), versionId);
+      const document = parseObject(version.document);
+      setTimelineState(timeline);
+      setTimelineVersionId(versionId);
+      setTimelineDocument(document);
+      setTimelineClipId(firstClipId(document));
+      setTimelineTargetTrack(firstTrackId(document));
+      setTimelineHistory([]);
+      setStatus("Timeline, current TimelineVersion and Scenes loaded from server state.");
+    } catch (value) {
+      setError(safeMessage(value));
+    }
+  }
+
+  async function loadReviewSteps() {
+    if (!selectedProject || !selectedJob) return;
+    setError("");
+    try {
+      const result = await api.listSteps(stringValue(selectedProject.id), stringValue(selectedJob.id), stringValue(selectedJob.pipeline_run_id));
+      setSteps(result.items || []);
+      if (result.items?.length) setReviewStepId(stringValue(result.items[0].id));
+      setStatus("Reviewable JobSteps loaded from the durable run.");
+    } catch (value) {
+      setError(safeMessage(value));
+    }
   }
 
   async function createProject(event: FormEvent) {
@@ -119,36 +188,145 @@ export default function HomePage() {
     }
   }
 
+  async function uploadAsset() {
+    if (!selectedProject || !uploadFile) return;
+    setError("");
+    try {
+      const projectId = stringValue(selectedProject.id);
+      const sessionEnvelope = await api.createUploadSession(projectId, {
+        kind: uploadFile.type.startsWith("audio/") ? "audio" : "video",
+        filename: uploadFile.name,
+        content_type: uploadFile.type || "application/octet-stream",
+        size_bytes: uploadFile.size,
+        multipart: true,
+      });
+      const asset = objectValue(sessionEnvelope.asset);
+      const upload = objectValue(sessionEnvelope.upload);
+      const parts = Array.isArray(upload.parts) ? upload.parts : [];
+      const part = objectValue(parts[0]);
+      const url = stringValue(part.url);
+      if (!url) throw new Error("The API did not return a direct upload URL.");
+      const headers = Object.fromEntries(Object.entries(objectValue(part.headers)).filter(([, value]) => typeof value === "string")) as Record<string, string>;
+      const etag = await api.uploadPart(url, uploadFile, headers);
+      if (!etag) throw new Error("The storage provider did not return an upload ETag.");
+      await api.completeUpload(projectId, stringValue(asset.id), stringValue(upload.id), [{ part_number: 1, etag }]);
+      setUploadFile(null);
+      setStatus("Asset uploaded directly to approved storage; validation Job created.");
+      await selectProject(selectedProject);
+    } catch (value) {
+      setError(safeMessage(value));
+    }
+  }
+
+  async function downloadArtifact() {
+    if (!selectedProject || !artifactId.trim()) return;
+    setError("");
+    try {
+      const value = await api.downloadArtifact(stringValue(selectedProject.id), artifactId.trim());
+      setDownloadUrl(value.url);
+      setStatus("Short-lived artifact URL issued by Product API.");
+    } catch (value) {
+      setError(safeMessage(value));
+    }
+  }
+
   async function saveScriptVersion(event: FormEvent) {
     event.preventDefault();
     if (!selectedProject || !scriptId.trim()) return;
     setError("");
     try {
       const content = JSON.parse(scriptContent) as Record<string, unknown>;
-      await api.createScriptVersion(stringValue(selectedProject.id), scriptId.trim(), {
-        based_on_version_id: scriptBasedOn.trim(),
+      const value = await api.createScriptVersion(stringValue(selectedProject.id), scriptId.trim(), {
+        based_on_version_id: stringValue(scriptVersion?.id),
         language: "vi",
         origin: "user",
         content,
-      }, Number(scriptRevision));
-      setStatus("Script draft submitted as an immutable server version.");
+      }, Number(scriptState?.revision || 0));
+      setScriptVersion(value);
+      setStatus("Script draft submitted as an immutable server version; reload is required after conflict.");
+      await loadScriptState();
     } catch (value) {
       setError(value instanceof SyntaxError ? "Script content must be valid JSON." : safeMessage(value));
     }
   }
 
-  async function applyTimelineEdit(event: FormEvent) {
-    event.preventDefault();
-    if (!selectedProject || !timelineId.trim() || !timelineVersionId.trim() || !timelineClipId.trim()) return;
+  async function setScriptStatus(status: "approve" | "reject") {
+    if (!selectedProject || !scriptId.trim() || !scriptVersion) return;
     setError("");
     try {
+      const projectId = stringValue(selectedProject.id);
+      const versionId = stringValue(scriptVersion.id);
+      const value = status === "approve"
+        ? await api.approveScriptVersion(projectId, scriptId.trim(), versionId)
+        : await api.rejectScriptVersion(projectId, scriptId.trim(), versionId, "web-review");
+      setScriptVersion(value);
+      await loadScriptState();
+      setStatus(status === "approve" ? "ScriptVersion approved." : "ScriptVersion rejected as superseded.");
+    } catch (value) {
+      setError(safeMessage(value));
+    }
+  }
+
+  async function applyTimelineEdit(event: FormEvent) {
+    event.preventDefault();
+    if (!selectedProject || !timelineId.trim() || !timelineVersionId.trim() || !timelineClipId.trim() || !timelineDocument) return;
+    setError("");
+    try {
+      const clip = findClip(timelineDocument, timelineClipId.trim());
+      if (!clip) throw new Error("Selected clip is not present in the loaded TimelineVersion.");
+      setTimelineHistory((current) => [...current, clip]);
+      const payload: Record<string, unknown> = timelineEditKind === "MoveClip"
+        ? { clip_id: timelineClipId.trim(), track_id: timelineTargetTrack.trim() }
+        : timelineEditKind === "ReplaceClip"
+          ? { clip_id: timelineClipId.trim(), clip: { ...clip, metadata: { ...(objectValue(clip.metadata)), edited_from: "web" } } }
+          : { clip_id: timelineClipId.trim(), metadata: { edited_from: "web", title: "User scene override" } };
       await api.timelineCommand(stringValue(selectedProject.id), timelineId.trim(), timelineVersionId.trim(), {
-        kind: "UpdateScene",
+        kind: timelineEditKind,
         schema_version: "1.0",
-        expected_version: Number(timelineExpectedVersion),
-        payload: { clip_id: timelineClipId.trim(), metadata: { edited_from: "web", title: "User scene override" } },
-      });
-      setStatus("Timeline command accepted as a new user-origin TimelineVersion.");
+        expected_version: Number(timelineDocument.version || 0),
+        payload,
+      }, Number(timelineState?.revision || 0));
+      await loadTimelineState();
+      setStatus("Timeline command accepted as a new immutable user-origin TimelineVersion.");
+    } catch (value) {
+      setError(safeMessage(value));
+    }
+  }
+
+  async function undoTimelineEdit() {
+    if (!selectedProject || !timelineDocument || !timelineVersionId || !timelineClipId || !timelineState) return;
+    const previousClip = timelineHistory[timelineHistory.length - 1];
+    if (!previousClip) return;
+    setError("");
+    try {
+      await api.timelineCommand(stringValue(selectedProject.id), timelineId.trim(), timelineVersionId, {
+        kind: "ReplaceClip", schema_version: "1.0", expected_version: Number(timelineDocument.version || 0),
+        payload: { clip_id: timelineClipId, clip: previousClip },
+      }, Number(timelineState.revision || 0));
+      setTimelineHistory((current) => current.slice(0, -1));
+      await loadTimelineState();
+      setStatus("Undo was recorded as a new server TimelineVersion.");
+    } catch (value) {
+      setError(safeMessage(value));
+    }
+  }
+
+  async function resolveReview(action: "approve" | "reject" | "resume") {
+    if (!selectedProject || !selectedJob || !reviewStepId.trim()) return;
+    setError("");
+    try {
+      const projectId = stringValue(selectedProject.id);
+      const jobId = stringValue(selectedJob.id);
+      if (action === "approve") {
+        await api.approveReview(projectId, jobId, reviewStepId.trim(), reviewResourceType, reviewResourceId.trim(), Number(reviewResourceRevision));
+      } else if (action === "reject") {
+        await api.rejectReview(projectId, jobId, reviewStepId.trim(), "edit_then_resume", "web-edit");
+      } else {
+        await api.resumeJob(projectId, jobId);
+      }
+      const refreshed = await api.getJob(projectId, jobId);
+      setSelectedJob(refreshed);
+      setStatus(action === "approve" ? "Review approved with the exact selected resource." : action === "reject" ? "Review rejected for edit_then_resume." : "Paused review descendants resumed from server state.");
     } catch (value) {
       setError(safeMessage(value));
     }
@@ -208,6 +386,16 @@ export default function HomePage() {
               <li key={stringValue(project.id)}><button type="button" className="list-button" onClick={() => void selectProject(project)} aria-pressed={selectedProject?.id === project.id}>{stringValue(project.name)}</button></li>
             ))}
           </ul>
+          <div className="stack compact-form">
+            <h3>Direct asset upload</h3>
+            <input type="file" onChange={(event) => setUploadFile(event.target.files?.[0] || null)} disabled={!selectedProject} />
+            <button type="button" onClick={() => void uploadAsset()} disabled={!selectedProject || !uploadFile}>Upload to approved storage</button>
+            <p className="muted">Media bytes go to the signed storage URL; Product API receives metadata only.</p>
+            <h3>Artifact download</h3>
+            <input value={artifactId} onChange={(event) => setArtifactId(event.target.value)} placeholder="Committed artifact UUID" disabled={!selectedProject} />
+            <button type="button" onClick={() => void downloadArtifact()} disabled={!selectedProject || !artifactId.trim()}>Issue download URL</button>
+            {downloadUrl ? <a href={downloadUrl} target="_blank" rel="noreferrer">Open signed artifact download</a> : null}
+          </div>
         </section>
         <section className="card" aria-labelledby="jobs-title">
           <h2 id="jobs-title">Jobs{selectedProject ? " · " + stringValue(selectedProject.name) : ""}</h2>
@@ -224,27 +412,62 @@ export default function HomePage() {
           <form onSubmit={saveScriptVersion} className="stack compact-form">
             <h3>Script editor</h3>
             <label htmlFor="script-id">Script ID</label>
-            <input id="script-id" value={scriptId} onChange={(event) => setScriptId(event.target.value)} placeholder="scr_…" />
-            <label htmlFor="script-based-on">Based-on version ID</label>
-            <input id="script-based-on" value={scriptBasedOn} onChange={(event) => setScriptBasedOn(event.target.value)} placeholder="optional" />
-            <label htmlFor="script-revision">Expected script revision</label>
-            <input id="script-revision" value={scriptRevision} onChange={(event) => setScriptRevision(event.target.value)} inputMode="numeric" />
+            <input id="script-id" value={scriptId} onChange={(event) => setScriptId(event.target.value)} placeholder="script_…" />
+            <button type="button" onClick={() => void loadScriptState()} disabled={!selectedProject || !scriptId.trim()}>Load script state</button>
+            <p className="muted">Revision {String(scriptState?.revision || "—")} · current {stringValue(scriptState?.current_version_id) || "—"}</p>
             <label htmlFor="script-content">Draft content JSON</label>
             <textarea id="script-content" value={scriptContent} onChange={(event) => setScriptContent(event.target.value)} rows={4} />
-            <button type="submit" disabled={!selectedProject || !scriptId.trim()}>Save immutable script version</button>
+            <button type="submit" disabled={!selectedProject || !scriptId.trim() || !scriptState}>Save immutable script version</button>
+            <div className="inline-form">
+              <button type="button" onClick={() => void setScriptStatus("approve")} disabled={!scriptVersion}>Approve version</button>
+              <button type="button" onClick={() => void setScriptStatus("reject")} disabled={!scriptVersion}>Reject version</button>
+            </div>
           </form>
           <form onSubmit={applyTimelineEdit} className="stack compact-form">
             <h3>Timeline / scene editor</h3>
             <label htmlFor="timeline-id">Timeline ID</label>
-            <input id="timeline-id" value={timelineId} onChange={(event) => setTimelineId(event.target.value)} placeholder="tl_…" />
-            <label htmlFor="timeline-version-id">Based-on TimelineVersion ID</label>
-            <input id="timeline-version-id" value={timelineVersionId} onChange={(event) => setTimelineVersionId(event.target.value)} placeholder="tlv_…" />
+            <input id="timeline-id" value={timelineId} onChange={(event) => setTimelineId(event.target.value)} placeholder="timeline_…" />
+            <button type="button" onClick={() => void loadTimelineState()} disabled={!selectedProject || !timelineId.trim()}>Load timeline + current version</button>
+            <p className="muted">Aggregate revision {String(timelineState?.revision || "—")} · loaded version {timelineVersionId || "—"}</p>
             <label htmlFor="timeline-clip-id">Scene / clip ID</label>
             <input id="timeline-clip-id" value={timelineClipId} onChange={(event) => setTimelineClipId(event.target.value)} placeholder="clip_…" />
-            <label htmlFor="timeline-expected-version">Expected document version</label>
-            <input id="timeline-expected-version" value={timelineExpectedVersion} onChange={(event) => setTimelineExpectedVersion(event.target.value)} inputMode="numeric" />
-            <button type="submit" disabled={!selectedProject || !timelineId.trim() || !timelineVersionId.trim() || !timelineClipId.trim()}>Apply scene override</button>
+            <label htmlFor="timeline-command-kind">Typed command</label>
+            <select id="timeline-command-kind" value={timelineEditKind} onChange={(event) => setTimelineEditKind(event.target.value)}>
+              <option value="UpdateScene">UpdateScene</option>
+              <option value="MoveClip">MoveClip</option>
+              <option value="ReplaceClip">ReplaceClip</option>
+            </select>
+            {timelineEditKind === "MoveClip" ? <>
+              <label htmlFor="timeline-target-track">Target track</label>
+              <input id="timeline-target-track" value={timelineTargetTrack} onChange={(event) => setTimelineTargetTrack(event.target.value)} placeholder="track_…" />
+            </> : null}
+            <button type="submit" disabled={!selectedProject || !timelineDocument || !timelineVersionId || !timelineClipId}>Apply typed timeline command</button>
+            <button type="button" onClick={() => void undoTimelineEdit()} disabled={!timelineHistory.length}>Undo as a new server mutation</button>
           </form>
+          <section className="compact-form" aria-labelledby="review-actions-title">
+            <h3 id="review-actions-title">Generic JobStep review</h3>
+            <button type="button" onClick={() => void loadReviewSteps()} disabled={!selectedJob}>Load reviewable steps</button>
+            <label htmlFor="review-step-id">JobStep</label>
+            <select id="review-step-id" value={reviewStepId} onChange={(event) => setReviewStepId(event.target.value)}>
+              <option value="">Select JobStep</option>
+              {steps.map((step) => <option key={stringValue(step.id)} value={stringValue(step.id)}>{stringValue(step.node_key)} · {stringValue(step.status)}</option>)}
+            </select>
+            <label htmlFor="review-resource-type">Exact resource type</label>
+            <input id="review-resource-type" value={reviewResourceType} onChange={(event) => setReviewResourceType(event.target.value)} />
+            <label htmlFor="review-resource-id">Exact resource ID</label>
+            <input id="review-resource-id" value={reviewResourceId} onChange={(event) => setReviewResourceId(event.target.value)} />
+            <label htmlFor="review-resource-revision">Exact resource revision</label>
+            <input id="review-resource-revision" value={reviewResourceRevision} onChange={(event) => setReviewResourceRevision(event.target.value)} inputMode="numeric" />
+            <div className="inline-form">
+              <button type="button" onClick={() => void resolveReview("approve")} disabled={!selectedJob || !reviewStepId || !reviewResourceId}>Approve exact resource</button>
+              <button type="button" onClick={() => void resolveReview("reject")} disabled={!selectedJob || !reviewStepId}>Reject / edit then resume</button>
+              <button type="button" onClick={() => void resolveReview("resume")} disabled={!selectedJob}>Resume descendants</button>
+            </div>
+          </section>
+          <section className="compact-form" aria-labelledby="scene-list-title">
+            <h3 id="scene-list-title">Scenes loaded for this Project</h3>
+            {scenes.length ? <ul className="resource-list">{scenes.map((scene) => <li key={stringValue(scene.id)}>{stringValue(scene.id)} · {stringValue(scene.status)} · {String(scene.source_start_sec || 0)}–{String(scene.source_end_sec || 0)}</li>)}</ul> : <p className="muted">No server Scenes are available yet.</p>}
+          </section>
           {selectedJob ? <pre aria-label="Selected job state">{JSON.stringify(selectedJob, null, 2)}</pre> : <p>Select a Job to watch progress and reconnect.</p>}
         </section>
       </div>
@@ -254,6 +477,43 @@ export default function HomePage() {
 
 function stringValue(value: unknown): string {
   return typeof value === "string" ? value : "";
+}
+
+function parseObject(value: unknown): Record<string, unknown> {
+  if (typeof value === "string") {
+    const parsed: unknown = JSON.parse(value);
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) return parsed as Record<string, unknown>;
+  }
+  if (value && typeof value === "object" && !Array.isArray(value)) return value as Record<string, unknown>;
+  throw new Error("The server returned an invalid canonical document.");
+}
+
+function objectValue(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function firstTrackId(document: Record<string, unknown>): string {
+  const tracks = Array.isArray(document.tracks) ? document.tracks : [];
+  return tracks.length ? stringValue(objectValue(tracks[0]).id) : "";
+}
+
+function firstClipId(document: Record<string, unknown>): string {
+  const tracks = Array.isArray(document.tracks) ? document.tracks : [];
+  for (const rawTrack of tracks) {
+    const clips = objectValue(rawTrack).clips;
+    if (Array.isArray(clips) && clips.length) return stringValue(objectValue(clips[0]).id);
+  }
+  return "";
+}
+
+function findClip(document: Record<string, unknown>, id: string): Record<string, unknown> | null {
+  const tracks = Array.isArray(document.tracks) ? document.tracks : [];
+  for (const rawTrack of tracks) {
+    const clips = objectValue(rawTrack).clips;
+    if (!Array.isArray(clips)) continue;
+    for (const rawClip of clips) if (stringValue(objectValue(rawClip).id) === id) return objectValue(rawClip);
+  }
+  return null;
 }
 
 function safeMessage(value: unknown): string {

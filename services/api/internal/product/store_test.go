@@ -123,7 +123,7 @@ func TestStoreTimelineSceneNarrationAndCommandPathsResolveDurableState(t *testin
 	store.narrations[narration.ID].AudioArtifactID = "artifact_good"
 	store.mu.Unlock()
 	narrationRef := map[string]any{"narration_id": narration.ID, "script_version_id": scriptVersion.ID}
-	if _, _, err := store.CreateTimeline(store.WorkspaceID(), project.ID, "user", timelineDocumentFor(project.ID, map[string]any{"type": "none"}, narrationRef)); err != nil {
+	if _, _, err := store.CreateTimeline(store.WorkspaceID(), project.ID, "user", timelineDocumentFor(project.ID, map[string]any{"type": "none", "inline_id": "silence"}, narrationRef)); err != nil {
 		t.Fatalf("valid narration reference rejected: %v", err)
 	}
 	if _, _, err := store.CreateTimeline(store.WorkspaceID(), project.ID, "user", timelineDocumentFor(project.ID, map[string]any{"type": "none"}, map[string]any{"narration_id": narration.ID, "script_version_id": "missing"})); err == nil {
@@ -164,7 +164,7 @@ func TestStoreRenderProfileLifecycleAndExactRenderSnapshot(t *testing.T) {
 		t.Fatalf("active profile was mutable: %v", err)
 	}
 
-	document := timelineDocumentFor(project.ID, map[string]any{"type": "none"}, nil)
+	document := timelineDocumentFor(project.ID, map[string]any{"type": "none", "inline_id": "silence"}, nil)
 	timeline, version, err := store.CreateTimeline(store.WorkspaceID(), project.ID, "user", document)
 	if err != nil {
 		t.Fatal(err)

@@ -225,6 +225,11 @@ func (b *DurableBackend) resolveReview(ctx context.Context, workspaceID, project
 	if decision == "approve" && resourceRevision < proposedRevision {
 		return nil, product.ErrConflict
 	}
+	if decision == "approve" {
+		if err := validateReviewResourceTx(ctx, tx, projectID, proposedType, resourceID, resourceRevision); err != nil {
+			return nil, err
+		}
+	}
 	if decision != "approve" && decision != "reject" {
 		return nil, product.ErrConflict
 	}
@@ -294,6 +299,9 @@ func (b *DurableBackend) OpenReview(workspaceID, projectID, jobID, stepID, revie
 	if reviewType != "script" && reviewType != "timeline" && reviewType != "scene_match" && reviewType != "subtitle" && reviewType != "voice" {
 		return nil, product.ErrConflict
 	}
+	if err := validateReviewResourceTx(context.Background(), tx, projectID, resourceType, resourceID, resourceRevision); err != nil {
+		return nil, err
+	}
 	var reviewID string
 	if err := tx.QueryRowContext(context.Background(), `INSERT INTO reviews(project_id,job_id,pipeline_run_id,job_step_id,review_type,status,proposed_resource_type,proposed_resource_id,proposed_resource_revision,allowed_actions) VALUES($1::uuid,$2::uuid,$3::uuid,$4::uuid,$5,'open',$6,$7::uuid,$8,'["approve","reject","edit_then_resume"]'::jsonb) RETURNING id::text`, projectID, jobID, runID, stepID, reviewType, resourceType, resourceID, resourceRevision).Scan(&reviewID); err != nil {
 		return nil, err
@@ -315,6 +323,50 @@ func (b *DurableBackend) OpenReview(workspaceID, projectID, jobID, stepID, revie
 		return nil, err
 	}
 	return &product.Review{ID: reviewID, JobID: jobID, JobStepID: stepID, PipelineRunID: runID, Status: "open", ReviewType: reviewType, ProposedResourceType: resourceType, ProposedResourceID: resourceID, ProposedResourceRevision: resourceRevision}, nil
+}
+
+// validateReviewResourceTx resolves the selected resource inside the same
+// transaction as review resolution. A review may select a newer immutable
+// descendant, but the submitted type/id/revision must identify a real,
+// project-owned resource at its exact current revision.
+func validateReviewResourceTx(ctx context.Context, tx *sql.Tx, projectID, resourceType, resourceID string, revision int64) error {
+	if resourceType == "" || resourceID == "" || revision < 1 {
+		return product.ErrConflict
+	}
+	var current int64
+	var err error
+	switch resourceType {
+	case "script":
+		err = tx.QueryRowContext(ctx, `SELECT revision FROM scripts WHERE id=$1::uuid AND project_id=$2::uuid AND deleted_at IS NULL`, resourceID, projectID).Scan(&current)
+	case "script_version":
+		err = tx.QueryRowContext(ctx, `SELECT sv.version FROM script_versions sv JOIN scripts s ON s.id=sv.script_id WHERE sv.id=$1::uuid AND s.project_id=$2::uuid AND s.deleted_at IS NULL`, resourceID, projectID).Scan(&current)
+	case "timeline":
+		err = tx.QueryRowContext(ctx, `SELECT revision FROM timelines WHERE id=$1::uuid AND project_id=$2::uuid AND deleted_at IS NULL`, resourceID, projectID).Scan(&current)
+	case "timeline_version":
+		err = tx.QueryRowContext(ctx, `SELECT tv.version FROM timeline_versions tv JOIN timelines t ON t.id=tv.timeline_id WHERE tv.id=$1::uuid AND t.project_id=$2::uuid AND t.deleted_at IS NULL`, resourceID, projectID).Scan(&current)
+	case "scene":
+		err = tx.QueryRowContext(ctx, `SELECT revision FROM scenes WHERE id=$1::uuid AND project_id=$2::uuid`, resourceID, projectID).Scan(&current)
+	case "asset":
+		err = tx.QueryRowContext(ctx, `SELECT revision FROM assets WHERE id=$1::uuid AND project_id=$2::uuid AND deleted_at IS NULL`, resourceID, projectID).Scan(&current)
+	case "artifact":
+		var status string
+		err = tx.QueryRowContext(ctx, `SELECT status FROM artifacts WHERE id=$1::uuid AND project_id=$2::uuid`, resourceID, projectID).Scan(&status)
+		if err == nil {
+			if status != "committed" || revision != 1 {
+				return product.ErrConflict
+			}
+			return nil
+		}
+	default:
+		return product.ErrConflict
+	}
+	if errors.Is(err, sql.ErrNoRows) {
+		return product.ErrConflict
+	}
+	if err != nil || current != revision {
+		return product.ErrConflict
+	}
+	return nil
 }
 
 func jobFromRecord(value JobRecord) *product.Job {
