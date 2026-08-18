@@ -12,8 +12,9 @@ owner: repository owner / task assignee
 |---|---|---|
 | Working branch | `implementation/bootstrap` | `git branch --show-current` |
 | Baseline commit | `f640524e1e91ed21c3bed66702d3b6b50e55b9fb` (`docs: sync Gate E checkpoint handoff state`) | final narrow Gate E acceptance repair started from this pushed commit |
+| Acceptance checkpoint | `564ef99` (`checkpoint: finalize Gate E acceptance`) | Gate E code, tests and evidence committed after full local/live PASS |
 | Tracking branch | `origin/implementation/bootstrap` | `git status --short --branch` |
-| Push/merge action | acceptance checkpoint is pushed only after the final PASS checkpoint commit | record the resulting hash in the next metadata synchronization entry |
+| Push/merge action | `564ef99` pushed to `origin/implementation/bootstrap` after final PASS | `git push origin implementation/bootstrap`; remote hash verified after push |
 
 ## Gate and phase
 
@@ -25,14 +26,13 @@ owner: repository owner / task assignee
 - T004 owner approval/independence certification: complete by 2026-08-17 ratification and final
   documentation consistency evidence; final pre-code certification rerun after T002/T003.
 - Application implementation: Gate B foundation T100–T108, Gate C+D, and the Gate E execution slice
-  are committed at the baseline above; this task adds the final acceptance harness/repair before its
-  checkpoint commit.
+  are committed at the baseline above and Gate E acceptance repair is checkpointed at `564ef99`.
 - Gate C+D status: T200–T235 implementation plus the narrow C+D repair is committed at the baseline
   above. Focused Go/unit/sqlmock and non-desktop canonical verification remain green. The API selects
   the durable PostgreSQL/Product + MinIO path when `NH_MEDIA_DATABASE_URL` is configured; unit tests
   retain the explicit in-memory backend as a deterministic test adapter.
-- Gate E status: T300–T350 are complete for the Local/LAN-first execution slice pending the clean
-  checkpoint commit for this acceptance repair. Durable PostgreSQL Job/Run/Step/Review/Render commands,
+- Gate E status: T300–T350 are complete for the Local/LAN-first execution slice at checkpoint
+  `564ef99`. Durable PostgreSQL Job/Run/Step/Review/Render commands,
   Product API client disconnect/reconnect, native and Python worker/artifact paths, Redis reclaim,
   crash/resume, retry/DLQ/replay, cancellation, partial stop-after resume, and authenticated SSE
   snapshot/replay/reconnect tests pass against the current working tree.
