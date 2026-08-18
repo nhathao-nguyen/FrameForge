@@ -205,6 +205,9 @@ func (b *DurableBackend) resolveReview(ctx context.Context, workspaceID, project
 	if decision == "approve" && (resourceID == "" || resourceRevision < 1) {
 		return nil, product.ErrConflict
 	}
+	if decision == "approve" && resourceRevision < proposedRevision {
+		return nil, product.ErrConflict
+	}
 	if decision != "approve" && decision != "reject" {
 		return nil, product.ErrConflict
 	}

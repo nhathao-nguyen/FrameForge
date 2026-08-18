@@ -6,6 +6,18 @@ owner: repository owner / task assignee
 
 # Memory changelog
 
+## 2026-08-17 — Final Gate E acceptance repair
+
+- Added the independent Product API durable acceptance harness covering client disconnect/reconnect,
+  Redis reclaim, MinIO Artifact commit, PostgreSQL authority, partial `stop_after` pause/resume,
+  crash/lease recovery, cancellation, retry exhaustion, DLQ, replay lineage and durable SSE replay.
+- Fixed durable execution boundary validation, one-shot `stop_after` resume semantics, exhausted-retry
+  DLQ classification, stale worker results after cancellation, stale review revision rejection and
+  SSE retention-gap reset signaling.
+- Re-ran the full Go integration package with PostgreSQL, Redis, MinIO, Go and real `uv`/Python
+  `nh_media`; canonical Go/Python/contracts/memory/TypeScript/Rust/independence/secret/supply-chain
+  checks passed. No Gate F implementation was added.
+
 ## 2026-08-17 — Gate E checkpoint handoff synchronization
 
 - Recorded checkpoint `2fa58d4` (`checkpoint: close Gate E T322-T350 execution slice`) as the

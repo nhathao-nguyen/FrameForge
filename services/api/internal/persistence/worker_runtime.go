@@ -211,7 +211,7 @@ func (s *SQLStore) QueueRetryingSteps(ctx context.Context, workspaceID string) (
 			if _, err := appendEventAndOutboxTx(ctx, tx, EventInput{SchemaVersion: "1.0", EventType: "node.failed", CorrelationID: value.jobID, WorkspaceID: workspaceID, ProjectID: value.projectID, JobID: value.jobID, PipelineRunID: value.runID, JobStepID: value.stepID, PipelineNodeID: value.nodeID, NodeKey: value.nodeKey, Payload: json.RawMessage(`{"code":"retry_exhausted","safe_message":"Retry budget was exhausted."}`)}); err != nil {
 				return nil, err
 			}
-			if err := failAggregateTx(ctx, tx, workspaceID, value.projectID, value.jobID, value.runID); err != nil {
+			if err := failAggregateTx(ctx, tx, workspaceID, value.projectID, value.jobID, value.runID, false); err != nil {
 				return nil, err
 			}
 			continue

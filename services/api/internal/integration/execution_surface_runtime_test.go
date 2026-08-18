@@ -75,12 +75,15 @@ func TestDurableExecutionCommandSurface(t *testing.T) {
 	if err := setRunning(job.ID, runs[0].ID, steps[0].ID); err != nil {
 		t.Fatal(err)
 	}
-	opened, err := backend.OpenReview(bootstrap.WorkspaceID, project.ID, job.ID, steps[0].ID, "timeline", "timeline_version", "00000000-0000-0000-0000-000000000001", 1)
+	opened, err := backend.OpenReview(bootstrap.WorkspaceID, project.ID, job.ID, steps[0].ID, "timeline", "timeline_version", "00000000-0000-0000-0000-000000000001", 2)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if opened.Status != "open" {
 		t.Fatalf("review status=%s", opened.Status)
+	}
+	if _, err := backend.ApproveReview(bootstrap.WorkspaceID, project.ID, job.ID, steps[0].ID, "00000000-0000-0000-0000-000000000001", 1); err == nil {
+		t.Fatal("stale review resource revision was accepted")
 	}
 	approved, err := backend.ApproveReview(bootstrap.WorkspaceID, project.ID, job.ID, steps[0].ID, "00000000-0000-0000-0000-000000000002", 2)
 	if err != nil {

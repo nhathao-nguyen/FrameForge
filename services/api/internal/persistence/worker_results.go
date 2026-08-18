@@ -171,6 +171,9 @@ func (s *SQLStore) ApplyWorkerResult(ctx context.Context, input WorkerResultInpu
 	if currentAttempt != input.Attempt {
 		return execution.ErrLeaseConflict
 	}
+	if (jobStatus == "cancelling" || jobStatus == "cancelled" || runStatus == "cancelled") && status != "cancelled" {
+		return execution.ErrLeaseConflict
+	}
 	failureCategory, errorCode, errorMessage := "", "", ""
 	retryable := false
 	if input.Result.SafeError != nil {
@@ -208,7 +211,8 @@ func (s *SQLStore) ApplyWorkerResult(ctx context.Context, input WorkerResultInpu
 		}
 	}
 	if targetStatus == "failed" {
-		if err := failAggregateTx(ctx, tx, input.WorkspaceID, input.ProjectID, input.JobID, input.PipelineRunID); err != nil {
+		exhaustedRetry := input.Result.SafeError != nil && retryableWorkerFailure(input.Result.SafeError) && input.Attempt >= maxAttempts
+		if err := failAggregateTx(ctx, tx, input.WorkspaceID, input.ProjectID, input.JobID, input.PipelineRunID, exhaustedRetry); err != nil {
 			return err
 		}
 	}
@@ -237,7 +241,7 @@ func retryableWorkerFailure(value *worker.SafeError) bool {
 	}
 }
 
-func failAggregateTx(ctx context.Context, tx *sql.Tx, workspaceID, projectID, jobID, runID string) error {
+func failAggregateTx(ctx context.Context, tx *sql.Tx, workspaceID, projectID, jobID, runID string, exhaustedRetry bool) error {
 	var failed, active int
 	if err := tx.QueryRowContext(ctx, `SELECT count(*) FILTER (WHERE status IN ('failed','cancelled')),count(*) FILTER (WHERE status IN ('pending','ready','queued','running','paused','waiting_for_review','retrying')) FROM job_steps WHERE pipeline_run_id=$1::uuid`, runID).Scan(&failed, &active); err != nil {
 		return err
@@ -260,7 +264,7 @@ func failAggregateTx(ctx context.Context, tx *sql.Tx, workspaceID, projectID, jo
 	}
 	if jobStatus == "running" || jobStatus == "retrying" {
 		to := "failed"
-		if jobStatus == "retrying" && commandEnablesDLQ(command) {
+		if commandEnablesDLQ(command) && (jobStatus == "retrying" || exhaustedRetry) {
 			to = "dead_lettered"
 		}
 		if _, _, err := transitionJob(ctx, tx, TransitionInput{Entity: execution.EntityJob, WorkspaceID: workspaceID, ProjectID: projectID, JobID: jobID, PipelineRunID: runID, FromStatus: jobStatus, ToStatus: to, CorrelationID: jobID, Payload: json.RawMessage(`{"reason":"step_failed"}`)}); err != nil {
@@ -332,10 +336,16 @@ func completeAggregateTx(ctx context.Context, tx *sql.Tx, workspaceID, projectID
 	if err := tx.QueryRowContext(ctx, `SELECT r.status,j.status FROM pipeline_runs r JOIN jobs j ON j.id=r.job_id JOIN projects p ON p.id=j.project_id WHERE p.workspace_id=$1::uuid AND j.project_id=$2::uuid AND j.id=$3::uuid AND r.id=$4::uuid`, workspaceID, projectID, jobID, runID).Scan(&runStatus, &jobStatus); err != nil {
 		return err
 	}
+	stopAfterPaused := false
 	if err := tx.QueryRowContext(ctx, `SELECT COALESCE(stop_after,'') FROM jobs WHERE id=$1::uuid`, jobID).Scan(&stopAfter); err != nil {
 		return err
 	}
 	if stopAfter != "" {
+		if err := tx.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM job_events WHERE job_id=$1::uuid AND event_type='job.paused' AND payload->>'reason'='stop_after')`, jobID).Scan(&stopAfterPaused); err != nil {
+			return err
+		}
+	}
+	if stopAfter != "" && !stopAfterPaused {
 		var targetStatus string
 		err := tx.QueryRowContext(ctx, `SELECT status FROM job_steps WHERE pipeline_run_id=$1::uuid AND node_key=$2`, runID, stopAfter).Scan(&targetStatus)
 		if err != nil && !errors.Is(err, sql.ErrNoRows) {

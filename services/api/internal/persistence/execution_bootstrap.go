@@ -71,3 +71,39 @@ func createExecutionGraphTx(ctx context.Context, tx *sql.Tx, jobID, projectID, p
 	}
 	return runID, nil
 }
+
+// validateExecutionBoundaries checks the client-provided partial-execution
+// selectors against the immutable pipeline snapshot before a Job becomes
+// durable. The selector is a node key, never an executor-specific shortcut.
+func validateExecutionBoundaries(pipelineSnapshot, command json.RawMessage) error {
+	var snapshot struct {
+		Nodes []struct {
+			NodeKey string `json:"node_key"`
+		} `json:"nodes"`
+	}
+	if err := json.Unmarshal(pipelineSnapshot, &snapshot); err != nil {
+		return fmt.Errorf("pipeline snapshot is invalid: %w", err)
+	}
+	keys := make(map[string]struct{}, len(snapshot.Nodes))
+	for _, node := range snapshot.Nodes {
+		if node.NodeKey != "" {
+			keys[node.NodeKey] = struct{}{}
+		}
+	}
+	var boundaries struct {
+		StartFrom string `json:"start_from"`
+		StopAfter string `json:"stop_after"`
+	}
+	if err := json.Unmarshal(command, &boundaries); err != nil {
+		return fmt.Errorf("execution command is invalid: %w", err)
+	}
+	for name, value := range map[string]string{"start_from": boundaries.StartFrom, "stop_after": boundaries.StopAfter} {
+		if value == "" {
+			continue
+		}
+		if _, ok := keys[value]; !ok {
+			return fmt.Errorf("%s boundary %q is not in the pipeline snapshot", name, value)
+		}
+	}
+	return nil
+}

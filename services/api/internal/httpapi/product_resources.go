@@ -393,6 +393,15 @@ func (s *Server) streamJobEvents(w http.ResponseWriter, r *http.Request) {
 		}
 		s.writeSSE(w, "0", "stream.snapshot", snapshot)
 		flusher.Flush()
+	} else if first, firstErr := s.Product.ListJobEvents(principal.WorkspaceID, projectID, jobID, 0, 1); firstErr == nil && len(first) > 0 && after < first[0].Sequence-1 {
+		// A retained-event gap cannot be repaired from the cursor alone. Emit
+		// the canonical reset envelope before replaying from the first durable
+		// event so clients can refetch REST state without treating a partial
+		// stream as authoritative.
+		resetURL := "/api/v1/projects/" + projectID + "/jobs/" + jobID
+		s.writeSSE(w, strconv.FormatInt(first[0].Sequence-1, 10), "stream.reset", map[string]any{"snapshot_url": resetURL, "last_available_sequence": first[0].Sequence})
+		flusher.Flush()
+		after = first[0].Sequence - 1
 	}
 	deadline := time.NewTimer(30 * time.Second)
 	defer deadline.Stop()

@@ -495,6 +495,9 @@ func (s *SQLStore) CreateProjectJob(ctx context.Context, userID, workspaceID, pr
 	if err != nil {
 		return JobRecord{}, err
 	}
+	if err := validateExecutionBoundaries(pipelineSnapshot, command); err != nil {
+		return JobRecord{}, err
+	}
 	tx, err := s.DB.BeginTx(ctx, nil)
 	if err != nil {
 		return JobRecord{}, err
