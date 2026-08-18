@@ -6,6 +6,14 @@ owner: repository owner / task assignee
 
 # Memory changelog
 
+## 2026-08-17 — Gate E checkpoint handoff synchronization
+
+- Recorded checkpoint `2fa58d4` (`checkpoint: close Gate E T322-T350 execution slice`) as the
+  committed baseline on `implementation/bootstrap`.
+- Confirmed the checkpoint is pushed to `origin/implementation/bootstrap`, the local and remote
+  hashes match, and the worktree is clean.
+- Synchronized current-state and evidence handoff metadata; T400/Gate F remains the next task.
+
 ## 2026-08-17 — Gate E T322–T350 Local/LAN execution closure
 
 - Completed the durable Job/Run/Step command surface: create/list/get/start/pause/resume/cancel/retry,

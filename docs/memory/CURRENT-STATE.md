@@ -11,9 +11,9 @@ owner: repository owner / task assignee
 | Field | Value | Evidence |
 |---|---|---|
 | Working branch | `implementation/bootstrap` | `git branch --show-current` |
-| Baseline commit | `795c2de` (`fix: complete Gate C+D repair before Gate E`) | last committed Gate C+D repair; Gate E implementation is uncommitted |
+| Baseline commit | `2fa58d4` (`checkpoint: close Gate E T322-T350 execution slice`) | committed Gate C+D plus Gate E T300–T350 Local/LAN execution checkpoint |
 | Tracking branch | `origin/implementation/bootstrap` | `git status --short --branch` |
-| Push/merge action | none performed | task scope |
+| Push/merge action | checkpoint pushed to `origin/implementation/bootstrap` on 2026-08-17 | `git push origin implementation/bootstrap`; local and remote hashes match |
 
 ## Gate and phase
 
@@ -24,8 +24,8 @@ owner: repository owner / task assignee
 - T003 reference-behavior fixture policy: complete with a policy README and intentionally empty manifest.
 - T004 owner approval/independence certification: complete by 2026-08-17 ratification and final
   documentation consistency evidence; final pre-code certification rerun after T002/T003.
-- Application implementation: Gate B foundation T100–T108, committed Gate C+D and the current
-  uncommitted Gate E execution foundation are present in the working tree.
+- Application implementation: Gate B foundation T100–T108, Gate C+D, and the Gate E execution slice
+  are committed at checkpoint `2fa58d4`; the working tree is clean.
 - Gate C+D status: T200–T235 implementation plus the narrow C+D repair is committed at the baseline
   above. Focused Go/unit/sqlmock and non-desktop canonical verification remain green. The API selects
   the durable PostgreSQL/Product + MinIO path when `NH_MEDIA_DATABASE_URL` is configured; unit tests
