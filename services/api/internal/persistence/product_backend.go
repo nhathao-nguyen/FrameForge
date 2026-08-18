@@ -1,6 +1,7 @@
 package persistence
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"database/sql"
@@ -13,6 +14,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/nhathao-nguyen/NH-Media/services/api/internal/artifact"
 	"github.com/nhathao-nguyen/NH-Media/services/api/internal/domain"
 	"github.com/nhathao-nguyen/NH-Media/services/api/internal/product"
 	"github.com/nhathao-nguyen/NH-Media/services/api/internal/queue"
@@ -252,7 +254,7 @@ func (b *DurableBackend) CompleteUpload(ctx context.Context, _ string, projectID
 		return nil, nil, fmt.Errorf("complete storage upload: %w", err)
 	}
 	command := jsonBytes(map[string]any{"asset_id": assetID, "purpose": "validation"})
-	completed, durableJob, err := b.SQL.CompleteUploadAndCreateProbeJob(ctx, b.UserID, b.Workspace, projectID, assetID, uploadID, staged.SizeBytes, command, command)
+	completed, durableJob, err := b.SQL.CompleteUploadAndCreateProbeJob(ctx, b.UserID, b.Workspace, projectID, assetID, uploadID, staged.SizeBytes, record.ExpectedSHA256, command, command)
 	if err != nil {
 		// Leave the staging locator for reconciliation; it is not published as
 		// a committed Artifact and is never returned as ready media.
@@ -788,7 +790,7 @@ func (b *DurableBackend) CreateRender(_ string, projectID, timelineVersionID, pr
 		return nil, err
 	}
 	var timelineStatus string
-	if err := b.SQL.DB.QueryRowContext(ctx, `SELECT status FROM timeline_versions v JOIN timelines t ON t.id=v.timeline_id WHERE v.id=$1 AND t.project_id=$2`, timelineVersionID, projectID).Scan(&timelineStatus); err != nil {
+	if err := b.SQL.DB.QueryRowContext(ctx, `SELECT v.status FROM timeline_versions v JOIN timelines t ON t.id=v.timeline_id WHERE v.id=$1 AND t.project_id=$2`, timelineVersionID, projectID).Scan(&timelineStatus); err != nil {
 		return nil, mapPersistenceError(err)
 	}
 	if timelineStatus != "approved" && timelineStatus != "locked" {
@@ -806,6 +808,14 @@ func (b *DurableBackend) CreateRender(_ string, projectID, timelineVersionID, pr
 	if profileStatus != "active" {
 		return nil, product.ErrConflict
 	}
+	timelineVersion, err := b.GetTimelineVersion("", projectID, timelineVersionID)
+	if err != nil {
+		return nil, err
+	}
+	timelineArtifact, err := b.ensureTimelineArtifact(ctx, projectID, timelineVersion)
+	if err != nil {
+		return nil, err
+	}
 	requestJSON := jsonBytes(request)
 	var value product.Render
 	requestHash := jsonHash(requestJSON)
@@ -817,7 +827,9 @@ func (b *DurableBackend) CreateRender(_ string, projectID, timelineVersionID, pr
 	value.ProfileID = profileID
 	value.ProfileSnapshot = mapFromJSON(profileDocument)
 	jobCommand := cloneMap(request)
+	jobCommand["kind"] = "render"
 	jobCommand["render_id"] = value.ID
+	jobCommand["artifacts"] = b.renderInputArtifacts(ctx, projectID, timelineVersion, timelineArtifact)
 	jobRequest := jsonBytes(jobCommand)
 	job, jobErr := b.SQL.CreateProjectJob(ctx, b.UserID, b.Workspace, projectID, "render", jobRequest, jobRequest)
 	if jobErr != nil {
@@ -1131,6 +1143,89 @@ func jsonHash(value json.RawMessage) string {
 	}
 	digest := sha256.Sum256(canonical)
 	return hex.EncodeToString(digest[:])
+}
+
+func (b *DurableBackend) ensureTimelineArtifact(ctx context.Context, projectID string, version *product.TimelineVersion) (artifact.Artifact, error) {
+	if b.Storage == nil || version == nil || version.ID == "" {
+		return artifact.Artifact{}, errors.New("timeline artifact storage is required")
+	}
+	var existing artifact.Artifact
+	var backend, objectKey, objectVersion, contentType string
+	var metadata []byte
+	var size int64
+	err := b.SQL.DB.QueryRowContext(ctx, `SELECT id::text,kind,role,status,storage_backend,object_key,COALESCE(object_version,''),COALESCE(content_type,''),size_bytes,sha256,metadata FROM artifacts WHERE project_id=$1::uuid AND role='timeline_version' AND metadata->>'timeline_version_id'=$2 ORDER BY created_at DESC LIMIT 1`, projectID, version.ID).Scan(&existing.ID, &existing.Kind, &existing.Role, &existing.Status, &backend, &objectKey, &objectVersion, &contentType, &size, &existing.SHA256, &metadata)
+	if err == nil {
+		existing.ProjectID, existing.Locator = projectID, storage.StorageLocator{Backend: backend, ObjectKey: objectKey, ObjectVersion: objectVersion}
+		existing.SizeBytes, existing.ContentType, existing.Metadata = size, contentType, mapFromJSON(metadata)
+		return existing, nil
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		return artifact.Artifact{}, err
+	}
+	staged, err := b.Storage.PutStaged(ctx, storage.Scope{WorkspaceID: b.Workspace, ProjectID: projectID}, bytes.NewReader(version.Document), "application/json")
+	if err != nil {
+		return artifact.Artifact{}, err
+	}
+	finalKey := fmt.Sprintf("workspaces/%s/projects/%s/artifacts/timeline_version_%s.json", b.Workspace, projectID, version.ID)
+	metadataMap := map[string]any{"source": "timeline_version", "timeline_version_id": version.ID, "content_hash": version.ContentHash}
+	promoted, err := b.Storage.Promote(ctx, staged, finalKey, storage.Preconditions{IfNoneMatch: true})
+	if err != nil {
+		return artifact.Artifact{}, fmt.Errorf("promote timeline Artifact: %w", err)
+	}
+	repository, err := NewSQLArtifactRepository(b.SQL, b.UserID, b.Workspace)
+	if err != nil {
+		return artifact.Artifact{}, err
+	}
+	committed, err := repository.PublishCommitted(ctx, artifact.Artifact{ProjectID: projectID, Kind: "timeline", Role: "timeline_version", Status: "committed", Locator: promoted.Locator, SizeBytes: promoted.SizeBytes, SHA256: staged.SHA256, ContentType: "application/json", Metadata: metadataMap})
+	if err != nil {
+		_ = repository.MarkOrphan(ctx, promoted.Locator, "timeline Artifact metadata publish failed")
+		return artifact.Artifact{}, fmt.Errorf("publish timeline Artifact: %w", err)
+	}
+	return committed, nil
+}
+
+func (b *DurableBackend) renderInputArtifacts(ctx context.Context, projectID string, version *product.TimelineVersion, timelineArtifact artifact.Artifact) []map[string]string {
+	refs := []map[string]string{{"artifact_id": contractArtifactID(timelineArtifact.ID), "role": "timeline_version", "sha256": timelineArtifact.SHA256}}
+	for _, rawID := range timelineArtifactIDs(version.Document) {
+		var id, checksum string
+		if err := b.SQL.DB.QueryRowContext(ctx, `SELECT id::text,sha256 FROM artifacts WHERE id=$1::uuid AND project_id=$2::uuid AND status='committed'`, rawID, projectID).Scan(&id, &checksum); err != nil {
+			continue
+		}
+		refs = append(refs, map[string]string{"artifact_id": contractArtifactID(id), "role": "source_original", "sha256": checksum})
+	}
+	return refs
+}
+
+func timelineArtifactIDs(document json.RawMessage) []string {
+	var root any
+	if json.Unmarshal(document, &root) != nil {
+		return nil
+	}
+	seen := map[string]bool{}
+	var result []string
+	var walk func(any)
+	walk = func(value any) {
+		switch typed := value.(type) {
+		case map[string]any:
+			if source, ok := typed["source"].(map[string]any); ok {
+				if id, ok := source["artifact_id"].(string); ok {
+					if parsed, err := uuid.Parse(id); err == nil && !seen[parsed.String()] {
+						seen[parsed.String()] = true
+						result = append(result, parsed.String())
+					}
+				}
+			}
+			for _, child := range typed {
+				walk(child)
+			}
+		case []any:
+			for _, child := range typed {
+				walk(child)
+			}
+		}
+	}
+	walk(root)
+	return result
 }
 
 func timelineProject(document json.RawMessage) string {

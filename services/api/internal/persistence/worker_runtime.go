@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/nhathao-nguyen/NH-Media/packages/shared-contracts/go/worker"
 	"github.com/nhathao-nguyen/NH-Media/services/api/internal/execution"
 	"github.com/nhathao-nguyen/NH-Media/services/api/internal/queue"
@@ -58,7 +59,7 @@ func (s *SQLStore) QueueReadySteps(ctx context.Context, workspaceID, projectID, 
 			WHERE d.pipeline_id=n.pipeline_id AND d.node_id=s.pipeline_node_id
 			  AND NOT (
 				dependency_step.status='completed'
-				OR (dependency_step.status='skipped' AND (NOT d.required OR COALESCE(CASE WHEN jsonb_typeof(d.condition)='string' THEN d.condition #>> '{}' ELSE COALESCE(d.condition->>'kind',d.condition->>'value') END,'success') IN ('soft','success_or_declared_soft')))
+				OR (dependency_step.status='skipped' AND (dependency_step.skip_reason='render_job_boundary' OR NOT d.required OR COALESCE(CASE WHEN jsonb_typeof(d.condition)='string' THEN d.condition #>> '{}' ELSE COALESCE(d.condition->>'kind',d.condition->>'value') END,'success') IN ('soft','success_or_declared_soft')))
 				OR (dependency_step.status='failed' AND (NOT d.required OR (dependency_node.failure_mode='soft' AND COALESCE(CASE WHEN jsonb_typeof(d.condition)='string' THEN d.condition #>> '{}' ELSE COALESCE(d.condition->>'kind',d.condition->>'value') END,'success') IN ('soft','success_or_declared_soft'))))
 			  )
 		  )
@@ -326,7 +327,16 @@ func (s *SQLStore) ResolveWorkerCommand(ctx context.Context, workspaceID string,
 	if len(refs) > 100 {
 		return worker.Command{}, errors.New("worker input Artifact ref limit exceeded")
 	}
-	command := worker.Command{SchemaVersion: worker.CommandSchemaVersion, MessageID: message.MessageID, Capability: capability, WorkspaceID: contractID("workspace", workspaceRef), ProjectID: contractID("project", projectID), JobID: contractID("job", message.JobID), PipelineRunID: contractID("run", runID), JobStepID: contractID("step", stepID), PipelineNodeID: contractID("node", nodeID), NodeKey: nodeKey, Attempt: message.Attempt, InputRefs: refs, Config: mapFromJSON(configJSON)}
+	config := mapFromJSON(configJSON)
+	var jobSnapshot map[string]any
+	if json.Unmarshal(inputRefsJSON, &jobSnapshot) == nil {
+		if profile, ok := jobSnapshot["render_profile"].(map[string]any); ok {
+			if key, ok := profile["profile_key"].(string); ok && strings.TrimSpace(key) != "" {
+				config["render_profile"] = key
+			}
+		}
+	}
+	command := worker.Command{SchemaVersion: worker.CommandSchemaVersion, MessageID: message.MessageID, Capability: capability, WorkspaceID: contractID("workspace", workspaceRef), ProjectID: contractID("project", projectID), JobID: contractID("job", message.JobID), PipelineRunID: contractID("run", runID), JobStepID: contractID("step", stepID), PipelineNodeID: contractID("node", nodeID), NodeKey: nodeKey, Attempt: message.Attempt, InputRefs: refs, Config: config}
 	if err := worker.ValidateCommand(command); err != nil {
 		return worker.Command{}, err
 	}
@@ -334,7 +344,11 @@ func (s *SQLStore) ResolveWorkerCommand(ctx context.Context, workspaceID string,
 }
 
 func capabilityForStep(value, nodeKey string) (string, error) {
-	if nodeKey == "analysis" {
+	// The native deterministic analysis node is an ml-class node that is
+	// consumed from the historical analysis stream. Custom acceptance graphs
+	// may reuse the same node key with a different execution class; routing
+	// those by node key would silently bypass the declared worker boundary.
+	if nodeKey == "analysis" && value == "ml" {
 		return "analysis", nil
 	}
 	switch value {
@@ -350,7 +364,7 @@ func capabilityForStep(value, nodeKey string) (string, error) {
 func artifactRefsFromSnapshot(raw []byte) []worker.ArtifactRef {
 	var direct []worker.ArtifactRef
 	if json.Unmarshal(raw, &direct) == nil {
-		return direct
+		return normalizeArtifactRefs(direct)
 	}
 	var value map[string]any
 	if json.Unmarshal(raw, &value) != nil {
@@ -358,7 +372,7 @@ func artifactRefsFromSnapshot(raw []byte) []worker.ArtifactRef {
 	}
 	for _, key := range []string{"artifacts", "input_refs"} {
 		if encoded, err := json.Marshal(value[key]); err == nil && json.Unmarshal(encoded, &direct) == nil && direct != nil {
-			return direct
+			return normalizeArtifactRefs(direct)
 		}
 	}
 	if nested, ok := value["input"].(map[string]any); ok {
@@ -367,6 +381,18 @@ func artifactRefsFromSnapshot(raw []byte) []worker.ArtifactRef {
 		}
 	}
 	return nil
+}
+
+func normalizeArtifactRefs(values []worker.ArtifactRef) []worker.ArtifactRef {
+	for index := range values {
+		if strings.HasPrefix(values[index].ArtifactID, "artifact_") {
+			continue
+		}
+		if parsed, err := uuid.Parse(values[index].ArtifactID); err == nil {
+			values[index].ArtifactID = contractID("artifact", parsed.String())
+		}
+	}
+	return values
 }
 
 func uniqueArtifactRefs(values []worker.ArtifactRef) []worker.ArtifactRef {

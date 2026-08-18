@@ -6,8 +6,8 @@ owner: operations owner / release owner
 
 # Production runbook (planned)
 
-**Readiness:** no runtime or production release exists. This file records required operational
-behavior; exact commands, image digests, endpoints and secret references belong to later tasks.
+**Readiness:** Gate H controls and local operational commands are implemented, but no public
+production release exists. Exact owner/LAN endpoints and secret references stay outside the repo.
 
 ## Release progression
 
@@ -44,6 +44,20 @@ behavior; exact commands, image digests, endpoints and secret references belong 
   automatically retried.
 - DLQ replay is authorized, audited and idempotent.
 - Initial retention preserves source/final/resume-required content until explicit audited deletion;
-  executor scratch may be cleaned after success. T602 proves backup/restore and inventory.
+  executor scratch may be cleaned after success. T602 tooling covers backup/restore and inventory;
+  the 2026-08-18 local rehearsal proved clean separate-target restore and post-restore lineage/API
+  read-through; physical second-device and public deployment remain separate gates.
 - Capture opaque correlation and Job/Run/Step IDs, deployment identity and safe error category;
   redact tokens, credentials, paths and user content.
+
+## Gate H local commands
+
+- `tools/reconcile-local.ps1` calls the authenticated recovery operation; it requeues only
+  PostgreSQL-authorized ready/retrying frontiers.
+- `tools/backup-local.ps1` writes a custom PostgreSQL dump and checksum manifest outside the repo.
+- `tools/restore-local.ps1` restores only into a separately named empty `restore/recovery/rehearsal`
+  target and never uses `--clean`.
+- `tools/inventory-artifacts.ps1` reports missing, orphan and checksum/size-corrupt objects; it
+  never deletes objects.
+- `tools/verify-gate-h.ps1` runs the deterministic T600–T602 suites and parser/independence checks;
+  `-IncludeLive` runs the reviewed-FFmpeg Product API flow and writes temporary evidence.

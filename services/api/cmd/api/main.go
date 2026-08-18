@@ -99,7 +99,19 @@ func main() {
 			runtimeQueue = transport
 		}
 	}
-	server, err := httpapi.NewServerWithBackend(value, provider, health.NewRegistry(nil, 2*time.Second), productBackend, backend)
+	dependencies := []health.Dependency{
+		health.FuncDependency{DependencyName: "postgres", CheckFunc: func(ctx context.Context) error {
+			return database.PingContext(ctx)
+		}},
+		health.FuncDependency{DependencyName: "minio", CheckFunc: func(ctx context.Context) error {
+			_, err := backend.ListStaging(ctx, "healthchecks")
+			return err
+		}},
+	}
+	if runtimeQueue != nil {
+		dependencies = append(dependencies, health.FuncDependency{DependencyName: "redis", CheckFunc: runtimeQueue.Ping})
+	}
+	server, err := httpapi.NewServerWithBackend(value, provider, health.NewRegistry(dependencies, 2*time.Second), productBackend, backend)
 	if err != nil {
 		log.Fatalf("invalid API server: %v", err)
 	}

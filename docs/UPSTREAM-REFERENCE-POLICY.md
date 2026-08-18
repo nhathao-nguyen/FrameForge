@@ -6,7 +6,8 @@ Movie Narrator is an external research/reference repository:
 
 - URL: `https://github.com/zcbacxc/movie-narrator.git`
 - Research snapshot recorded by the existing audit: commit
-  `bc2d276cf477fe3ce1a16f9679dcb1d2978e3a74`
+  `b332cf9411a09cd8452c7dd84bfffb380be9c621` (refreshed 2026-08-18; prior audit snapshot is
+  retained in the historical evidence)
 - Recorded upstream license identifier: `AGPL-3.0-or-later`
 
 These fields are engineering provenance. This document does not make a legal conclusion or replace

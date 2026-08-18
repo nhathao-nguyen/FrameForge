@@ -297,19 +297,13 @@ func failedTransientResult(messageID, jobID, stepID string) worker.Result {
 func TestProductAPIDurableClientDisconnectReconnect(t *testing.T) {
 	f := newGateEDurableFixture(t)
 	token := f.login(t)
-	projectStatus, projectBody := f.request(t, http.MethodPost, "/api/v1/projects", token, map[string]any{"name": "client-disconnect", "workflow_key": "movie_recap"}, map[string]string{"Idempotency-Key": "gate-e-project-" + gateESuffix()})
-	if projectStatus != http.StatusCreated {
-		t.Fatalf("project status=%d body=%s", projectStatus, projectBody)
-	}
-	var project product.Project
-	if err := json.Unmarshal(projectBody, &project); err != nil {
-		t.Fatal(err)
-	}
-	if project.ID == "" {
-		t.Fatal("Product API did not return a Project ID")
-	}
+	// This test exercises the durable Product API/SSE surface with a disposable
+	// probe graph. Upload validation jobs are created by the upload-completion
+	// command because they require a real Asset and staged source Artifact.
+	workflowKey := f.createSingleNodeWorkflow(t, "client-disconnect-"+gateESuffix(), 1, "none")
+	project := f.createProject(t, workflowKey, "client-disconnect")
 	defer f.closeProject(t, project.ID, "")
-	validJobBody := map[string]any{"kind": "asset_probe", "mode": "automatic", "input": map[string]any{"asset_id": "asset_gate_e"}, "start_from": "asset_probe", "enable_dlq": true}
+	validJobBody := map[string]any{"kind": "pipeline", "workflow_key": workflowKey, "mode": "automatic", "start_from": "analysis", "enable_dlq": true}
 	jobStatus, jobBody := f.request(t, http.MethodPost, "/api/v1/projects/"+project.ID+"/jobs", token, validJobBody, map[string]string{"Idempotency-Key": "gate-e-job-" + gateESuffix()})
 	if jobStatus != http.StatusCreated {
 		t.Fatalf("job status=%d body=%s", jobStatus, jobBody)
@@ -318,7 +312,7 @@ func TestProductAPIDurableClientDisconnectReconnect(t *testing.T) {
 	if err := json.Unmarshal(jobBody, &job); err != nil {
 		t.Fatal(err)
 	}
-	invalidStatus, _ := f.request(t, http.MethodPost, "/api/v1/projects/"+project.ID+"/jobs", token, map[string]any{"kind": "asset_probe", "start_from": "missing-node"}, map[string]string{"Idempotency-Key": "gate-e-invalid-" + gateESuffix()})
+	invalidStatus, _ := f.request(t, http.MethodPost, "/api/v1/projects/"+project.ID+"/jobs", token, map[string]any{"kind": "pipeline", "workflow_key": workflowKey, "start_from": "missing-node"}, map[string]string{"Idempotency-Key": "gate-e-invalid-" + gateESuffix()})
 	if invalidStatus != http.StatusUnprocessableEntity {
 		t.Fatalf("invalid start_from status=%d", invalidStatus)
 	}

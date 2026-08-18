@@ -153,6 +153,21 @@ func (b *DurableBackend) ScheduleReadySteps(ctx context.Context) (int, error) {
 	return count, nil
 }
 
+// Reconcile is the safe, repeatable recovery operation used after a
+// dependency or worker outage. It only re-enqueues PostgreSQL-authorized
+// ready/retrying frontiers; it never fabricates rows or trusts Redis as truth.
+func (b *DurableBackend) Reconcile(ctx context.Context) (product.RecoveryReport, error) {
+	ready, err := b.ScheduleReadySteps(ctx)
+	if err != nil {
+		return product.RecoveryReport{}, err
+	}
+	retrying, err := b.RequeueRetryingSteps(ctx)
+	if err != nil {
+		return product.RecoveryReport{ReadyStepsRequeued: ready}, err
+	}
+	return product.RecoveryReport{ReadyStepsRequeued: ready, RetryStepsRequeued: retrying}, nil
+}
+
 func (b *DurableBackend) PauseJob(workspaceID, projectID, jobID string) (*product.Job, error) {
 	if err := b.controlJob(context.Background(), workspaceID, projectID, jobID, "pause"); err != nil {
 		return nil, err

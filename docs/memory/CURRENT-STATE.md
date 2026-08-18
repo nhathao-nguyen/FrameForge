@@ -37,7 +37,8 @@ owner: repository owner / task assignee
   crash/resume, retry/DLQ/replay, cancellation, partial stop-after resume, and authenticated SSE
   snapshot/replay/reconnect tests pass against the current working tree.
   T400/Gate F and desktop T550 acceptance were explicitly outside that Gate E checkpoint; their
-  current status is recorded below. Hardened T603 and public/VPS T605 remain future work.
+  current status is recorded below. Gate H T600–T604 implementation and the same-machine T603
+  hardened acceptance are complete; public/VPS T605 remains unstarted.
 - Gate F implementation status: PASS for the repaired T400–T434 source behavior and current local
   T550 runtime acceptance. The existing signed T434 staging package is stale against the current
   uncommitted web edit; fresh N/N+1 owner re-signing is required before release-artifact handoff.
@@ -96,7 +97,8 @@ owner: repository owner / task assignee
   physical-client T550 run. The external client authenticated, created Workspace/Project data,
   exercised upload and Job/event/SSE paths, proved no local backend dependency, and cleaned up.
 - Local Functional Acceptance is T550; Local/LAN Hardened Acceptance is T603; Internet/VPS
-  production is T605.
+  production is T605. T603 is PASS for this host's one-machine scope; physical second-device
+  evidence is not claimed.
 - Gate G evidence is in `docs/evidence/gate-g-dependency-preflight-20260818.md`,
   `docs/evidence/gate-g-capability-coverage.md` and the current implementation audit entry in
   `docs/memory/TEST-EVIDENCE.md`; executable acceptance is `tools/accept-gate-g.ps1`.
@@ -137,6 +139,6 @@ Boundary: Canonical execution transitions/events, queue, scheduling, leases, med
   durable graph bootstrap, controls, checkpoint/DLQ and SSE boundary
 Application code: API, persistence, media worker, Python worker, contracts, and execution adapters
 Upstream relationship: research/reference only; no operational dependency
-  Next: preserve the evidence and await a separately approved T600 hardening task; do not begin T600
-  or Prompt 7/T600–T605 work in this Gate G task.
+  Next: preserve the Gate H evidence and obtain explicit production approval before any T605
+  work; do not begin public deployment from this local checkpoint.
 ```

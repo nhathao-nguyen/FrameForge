@@ -518,11 +518,12 @@ func newRandomID() string { return fmt.Sprintf("%d", time.Now().UnixNano()) }
 // S3Storage is the MinIO/S3-compatible adapter. It shares the same key and
 // reference rules as LocalStorage; credentials remain inside this adapter.
 type S3Storage struct {
-	client   *minio.Core
-	bucket   string
-	endpoint string
-	uploads  sync.Map
-	uploadMu sync.Mutex
+	client    *minio.Core
+	apiClient *minio.Client
+	bucket    string
+	endpoint  string
+	uploads   sync.Map
+	uploadMu  sync.Mutex
 }
 type s3Upload struct {
 	session UploadSession
@@ -537,7 +538,11 @@ func NewS3Storage(endpoint, accessKey, secretKey, bucket string, secure bool) (*
 	if err != nil {
 		return nil, err
 	}
-	return &S3Storage{client: client, bucket: bucket, endpoint: endpoint}, nil
+	apiClient, err := minio.New(endpoint, &minio.Options{Creds: credentials.NewStaticV4(accessKey, secretKey, ""), Secure: secure})
+	if err != nil {
+		return nil, err
+	}
+	return &S3Storage{client: client, apiClient: apiClient, bucket: bucket, endpoint: endpoint}, nil
 }
 
 func (s *S3Storage) InitiateUpload(ctx context.Context, scope Scope, constraints UploadConstraints) (UploadSession, error) {

@@ -50,8 +50,16 @@ func createExecutionGraphTx(ctx context.Context, tx *sql.Tx, jobID, projectID, p
 	if len(nodes) == 0 {
 		return "", errors.New("active pipeline has no nodes")
 	}
+	var commandMeta struct {
+		Kind string `json:"kind"`
+	}
+	_ = json.Unmarshal(command, &commandMeta)
 	for _, node := range nodes {
-		if _, err := tx.ExecContext(ctx, `INSERT INTO job_steps(pipeline_run_id,pipeline_node_id,node_key,status,input_refs,provider_snapshot,resource_class,created_at,updated_at) VALUES($1::uuid,$2::uuid,$3,'pending',$4,'{}'::jsonb,$5,now(),now())`, runID, node.id, node.key, jsonOrEmpty(inputSnapshot), node.class); err != nil {
+		status, skipReason := "pending", ""
+		if commandMeta.Kind == "render" && node.key != "render_timeline" && node.key != "validate_deliverable" {
+			status, skipReason = "skipped", "render_job_boundary"
+		}
+		if _, err := tx.ExecContext(ctx, `INSERT INTO job_steps(pipeline_run_id,pipeline_node_id,node_key,status,input_refs,provider_snapshot,resource_class,skip_reason,created_at,updated_at) VALUES($1::uuid,$2::uuid,$3,$4,$5,'{}'::jsonb,$6,NULLIF($7,''),now(),now())`, runID, node.id, node.key, status, jsonOrEmpty(inputSnapshot), node.class, skipReason); err != nil {
 			return "", fmt.Errorf("create JobStep %s: %w", node.key, err)
 		}
 	}

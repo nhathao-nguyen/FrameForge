@@ -59,7 +59,7 @@ func (e *Executor) Execute(ctx context.Context, command worker.Command) (worker.
 	defer os.RemoveAll(root)
 	var outputs []worker.OutputRef
 	switch command.NodeKey {
-	case "resolve_source_asset":
+	case "asset_probe", "resolve_source_asset":
 		outputs, err = e.resolveSource(ctx, command, root)
 	case "prepare_media_assets":
 		outputs, err = e.prepareMedia(ctx, command, root)
@@ -84,7 +84,7 @@ func (e *Executor) resolveSource(ctx context.Context, command worker.Command, ro
 	if command.Capability != "probe" {
 		return nil, errors.New("source resolver requires probe capability")
 	}
-	ref, err := requiredRef(command, "source_original")
+	ref, err := requiredSourceRef(command)
 	if err != nil {
 		return nil, err
 	}
@@ -201,6 +201,9 @@ func (e *Executor) renderTimeline(ctx context.Context, command worker.Command, r
 		path, materializeErr := e.artifacts.materialize(ctx, command, ref, root)
 		if materializeErr == nil {
 			paths[ref.ArtifactID] = path
+			if rawID, ok := rawArtifactID(ref.ArtifactID); ok {
+				paths[rawID] = path
+			}
 		}
 	}
 	profileKey := configString(command.Config, "render_profile")
@@ -222,14 +225,32 @@ func (e *Executor) renderTimeline(ctx context.Context, command worker.Command, r
 	if err != nil {
 		return nil, err
 	}
-	mixedRef, err := requiredRef(command, "mixed_audio")
-	if err != nil {
-		return nil, err
-	}
-	mixedPath, ok := paths[mixedRef.ArtifactID]
-	if !ok {
-		mixedPath, err = e.artifacts.materialize(ctx, command, mixedRef, root)
-		if err != nil {
+	mixedRef, mixedErr := requiredRef(command, "mixed_audio")
+	var mixedPath string
+	if mixedErr == nil {
+		mixedPath = paths[mixedRef.ArtifactID]
+		if mixedPath == "" {
+			mixedPath, err = e.artifacts.materialize(ctx, command, mixedRef, root)
+			if err != nil {
+				return nil, err
+			}
+		}
+	} else {
+		sourceRef, sourceErr := requiredSourceRef(command)
+		if sourceErr != nil {
+			return nil, mixedErr
+		}
+		sourcePath := paths[sourceRef.ArtifactID]
+		if sourcePath == "" {
+			sourcePath, err = e.artifacts.materialize(ctx, command, sourceRef, root)
+			if err != nil {
+				return nil, err
+			}
+		}
+		mixedPath = filepath.Join(root, "render-audio.wav")
+		if _, err := e.policy(root).Run(ctx, process.Spec{Tool: process.ToolFFmpeg, Args: []string{
+			"-hide_banner", "-loglevel", "error", "-y", "-i", sourcePath, "-vn", "-ac", "2", "-ar", "48000", "-c:a", "pcm_s16le", mixedPath,
+		}, InputPaths: []string{sourcePath}, OutputPaths: []string{mixedPath}}); err != nil {
 			return nil, err
 		}
 	}
@@ -243,6 +264,17 @@ func (e *Executor) renderTimeline(ctx context.Context, command worker.Command, r
 		"has_video": result.HasVideo, "has_audio": result.HasAudio, "qa": result.QAReport,
 	}, root)
 	return []worker.OutputRef{video, audio, metadata}, err
+}
+
+func rawArtifactID(value string) (string, bool) {
+	if !strings.HasPrefix(value, "artifact_") {
+		return "", false
+	}
+	parts := strings.Split(strings.TrimPrefix(value, "artifact_"), "_")
+	if len(parts) != 5 || len(parts[0]) != 8 || len(parts[1]) != 4 || len(parts[2]) != 4 || len(parts[3]) != 4 || len(parts[4]) != 12 {
+		return "", false
+	}
+	return strings.Join(parts, "-"), true
 }
 
 func (e *Executor) validateDeliverable(ctx context.Context, command worker.Command, root string) ([]worker.OutputRef, error) {
@@ -340,7 +372,11 @@ func clipOverlapsRejectedContent(start, end float64, segments []render.MediaSegm
 }
 
 func (e *Executor) policy(root string) process.Policy {
-	return process.Policy{FFmpegPath: e.ffmpegPath, FFprobePath: e.ffprobePath, SandboxRoot: root, MaxOutputBytes: 1 << 20, MaxDuration: 10 * time.Minute}
+	return process.Policy{
+		FFmpegPath: e.ffmpegPath, FFprobePath: e.ffprobePath, SandboxRoot: root,
+		MaxInputBytes: 8 << 30, MaxOutputBytes: 1 << 20, MaxDuration: 10 * time.Minute,
+		MaxArgs: 256, MaxChildren: 1, MaxDiskBytes: 16 << 30,
+	}
 }
 
 func requiredRef(command worker.Command, role string) (worker.ArtifactRef, error) {
@@ -350,6 +386,15 @@ func requiredRef(command worker.Command, role string) (worker.ArtifactRef, error
 		}
 	}
 	return worker.ArtifactRef{}, fmt.Errorf("required Artifact role %q is missing", role)
+}
+
+func requiredSourceRef(command worker.Command) (worker.ArtifactRef, error) {
+	for _, role := range []string{"source_original", "source"} {
+		if ref, err := requiredRef(command, role); err == nil {
+			return ref, nil
+		}
+	}
+	return worker.ArtifactRef{}, errors.New("required source Artifact role is missing")
 }
 
 func configString(config map[string]any, key string) string {
@@ -416,7 +461,7 @@ func failureCode(command worker.Command, err error) string {
 		return "artifact_transfer_failed"
 	}
 	switch command.NodeKey {
-	case "resolve_source_asset":
+	case "asset_probe", "resolve_source_asset":
 		return "source_probe_failed"
 	case "prepare_media_assets":
 		return "media_preparation_failed"

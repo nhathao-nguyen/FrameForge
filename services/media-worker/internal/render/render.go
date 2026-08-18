@@ -20,6 +20,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/nhathao-nguyen/NH-Media/packages/shared-contracts/go/security"
 	"github.com/nhathao-nguyen/NH-Media/services/media-worker/internal/process"
 )
 
@@ -1292,17 +1293,8 @@ func sha256File(path string) (string, error) {
 }
 
 func ensureSandboxPath(root, value string) error {
-	rootAbs, err := filepath.Abs(root)
-	if err != nil {
+	if err := (security.PathPolicy{Root: root, AllowMissingLeaf: true}).Validate(value); err != nil {
 		return err
-	}
-	valueAbs, err := filepath.Abs(value)
-	if err != nil {
-		return err
-	}
-	relative, err := filepath.Rel(rootAbs, valueAbs)
-	if err != nil || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) || filepath.IsAbs(relative) {
-		return fmt.Errorf("render output escapes executor sandbox")
 	}
 	return nil
 }

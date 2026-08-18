@@ -153,7 +153,22 @@ func (s *SQLStore) EnsureDefaultWorkflow(ctx context.Context, userID string) err
 	if _, err = s.EnsurePipelineDefinition(ctx, nativeAssetValidationInput(userID)); err != nil {
 		return err
 	}
-	_, err = s.EnsurePipelineDefinition(ctx, nativeAcceptanceAnalysisInput(userID))
+	if _, err = s.EnsurePipelineDefinition(ctx, nativeAcceptanceAnalysisInput(userID)); err != nil {
+		return err
+	}
+	return s.EnsureDefaultRenderProfile(ctx, userID)
+}
+
+// EnsureDefaultRenderProfile installs the reviewed native profile used by the
+// local render acceptance path. It is system-owned, immutable once active and
+// safe to call on every API bootstrap.
+func (s *SQLStore) EnsureDefaultRenderProfile(ctx context.Context, userID string) error {
+	if userID == "" {
+		return errors.New("render profile seed requires creator")
+	}
+	document := json.RawMessage(`{"profile_key":"youtube_16_9","version":1,"platform":"youtube","aspect_ratio":"16:9","width":640,"height":360,"fps":30,"video_codec":"libx264","audio_codec":"aac","pixel_format":"yuv420p","audio_target_lufs":-16,"true_peak_db":-1}`)
+	digest := sha256.Sum256(document)
+	_, err := s.DB.ExecContext(ctx, `INSERT INTO render_profiles(workspace_id,profile_key,version,status,schema_version,document,content_hash,created_by) SELECT NULL,'youtube_16_9',1,'active','1.0',$1,$2,$3 WHERE NOT EXISTS (SELECT 1 FROM render_profiles WHERE workspace_id IS NULL AND profile_key='youtube_16_9' AND version=1)`, document, hex.EncodeToString(digest[:]), userID)
 	return err
 }
 
@@ -567,7 +582,7 @@ func (s *SQLStore) CreateProjectJob(ctx context.Context, userID, workspaceID, pr
 // and one durable validation Job is inserted from the immutable pipeline
 // snapshot. Storage completion happens before this call; a database failure
 // therefore leaves a staged object for reconciliation, never a ready Asset.
-func (s *SQLStore) CompleteUploadAndCreateProbeJob(ctx context.Context, userID, workspaceID, projectID, assetID, uploadID string, completedSize int64, command, inputSnapshot json.RawMessage) (UploadRecord, JobRecord, error) {
+func (s *SQLStore) CompleteUploadAndCreateProbeJob(ctx context.Context, userID, workspaceID, projectID, assetID, uploadID string, completedSize int64, stagedSHA256 string, command, inputSnapshot json.RawMessage) (UploadRecord, JobRecord, error) {
 	if _, err := s.GetAsset(ctx, userID, workspaceID, projectID, assetID); err != nil {
 		return UploadRecord{}, JobRecord{}, err
 	}
@@ -582,6 +597,10 @@ func (s *SQLStore) CompleteUploadAndCreateProbeJob(ctx context.Context, userID, 
 		return UploadRecord{}, JobRecord{}, err
 	}
 	defer func() { _ = tx.Rollback() }()
+	var assetKind, assetMIME string
+	if err := tx.QueryRowContext(ctx, `SELECT kind,COALESCE(declared_mime_type,'') FROM assets WHERE id=$1::uuid AND project_id=$2::uuid AND deleted_at IS NULL FOR UPDATE`, assetID, projectID).Scan(&assetKind, &assetMIME); err != nil {
+		return UploadRecord{}, JobRecord{}, err
+	}
 	var upload UploadRecord
 	err = tx.QueryRowContext(ctx, `UPDATE asset_uploads u SET status='completed',completed_size=$3,updated_at=now() FROM assets a JOIN projects p ON p.id=a.project_id WHERE u.id=$1 AND u.asset_id=$2 AND a.id=$2 AND p.id=$4 AND p.workspace_id=$5 AND u.status='active' AND u.expires_at > now() RETURNING u.id::text,u.asset_id::text,u.storage_backend,u.staging_object_key,COALESCE(u.provider_upload_id,''),u.status,u.multipart,COALESCE(u.part_size,0),COALESCE(u.expected_size,0),COALESCE(u.completed_size,0),COALESCE(u.expected_sha256,''),u.expires_at,u.created_at,u.updated_at`, uploadID, assetID, completedSize, projectID, workspaceID).Scan(&upload.ID, &upload.AssetID, &upload.Backend, &upload.StagingObjectKey, &upload.ProviderUploadID, &upload.Status, &upload.Multipart, &upload.PartSize, &upload.ExpectedSize, &upload.CompletedSize, &upload.ExpectedSHA256, &upload.ExpiresAt, &upload.CreatedAt, &upload.UpdatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -593,6 +612,26 @@ func (s *SQLStore) CompleteUploadAndCreateProbeJob(ctx context.Context, userID, 
 	if _, err = tx.ExecContext(ctx, `UPDATE assets SET status='validating',revision=revision+1,updated_by=$3,updated_at=now() WHERE id=$1 AND project_id=$2 AND deleted_at IS NULL`, assetID, projectID, userID); err != nil {
 		return UploadRecord{}, JobRecord{}, err
 	}
+	// Keep uploaded bytes non-authoritative until the probe succeeds, but give
+	// the probe a scoped staged Artifact ref so the worker can materialize the
+	// object without sending media through the Product API.
+	probeInput := inputSnapshot
+	if len(stagedSHA256) == 64 {
+		if _, decodeErr := hex.DecodeString(stagedSHA256); decodeErr != nil {
+			return UploadRecord{}, JobRecord{}, errors.New("staged upload checksum is invalid")
+		}
+		var stagedArtifactID string
+		if err := tx.QueryRowContext(ctx, `INSERT INTO artifacts(project_id,kind,role,status,storage_backend,object_key,content_type,size_bytes,sha256,metadata,created_by_user_id) VALUES($1,$2,'source_original','staged',$3,$4,NULLIF($5,''),$6,$7,'{"source":"upload_validation"}'::jsonb,$8) RETURNING id::text`, projectID, assetKind, upload.Backend, upload.StagingObjectKey, assetMIME, completedSize, stagedSHA256, userID).Scan(&stagedArtifactID); err != nil {
+			return UploadRecord{}, JobRecord{}, err
+		}
+		probeInput, err = json.Marshal(map[string]any{
+			"asset_id":  assetID,
+			"artifacts": []map[string]string{{"artifact_id": contractArtifactID(stagedArtifactID), "role": "source_original", "sha256": stagedSHA256}},
+		})
+		if err != nil {
+			return UploadRecord{}, JobRecord{}, err
+		}
+	}
 	var workflowID, pipelineID string
 	var pipelineSnapshot json.RawMessage
 	err = tx.QueryRowContext(ctx, `SELECT w.id::text,p.id::text,`+pipelineSnapshotExpression+` FROM projects pr JOIN workflows w ON w.workflow_key='asset_validation' AND w.status='active' AND (w.workspace_id IS NULL OR w.workspace_id=$2) JOIN pipelines p ON p.workflow_id=w.id AND p.status='active' WHERE pr.id=$1 AND pr.workspace_id=$2 ORDER BY p.version DESC LIMIT 1`, projectID, workspaceID).Scan(&workflowID, &pipelineID, &pipelineSnapshot)
@@ -603,11 +642,11 @@ func (s *SQLStore) CompleteUploadAndCreateProbeJob(ctx context.Context, userID, 
 		return UploadRecord{}, JobRecord{}, err
 	}
 	var job JobRecord
-	err = tx.QueryRowContext(ctx, `INSERT INTO jobs(project_id,workflow_id,pipeline_id,kind,mode,status,requested_by,command,input_snapshot,pipeline_snapshot) VALUES($1,$2,$3,'asset_probe','automatic','created',$4,$5,$6,$7) RETURNING id::text,project_id::text,kind,status,command,created_at`, projectID, workflowID, pipelineID, userID, command, inputSnapshot, pipelineSnapshot).Scan(&job.ID, &job.ProjectID, &job.Kind, &job.Status, &job.Command, &job.CreatedAt)
+	err = tx.QueryRowContext(ctx, `INSERT INTO jobs(project_id,workflow_id,pipeline_id,kind,mode,status,requested_by,command,input_snapshot,pipeline_snapshot) VALUES($1,$2,$3,'asset_probe','automatic','created',$4,$5,$6,$7) RETURNING id::text,project_id::text,kind,status,command,created_at`, projectID, workflowID, pipelineID, userID, command, probeInput, pipelineSnapshot).Scan(&job.ID, &job.ProjectID, &job.Kind, &job.Status, &job.Command, &job.CreatedAt)
 	if err != nil {
 		return UploadRecord{}, JobRecord{}, err
 	}
-	job.PipelineRunID, err = createExecutionGraphTx(ctx, tx, job.ID, projectID, pipelineID, workspaceID, pipelineSnapshot, inputSnapshot, command)
+	job.PipelineRunID, err = createExecutionGraphTx(ctx, tx, job.ID, projectID, pipelineID, workspaceID, pipelineSnapshot, probeInput, command)
 	if err != nil {
 		return UploadRecord{}, JobRecord{}, err
 	}

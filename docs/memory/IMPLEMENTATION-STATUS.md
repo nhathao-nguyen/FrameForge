@@ -97,11 +97,11 @@ reviewable evidence is recorded.
 | T531-S1 | Clips/shorts export | T531 | complete | typed `ExportClips`; real selection/profile/codec/size/checksum manifest test plus content-safe automatic range that avoids rejected black/silence segments | one deterministic derivative path proven |
 | T532 | Multi-profile reuse | T531 | complete | 16:9/9:16/1:1 real outputs reuse source fingerprint with zero provider calls; subject-aware crop plan changes by coordinates | subject-aware pixel proof is local reviewed-FFmpeg evidence |
 | T532-S1 | Subject-aware auto-reframe disposition | T532 | complete | missing/invalid subject boxes fail closed; coordinate-sensitive typed reframe plan/fingerprint and real rendered pixel/SHA-256 differences pass | no silent center crop |
-| T600 | Sandbox/secret/egress hardening | T313, T500, T531 | blocked | none | after dependencies |
-| T601 | Observability/recovery | T340, T600 | blocked | none | after dependencies |
-| T602 | Backup/restore/inventory | T222, T601 | blocked | none | after dependencies |
-| T603 | Local/LAN Hardened Acceptance | T434, T531–T532, T550, T600–T602 | blocked | none | harden accepted functional system |
-| T604 | Upstream research refresh | T001, T003, T108 | blocked | none | research evidence only |
+| T600 | Sandbox/secret/egress hardening | T313, T500, T531 | complete | shared security policy, media process-tree/policy tests, Gate H security matrix | residual OS/container sandbox and malware scanner remain deployment controls |
+| T601 | Observability/recovery | T340, T600 | complete | bounded telemetry, dependency-aware readiness, worker drain, authenticated PostgreSQL-authorized reconcile operation, and live Postgres/Redis/MinIO outage probes | automatic worker reconnect after Redis EOF is not claimed; tracked `dev.ps1 restart` recovery is proven |
+| T602 | Backup/restore/inventory | T222, T601 | complete | live inventory, non-destructive orphan report, real `pg_dump`/checksum manifest, clean separate-target `pg_restore`, migration, lineage and API read-through; corrupt-backup and non-clean-target negatives pass | current inventory has 713 owner-review orphan findings; no deletion was authorized or performed |
+| T603 | Local/LAN Hardened Acceptance | T434, T531–T532, T550, T600–T602 | complete | same-machine full stack acceptance: PostgreSQL/Redis/MinIO, Go API/media worker, Python worker, web, reviewed FFmpeg/ffprobe, upload→25-step movie job→TimelineVersion→render/download, restart recovery and readiness probes | physical second-device/LAN proof was not run on this host; VPS/DNS/TLS/load/power-loss remain outside T603 |
+| T604 | Upstream research refresh | T001, T003, T108 | complete | `docs/research/upstream-refresh-20260818.md`, metadata-only refresh script | research evidence only; no product coupling |
 | T605 | Internet/VPS production release | T603 | blocked | none | explicit production approval |
 
 Gate C+D, Gate E T300–T350, Gate F and Gate G T500–T532 are present in the current working tree.
@@ -109,8 +109,8 @@ Gate G is locally accepted with deterministic fake/local providers and real revi
 black/silence QA, content-safe clip-export and subject-aware pixel evidence. The immutable
 `movie_recap` v5 graph is also accepted end to end:
 Product API → PostgreSQL 25-step snapshot → Redis → actual Python/Go workers → canonical Timeline →
-render/mix/QA/clip Artifacts. T600–T605 remain separate future gates; external provider quality, GPU
-model execution and public production are not claimed.
+render/mix/QA/clip Artifacts. T600–T604 implementation is reviewable in the current working tree;
+T603 Local hardened acceptance is complete for the available one-machine scope. T605 public production remains unstarted.
 
 The 2026-08-18 current-tree repair audit added executable proof for the exact movie_recap graph and
 artifact-role contracts, canonical Timeline JSON Schema plus semantic/reference/safety validation,

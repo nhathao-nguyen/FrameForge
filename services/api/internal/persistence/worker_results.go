@@ -48,12 +48,22 @@ func (r ScopedResultApplier) ApplyClaimedResult(ctx context.Context, value execu
 		if err := r.SQL.DB.QueryRowContext(ctx, `SELECT j.project_id::text FROM jobs j JOIN projects p ON p.id=j.project_id WHERE p.workspace_id=$1::uuid AND j.id=$2::uuid`, r.Workspace, value.Claim.Message.JobID).Scan(&projectID); err != nil {
 			return err
 		}
+		if value.Claim.Message.NodeKey == "asset_probe" {
+			if err := r.Artifacts.FinalizeValidatedUpload(ctx, r.Workspace, projectID, value.Claim.Message.JobID, value.Claim.Command, result); err != nil {
+				return err
+			}
+		}
 		for index, ref := range result.OutputRefs {
 			committed, err := r.Artifacts.CommitWorkerArtifact(ctx, r.Workspace, projectID, value.Claim.Message.JobID, value.Claim.Message.JobStepID, result.MessageID, ref)
 			if err != nil {
 				return err
 			}
 			result.OutputRefs[index] = committed
+			if value.Claim.Message.NodeKey == "render_timeline" {
+				if err := r.linkRenderArtifact(ctx, value.Claim.Message.JobID, committed); err != nil {
+					return err
+				}
+			}
 		}
 	}
 	return r.SQL.ApplyWorkerResult(ctx, WorkerResultInput{
@@ -69,6 +79,19 @@ func (r ScopedResultApplier) ApplyClaimedResult(ctx context.Context, value execu
 		Attempt:        value.Claim.Lease.Attempt,
 		Result:         result,
 	})
+}
+
+func (r ScopedResultApplier) linkRenderArtifact(ctx context.Context, jobID string, ref worker.OutputRef) error {
+	role := map[string]string{"render_video": "video", "render_audio": "audio", "render_metadata": "metadata"}[ref.Role]
+	if role == "" {
+		return nil
+	}
+	artifactID, ok := contractUUID("artifact", ref.ArtifactID)
+	if !ok {
+		return errors.New("render output Artifact ref is invalid")
+	}
+	_, err := r.SQL.DB.ExecContext(ctx, `INSERT INTO render_artifacts(render_id,artifact_id,role,is_canonical) SELECT r.id,$2::uuid,$3,true FROM renders r JOIN jobs j ON j.id=r.job_id WHERE j.id=$1::uuid ON CONFLICT (render_id,artifact_id,role) DO UPDATE SET is_canonical=EXCLUDED.is_canonical`, jobID, artifactID, role)
+	return err
 }
 
 type ClaimedWorkerCommand struct {
@@ -195,6 +218,9 @@ func (s *SQLStore) ApplyWorkerResult(ctx context.Context, input WorkerResultInpu
 	}
 	if affected, err := result.RowsAffected(); err != nil || affected != 1 {
 		return execution.ErrLeaseConflict
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE job_steps SET output_refs=$2,updated_at=now() WHERE id=$1::uuid AND current_attempt=$3`, input.JobStepID, outputRefs, input.Attempt); err != nil {
+		return err
 	}
 	if _, _, err := transitionStep(ctx, tx, TransitionInput{Entity: execution.EntityStep, WorkspaceID: input.WorkspaceID, ProjectID: input.ProjectID, JobID: input.JobID, PipelineRunID: input.PipelineRunID, JobStepID: input.JobStepID, PipelineNodeID: input.PipelineNodeID, NodeKey: input.NodeKey, FromStatus: "running", ToStatus: targetStatus, CorrelationID: input.JobID, Payload: workerResultPayload(input.Result)}); err != nil {
 		return fmt.Errorf("transition worker result: %w", err)
@@ -333,6 +359,9 @@ func failAggregateTx(ctx context.Context, tx *sql.Tx, workspaceID, projectID, jo
 		if _, err := appendEventAndOutboxTx(ctx, tx, EventInput{SchemaVersion: "1.0", EventType: eventType, CorrelationID: jobID, WorkspaceID: workspaceID, ProjectID: projectID, JobID: jobID, PipelineRunID: runID, Payload: payload}); err != nil {
 			return err
 		}
+		if _, err := tx.ExecContext(ctx, `UPDATE renders SET status='failed',error_code='render_job_failed',error_message='The render Job failed.',updated_at=now() WHERE job_id=$1::uuid AND status NOT IN ('completed','cancelled')`, jobID); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -438,6 +467,9 @@ func completeAggregateTx(ctx context.Context, tx *sql.Tx, workspaceID, projectID
 			return err
 		}
 		if _, err := appendEventAndOutboxTx(ctx, tx, EventInput{SchemaVersion: "1.0", EventType: "job.completed", CorrelationID: jobID, WorkspaceID: workspaceID, ProjectID: projectID, JobID: jobID, PipelineRunID: runID, Payload: json.RawMessage(`{"reason":"all_steps_terminal"}`)}); err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx, `UPDATE renders SET status='completed',completed_at=now(),updated_at=now() WHERE job_id=$1::uuid AND status IN ('created','queued','running')`, jobID); err != nil {
 			return err
 		}
 	}

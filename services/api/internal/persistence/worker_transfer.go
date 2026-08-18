@@ -35,7 +35,15 @@ func (t WorkerTransfer) ResolveWorkerArtifact(ctx context.Context, projectRef, a
 	var checksum string
 	err := t.SQL.DB.QueryRowContext(ctx, `SELECT a.storage_backend,a.object_key,COALESCE(a.object_version,''),a.sha256
 		FROM artifacts a JOIN projects p ON p.id=a.project_id
-		WHERE p.workspace_id=$1::uuid AND p.id=$2::uuid AND a.id=$3::uuid AND a.status='committed'`, t.Workspace, projectID, artifactID).Scan(&locator.Backend, &locator.ObjectKey, &locator.ObjectVersion, &checksum)
+		WHERE p.workspace_id=$1::uuid AND p.id=$2::uuid AND a.id=$3::uuid
+		  AND (a.status='committed' OR (a.status='staged' AND EXISTS (
+			SELECT 1 FROM job_steps s
+			JOIN pipeline_runs r ON r.id=s.pipeline_run_id
+			JOIN jobs j ON j.id=r.job_id
+			WHERE j.project_id=a.project_id AND j.kind='asset_probe'
+			  AND j.status IN ('created','queued','running') AND s.status IN ('pending','ready','queued','running')
+			  AND s.input_refs @> jsonb_build_object('artifacts', jsonb_build_array(jsonb_build_object('artifact_id',$4::text,'role','source_original','sha256',$5::text)))
+		 )))`, t.Workspace, projectID, artifactID, contractArtifactID(artifactID), expectedSHA).Scan(&locator.Backend, &locator.ObjectKey, &locator.ObjectVersion, &checksum)
 	if errors.Is(err, sql.ErrNoRows) || err == nil && (expectedSHA == "" || checksum != expectedSHA) {
 		return storage.SignedRequest{}, ErrNotFound
 	}

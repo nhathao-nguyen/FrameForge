@@ -7,8 +7,10 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
+	"github.com/nhathao-nguyen/NH-Media/packages/shared-contracts/go/security"
 	"github.com/nhathao-nguyen/NH-Media/packages/shared-contracts/go/worker"
 	"github.com/redis/go-redis/v9"
 )
@@ -37,6 +39,7 @@ type RedisController struct {
 	maxLen       int64
 	groupCreated bool
 	executor     Executor
+	draining     atomic.Bool
 }
 
 func NewRedisController(options RedisOptions, executor Executor) (*RedisController, error) {
@@ -80,6 +83,16 @@ func (c *RedisController) Ping(ctx context.Context) error {
 	return c.client.Ping(ctx).Err()
 }
 
+// BeginDrain stops new claims while allowing the current RunOnce invocation to
+// finish. PostgreSQL remains authoritative; a later controller can reclaim any
+// lease that expires without fabricating database state.
+func (c *RedisController) BeginDrain() {
+	if c != nil {
+		c.draining.Store(true)
+	}
+}
+func (c *RedisController) IsDraining() bool { return c != nil && c.draining.Load() }
+
 func (c *RedisController) workerStream() string { return c.prefix + ":" + c.capability + ":worker" }
 func (c *RedisController) resultStream() string { return c.prefix + ":" + c.capability + ":results" }
 
@@ -98,6 +111,9 @@ func (c *RedisController) ensureGroup(ctx context.Context) error {
 func (c *RedisController) RunOnce(ctx context.Context, block time.Duration) (int, error) {
 	if c == nil || c.client == nil {
 		return 0, errors.New("worker Redis controller is not initialized")
+	}
+	if c.draining.Load() {
+		return 0, nil
 	}
 	if err := c.ensureGroup(ctx); err != nil {
 		return 0, err
@@ -177,9 +193,6 @@ func decodeCommand(values map[string]any) (worker.Command, error) {
 }
 
 func failedResult(command worker.Command, cause error) worker.Result {
-	message := cause.Error()
-	if len(message) > 256 {
-		message = message[:256]
-	}
+	message := security.SafeError(cause)
 	return worker.Result{SchemaVersion: worker.ResultSchemaVersion, MessageID: command.MessageID, JobID: command.JobID, JobStepID: command.JobStepID, Status: "failed", OutputRefs: []worker.OutputRef{}, SafeError: &worker.SafeError{Code: "WORKER_EXECUTION_FAILED", Category: "internal", Retryable: true, SafeMessage: message}}
 }

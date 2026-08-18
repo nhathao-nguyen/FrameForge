@@ -19,7 +19,7 @@ func expectDurableRenderTimelinePrerequisites(mock sqlmock.Sqlmock, timelineStat
 		mock.ExpectQuery("SELECT id::text,workspace_id::text,name").WithArgs("project_1", "ws_1").WillReturnRows(sqlmock.NewRows([]string{"id", "workspace_id", "name", "workflow_key", "status", "settings", "revision", "created_at", "updated_at"}).AddRow("project_1", "ws_1", "Project", "movie_recap", "active", []byte(`{}`), int64(1), now, now))
 	}
 	mock.ExpectQuery(regexp.QuoteMeta("SELECT v.id::text,v.timeline_id::text,t.project_id::text,v.version,v.status,v.schema_version,v.document,v.content_hash,v.origin,COALESCE(v.based_on_version_id::text,''),v.created_at")).WithArgs("timeline_version_1", "project_1").WillReturnRows(sqlmock.NewRows([]string{"id", "timeline_id", "project_id", "version", "status", "schema_version", "document", "content_hash", "origin", "based_on", "created_at"}).AddRow("timeline_version_1", "timeline_1", "project_1", 1, timelineStatus, "1.0", document, "hash", "user", "", now))
-	mock.ExpectQuery("SELECT status FROM timeline_versions").WithArgs("timeline_version_1", "project_1").WillReturnRows(sqlmock.NewRows([]string{"status"}).AddRow(timelineStatus))
+	mock.ExpectQuery("SELECT v.status FROM timeline_versions").WithArgs("timeline_version_1", "project_1").WillReturnRows(sqlmock.NewRows([]string{"status"}).AddRow(timelineStatus))
 }
 
 func TestDurableCreateRenderFailsWithoutExistingProfileAndNeverAutoCreates(t *testing.T) {

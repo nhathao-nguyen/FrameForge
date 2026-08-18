@@ -17,7 +17,7 @@ func testPolicy(t *testing.T) Policy {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return Policy{FFmpegPath: tool, FFprobePath: tool, SandboxRoot: root, MaxOutputBytes: 1024, MaxDuration: time.Second}
+	return Policy{FFmpegPath: tool, FFprobePath: tool, SandboxRoot: root, MaxOutputBytes: 1024, MaxDuration: 5 * time.Second}
 }
 
 func TestProcessRejectsUnreviewedToolAndUnsafeArguments(t *testing.T) {

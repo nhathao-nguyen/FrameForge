@@ -12,6 +12,8 @@ import (
 	"runtime"
 	"strings"
 	"time"
+
+	"github.com/nhathao-nguyen/NH-Media/packages/shared-contracts/go/security"
 )
 
 type Tool string
@@ -26,7 +28,11 @@ type Policy struct {
 	FFprobePath    string
 	SandboxRoot    string
 	MaxOutputBytes int64
+	MaxInputBytes  int64
 	MaxDuration    time.Duration
+	MaxArgs        int
+	MaxChildren    int
+	MaxDiskBytes   int64
 }
 
 type Spec struct {
@@ -73,12 +79,24 @@ func (p Policy) Run(ctx context.Context, spec Spec) (Result, error) {
 	if err != nil {
 		return Result{}, err
 	}
+	budget := p.resourceBudget()
+	if err := budget.Validate(); err != nil {
+		return Result{}, err
+	}
+	if len(spec.Args) > budget.MaxArgs {
+		return Result{}, fmt.Errorf("%w: argv count exceeds limit", ErrPolicyViolation)
+	}
 	if err := validateArgs(spec.Args, spec.InputPaths, spec.OutputPaths); err != nil {
 		return Result{}, err
 	}
 	for _, value := range append(append([]string{}, spec.InputPaths...), spec.OutputPaths...) {
-		if err := validateSandboxPath(p.SandboxRoot, value); err != nil {
-			return Result{}, err
+		if err := (security.PathPolicy{Root: p.SandboxRoot, AllowMissingLeaf: true}).Validate(value); err != nil {
+			return Result{}, fmt.Errorf("%w: %v", ErrPolicyViolation, err)
+		}
+		if info, statErr := os.Stat(value); statErr == nil && contains(spec.InputPaths, value) {
+			if err := budget.ValidateInput(info.Size()); err != nil {
+				return Result{}, fmt.Errorf("%w: %v", ErrPolicyViolation, err)
+			}
 		}
 	}
 	timeout := spec.Timeout
@@ -87,7 +105,8 @@ func (p Policy) Run(ctx context.Context, spec Spec) (Result, error) {
 	}
 	runCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
-	command := exec.CommandContext(runCtx, path, spec.Args...)
+	command := exec.Command(path, spec.Args...)
+	configureProcessTree(command)
 	command.Env = minimalEnvironment()
 	command.Dir = p.SandboxRoot
 	stdout := &limitedBuffer{limit: p.MaxOutputBytes}
@@ -95,7 +114,16 @@ func (p Policy) Run(ctx context.Context, spec Spec) (Result, error) {
 	command.Stdout = stdout
 	command.Stderr = stderr
 	started := time.Now()
-	err = command.Run()
+	if err = command.Start(); err == nil {
+		done := make(chan error, 1)
+		go func() { done <- command.Wait() }()
+		select {
+		case err = <-done:
+		case <-runCtx.Done():
+			_ = killProcessTree(command.Process.Pid)
+			err = <-done
+		}
+	}
 	duration := time.Since(started)
 	result := Result{Tool: spec.Tool, Duration: duration, Stdout: trimDiagnostic(stdout.String()), Diagnostic: trimDiagnostic(stderr.String())}
 	if stdout.limited || stderr.limited {
@@ -115,6 +143,26 @@ func (p Policy) Run(ctx context.Context, spec Spec) (Result, error) {
 	}
 	result.ExitCode = 0
 	return result, nil
+}
+
+func (p Policy) resourceBudget() security.ResourceBudget {
+	maxInput := p.MaxInputBytes
+	if maxInput <= 0 {
+		maxInput = 8 << 30
+	}
+	maxArgs := p.MaxArgs
+	if maxArgs <= 0 {
+		maxArgs = 256
+	}
+	maxChildren := p.MaxChildren
+	if maxChildren <= 0 {
+		maxChildren = 1
+	}
+	maxDisk := p.MaxDiskBytes
+	if maxDisk <= 0 {
+		maxDisk = 16 << 30
+	}
+	return security.ResourceBudget{MaxInputBytes: maxInput, MaxOutputBytes: p.MaxOutputBytes, MaxDuration: p.MaxDuration, MaxArgs: maxArgs, MaxChildren: maxChildren, MaxDiskBytes: maxDisk}
 }
 
 func (p Policy) toolPath(tool Tool) (string, error) {
@@ -169,28 +217,7 @@ func validateArgs(args, inputs, outputs []string) error {
 }
 
 func validateSandboxPath(root, value string) error {
-	if strings.TrimSpace(value) == "" {
-		return fmt.Errorf("%w: sandbox path is empty", ErrPolicyViolation)
-	}
-	rootAbs, err := filepath.Abs(root)
-	if err != nil {
-		return err
-	}
-	pathAbs, err := filepath.Abs(value)
-	if err != nil {
-		return err
-	}
-	relative, err := filepath.Rel(rootAbs, pathAbs)
-	if err != nil || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) || filepath.IsAbs(relative) {
-		return fmt.Errorf("%w: path escapes sandbox", ErrPolicyViolation)
-	}
-	if existing, err := filepath.EvalSymlinks(pathAbs); err == nil {
-		relative, err = filepath.Rel(rootAbs, existing)
-		if err != nil || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) || filepath.IsAbs(relative) {
-			return fmt.Errorf("%w: symlink escapes sandbox", ErrPolicyViolation)
-		}
-	}
-	return nil
+	return (security.PathPolicy{Root: root, AllowMissingLeaf: true}).Validate(value)
 }
 
 func minimalEnvironment() []string {
@@ -247,7 +274,16 @@ func safeProcessError(err error) string {
 	if len(message) > 256 {
 		message = message[:256]
 	}
-	return message
+	return security.RedactText(message)
+}
+
+func contains(values []string, candidate string) bool {
+	for _, value := range values {
+		if filepath.Clean(value) == filepath.Clean(candidate) {
+			return true
+		}
+	}
+	return false
 }
 
 var _ io.Writer = (*limitedBuffer)(nil)

@@ -33,3 +33,14 @@ func TestControllerRequiresKnownCapability(t *testing.T) {
 		t.Fatal("unknown worker capability was accepted")
 	}
 }
+
+func TestControllerDrainStopsNewClaims(t *testing.T) {
+	controller := &RedisController{}
+	if controller.IsDraining() {
+		t.Fatal("new controller is draining")
+	}
+	controller.BeginDrain()
+	if !controller.IsDraining() {
+		t.Fatal("drain state was not recorded")
+	}
+}

@@ -54,3 +54,12 @@ func TestFailureResultClassifiesRetryBoundary(t *testing.T) {
 		})
 	}
 }
+
+func TestAssetProbeUsesSourceProbeBoundary(t *testing.T) {
+	t.Parallel()
+	command := worker.Command{MessageID: "message_probe_001", JobID: "job_probe_001", JobStepID: "step_probe_001", NodeKey: "asset_probe"}
+	result := failureResult(command, errors.New("source probe rejected the Artifact"))
+	if result.SafeError == nil || result.SafeError.Code != "source_probe_failed" || result.SafeError.Category != "permanent" {
+		t.Fatalf("unexpected asset probe classification: %+v", result.SafeError)
+	}
+}

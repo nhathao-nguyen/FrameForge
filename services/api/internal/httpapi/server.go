@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"crypto/subtle"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -18,6 +19,7 @@ import (
 	"github.com/nhathao-nguyen/NH-Media/services/api/internal/health"
 	"github.com/nhathao-nguyen/NH-Media/services/api/internal/product"
 	"github.com/nhathao-nguyen/NH-Media/services/api/internal/storage"
+	"github.com/nhathao-nguyen/NH-Media/services/api/internal/telemetry"
 )
 
 type contextKey string
@@ -35,6 +37,7 @@ type Server struct {
 	Storage         storage.StoragePort
 	WorkerArtifacts WorkerArtifactTransfer
 	WorkerToken     string
+	Metrics         *telemetry.Metrics
 }
 
 func NewServer(value config.APIConfig, provider *auth.LocalAuthProvider, registry *health.Registry) (*Server, error) {
@@ -58,7 +61,7 @@ func NewServerWithBackend(value config.APIConfig, provider *auth.LocalAuthProvid
 	if productBackend == nil {
 		return nil, errors.New("Product backend is required")
 	}
-	server := &Server{Config: value, Auth: provider, LocalAuth: provider, Health: registry, Product: productBackend, Storage: backend}
+	server := &Server{Config: value, Auth: provider, LocalAuth: provider, Health: registry, Product: productBackend, Storage: backend, Metrics: telemetry.NewMetrics(256)}
 	server.HTTPServer = &http.Server{Addr: value.Bind, Handler: server.Handler(), ReadHeaderTimeout: value.ReadHeaderTimeout, ReadTimeout: value.ReadTimeout, WriteTimeout: value.WriteTimeout, IdleTimeout: value.IdleTimeout, MaxHeaderBytes: value.MaxHeaderBytes}
 	return server, nil
 }
@@ -68,6 +71,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1", s.version)
 	mux.Handle("GET /api/v1/live", s.Health.LiveHandler())
 	mux.Handle("GET /api/v1/ready", s.Health.ReadyHandler())
+	mux.HandleFunc("GET /api/v1/metrics", s.metrics)
 	mux.HandleFunc("POST /api/v1/auth/local/login", s.login)
 	mux.HandleFunc("POST /api/v1/auth/login", s.login)
 	mux.HandleFunc("POST /api/v1/auth/refresh", s.refresh)
@@ -78,6 +82,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/diagnostics", s.diagnostics)
 	mux.HandleFunc("POST /internal/v1/worker/artifacts/resolve", s.resolveWorkerArtifact)
 	mux.HandleFunc("POST /internal/v1/worker/artifacts/stage", s.stageWorkerArtifact)
+	mux.HandleFunc("POST /internal/v1/ops/reconcile", s.reconcile)
 	s.registerProjectRoutes(mux)
 	return s.middleware(mux)
 }
@@ -120,12 +125,42 @@ func (s *Server) diagnostics(w http.ResponseWriter, r *http.Request) {
 	s.writeJSON(w, r, http.StatusOK, map[string]any{"status": "ok", "profile": s.Config.Profile, "checks": []string{"configuration", "health"}})
 }
 
+func (s *Server) metrics(w http.ResponseWriter, r *http.Request) {
+	if s.Metrics == nil {
+		w.WriteHeader(http.StatusNotImplemented)
+		return
+	}
+	s.Metrics.Handler(w, r)
+}
+
+func (s *Server) reconcile(w http.ResponseWriter, r *http.Request) {
+	token := strings.TrimSpace(r.Header.Get("X-NH-Worker-Token"))
+	if token == "" || s.WorkerToken == "" || subtle.ConstantTimeCompare([]byte(token), []byte(s.WorkerToken)) != 1 {
+		s.writeError(w, r, http.StatusUnauthorized, "worker_authentication_required", "Worker authentication is required.")
+		return
+	}
+	recovery, ok := s.Product.(product.RecoverySurface)
+	if !ok {
+		s.writeError(w, r, http.StatusNotImplemented, "recovery_unavailable", "Recovery is unavailable for this backend.")
+		return
+	}
+	report, err := recovery.Reconcile(r.Context())
+	if err != nil {
+		s.writeError(w, r, http.StatusServiceUnavailable, "recovery_failed", "Recovery could not be completed.")
+		return
+	}
+	s.writeJSON(w, r, http.StatusOK, report)
+}
+
 func (s *Server) middleware(next http.Handler) http.Handler {
 	allowed := make(map[string]struct{}, len(s.Config.AllowedOrigins))
 	for _, origin := range s.Config.AllowedOrigins {
 		allowed[origin] = struct{}{}
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if s.Metrics != nil {
+			s.Metrics.Observe("http_requests_total", r.URL.Path, "request")
+		}
 		requestID := safeID(r.Header.Get("X-Request-ID"))
 		if requestID == "" {
 			requestID = newID("req")

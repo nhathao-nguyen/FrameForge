@@ -3,6 +3,8 @@ package persistence
 import (
 	"bytes"
 	"context"
+	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -12,10 +14,10 @@ import (
 	"github.com/nhathao-nguyen/NH-Media/services/api/internal/storage"
 )
 
-// WorkerArtifactCommitter is intentionally a narrow first-slice adapter. It
-// accepts only the zero-byte deterministic analysis report; media workers must
-// stage real bytes through a storage-aware executor and never put them on the
-// Redis result stream.
+// WorkerArtifactCommitter keeps result-stream metadata separate from payload
+// bytes. Zero-byte deterministic reports use a local empty stage; all other
+// outputs must already be verified in the worker staging namespace before the
+// committer promotes them to a canonical Artifact.
 type WorkerArtifactCommitter struct {
 	Storage    storage.StoragePort
 	Repository *SQLArtifactRepository
@@ -63,6 +65,81 @@ func (c WorkerArtifactCommitter) CommitWorkerArtifact(ctx context.Context, works
 		return worker.OutputRef{}, err
 	}
 	return worker.OutputRef{ArtifactID: contractArtifactID(committed.ID), Kind: committed.Kind, Role: committed.Role, SHA256: committed.SHA256, SizeBytes: committed.SizeBytes, ContentType: committed.ContentType}, nil
+}
+
+// FinalizeValidatedUpload promotes the staged source Artifact only after the
+// probe has completed successfully. The worker receives a staged ref through
+// the lease-scoped command, while Product state exposes the source only after
+// this promotion and the Asset pointer update succeed.
+func (c WorkerArtifactCommitter) FinalizeValidatedUpload(ctx context.Context, workspaceID, projectID, jobID string, command worker.Command, result worker.Result) error {
+	if c.Storage == nil || c.Repository == nil || c.Repository.SQL == nil || c.Repository.SQL.DB == nil {
+		return errors.New("validated upload commit dependencies are required")
+	}
+	var ref worker.ArtifactRef
+	for _, candidate := range command.InputRefs {
+		if candidate.Role == "source_original" || candidate.Role == "source" {
+			ref = candidate
+			break
+		}
+	}
+	artifactID, ok := contractUUID("artifact", ref.ArtifactID)
+	if !ok || ref.SHA256 == "" {
+		return errors.New("validated upload source Artifact ref is invalid")
+	}
+	var assetID string
+	if err := c.Repository.SQL.DB.QueryRowContext(ctx, `SELECT command->>'asset_id' FROM jobs WHERE id=$1::uuid AND project_id=$2::uuid`, jobID, projectID).Scan(&assetID); err != nil {
+		return err
+	}
+	var staged storage.StagedObject
+	var kind, role, contentType string
+	var size int64
+	var checksum string
+	if err := c.Repository.SQL.DB.QueryRowContext(ctx, `SELECT a.kind,a.role,a.storage_backend,a.object_key,COALESCE(a.object_version,''),COALESCE(a.content_type,''),a.size_bytes,a.sha256 FROM artifacts a JOIN projects p ON p.id=a.project_id WHERE p.workspace_id=$1::uuid AND a.project_id=$2::uuid AND a.id=$3::uuid AND a.status='staged'`, workspaceID, projectID, artifactID).Scan(&kind, &role, &staged.Locator.Backend, &staged.Locator.ObjectKey, &staged.Locator.ObjectVersion, &contentType, &size, &checksum); err != nil {
+		return err
+	}
+	if checksum != ref.SHA256 {
+		return errors.New("validated upload source checksum does not match the command")
+	}
+	staged.SizeBytes, staged.SHA256, staged.ContentType = size, checksum, contentType
+	finalKey := fmt.Sprintf("workspaces/%s/projects/%s/artifacts/source_original_%s", safeKey(workspaceID), safeKey(projectID), safeKey(assetID))
+	committed, err := (artifact.CommitService{Storage: c.Storage, Repository: c.Repository}).Commit(ctx, artifact.CommitRequest{
+		ProjectID: projectID, Kind: kind, Role: role, FinalKey: finalKey,
+		ExpectedSHA256: checksum, Staged: artifact.NewStaged(staged), ContentType: contentType,
+		Metadata: map[string]any{"source": "upload_validation", "validation_job_id": jobID}, IfNoneMatch: true,
+	})
+	if errors.Is(err, artifact.ErrDuplicateCanonicalRole) {
+		if committed.ID == "" {
+			return err
+		}
+	} else if err != nil {
+		return err
+	}
+	validationReport, err := json.Marshal(map[string]any{"status": "validated", "probe_output_refs": result.OutputRefs})
+	if err != nil {
+		return err
+	}
+	tx, err := c.Repository.SQL.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	updated, err := tx.ExecContext(ctx, `UPDATE assets SET status='ready',original_artifact_id=$3::uuid,detected_mime_type=NULLIF($4,''),sha256=$5,size_bytes=$6,validation_report=$7,revision=revision+1,updated_at=now() WHERE id=$1::uuid AND project_id=$2::uuid AND status='validating'`, assetID, projectID, committed.ID, contentType, checksum, size, validationReport)
+	if err != nil {
+		return err
+	}
+	if count, err := updated.RowsAffected(); err != nil || count != 1 {
+		if err != nil {
+			return err
+		}
+		return sql.ErrNoRows
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO artifact_variants(asset_id,artifact_id,variant_kind,is_canonical,metadata) VALUES($1::uuid,$2::uuid,'original',true,'{"source":"upload_validation"}'::jsonb) ON CONFLICT (asset_id,artifact_id,variant_kind) DO UPDATE SET is_canonical=true`, assetID, committed.ID); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE artifacts SET status='expired',updated_at=now() WHERE id=$1::uuid AND status='staged'`, artifactID); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func (r *SQLArtifactRepository) LinkProducer(ctx context.Context, artifactID, projectID, jobID, stepID string) error {

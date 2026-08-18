@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"sort"
 	"sync/atomic"
 	"time"
 )
@@ -13,10 +14,31 @@ type Dependency interface {
 	Check(ctx context.Context) error
 }
 
+// FuncDependency adapts a bounded runtime probe to the public health
+// registry without exposing provider-specific error details in HTTP output.
+type FuncDependency struct {
+	DependencyName string
+	CheckFunc      func(context.Context) error
+}
+
+func (d FuncDependency) Name() string { return d.DependencyName }
+
+func (d FuncDependency) Check(ctx context.Context) error {
+	if d.CheckFunc == nil {
+		return context.Canceled
+	}
+	return d.CheckFunc(ctx)
+}
+
 type Registry struct {
 	dependencies []Dependency
 	timeout      time.Duration
 	draining     atomic.Bool
+}
+
+type DependencyStatus struct {
+	Name   string `json:"name"`
+	Status string `json:"status"`
 }
 
 func NewRegistry(dependencies []Dependency, timeout time.Duration) *Registry {
@@ -43,14 +65,40 @@ func (r *Registry) ReadyHandler() http.Handler {
 		}
 		ctx, cancel := context.WithTimeout(request.Context(), r.timeout)
 		defer cancel()
-		for _, dependency := range r.dependencies {
-			if err := dependency.Check(ctx); err != nil {
-				writeJSON(w, http.StatusServiceUnavailable, map[string]string{"status": "not_ready"})
-				return
-			}
+		ready, statuses := r.Check(ctx)
+		status := "ready"
+		code := http.StatusOK
+		if !ready {
+			status = "not_ready"
+			code = http.StatusServiceUnavailable
 		}
-		writeJSON(w, http.StatusOK, map[string]string{"status": "ready"})
+		// Dependency names and failure details stay on the internal Check/metrics
+		// boundary; the public readiness contract remains deliberately minimal.
+		_ = statuses
+		writeJSON(w, code, map[string]string{"status": status})
 	})
+}
+
+func (r *Registry) Check(ctx context.Context) (bool, []DependencyStatus) {
+	if r == nil {
+		return false, []DependencyStatus{{Name: "health_registry", Status: "missing"}}
+	}
+	statuses := make([]DependencyStatus, 0, len(r.dependencies))
+	ready := true
+	for _, dependency := range r.dependencies {
+		status := "ready"
+		if dependency == nil || dependency.Check(ctx) != nil {
+			status = "unavailable"
+			ready = false
+		}
+		name := "unknown"
+		if dependency != nil && dependency.Name() != "" {
+			name = dependency.Name()
+		}
+		statuses = append(statuses, DependencyStatus{Name: name, Status: status})
+	}
+	sort.Slice(statuses, func(i, j int) bool { return statuses[i].Name < statuses[j].Name })
+	return ready, statuses
 }
 
 func writeJSON(w http.ResponseWriter, status int, value any) {

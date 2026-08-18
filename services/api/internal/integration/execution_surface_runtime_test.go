@@ -2,6 +2,7 @@ package integration
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"strings"
 	"testing"
@@ -64,6 +65,15 @@ func TestDurableExecutionCommandSurface(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	document := json.RawMessage(`{"schema_version":"1.0","timeline_id":"placeholder","timeline_version_id":"placeholder","project_id":"` + project.ID + `","version":1,"duration_sec":1,"tracks":[{"id":"track","kind":"video","name":"Footage","order":0,"clips":[{"id":"clip","timeline_in_sec":0,"timeline_out_sec":1,"source":{"type":"none","inline_id":"silence"},"origin":"user"}]}]}`)
+	timeline, versionOne, err := backend.CreateTimeline(bootstrap.WorkspaceID, project.ID, "user", document)
+	if err != nil {
+		t.Fatal(err)
+	}
+	versionTwo, err := backend.AddTimelineVersion(bootstrap.WorkspaceID, project.ID, timeline.ID, versionOne.ID, "user", versionOne.Document, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
 	runs, err := backend.ListPipelineRuns(bootstrap.WorkspaceID, project.ID, job.ID)
 	if err != nil || len(runs) != 1 {
 		t.Fatalf("runs=%d err=%v", len(runs), err)
@@ -75,17 +85,17 @@ func TestDurableExecutionCommandSurface(t *testing.T) {
 	if err := setRunning(job.ID, runs[0].ID, steps[0].ID); err != nil {
 		t.Fatal(err)
 	}
-	opened, err := backend.OpenReview(bootstrap.WorkspaceID, project.ID, job.ID, steps[0].ID, "timeline", "timeline_version", "00000000-0000-0000-0000-000000000001", 2)
+	opened, err := backend.OpenReview(bootstrap.WorkspaceID, project.ID, job.ID, steps[0].ID, "timeline", "timeline_version", versionTwo.ID, 2)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if opened.Status != "open" {
 		t.Fatalf("review status=%s", opened.Status)
 	}
-	if _, err := backend.ApproveReview(bootstrap.WorkspaceID, project.ID, job.ID, steps[0].ID, "00000000-0000-0000-0000-000000000001", 1); err == nil {
+	if _, err := backend.ApproveReview(bootstrap.WorkspaceID, project.ID, job.ID, steps[0].ID, versionOne.ID, 1); err == nil {
 		t.Fatal("stale review resource revision was accepted")
 	}
-	approved, err := backend.ApproveReview(bootstrap.WorkspaceID, project.ID, job.ID, steps[0].ID, "00000000-0000-0000-0000-000000000002", 2)
+	approved, err := backend.ApproveReview(bootstrap.WorkspaceID, project.ID, job.ID, steps[0].ID, versionTwo.ID, 2)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -109,7 +119,7 @@ func TestDurableExecutionCommandSurface(t *testing.T) {
 	if err := setRunning(job2.ID, runs2[0].ID, steps2[0].ID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := backend.OpenReview(bootstrap.WorkspaceID, project.ID, job2.ID, steps2[0].ID, "timeline", "timeline_version", "00000000-0000-0000-0000-000000000003", 1); err != nil {
+	if _, err := backend.OpenReview(bootstrap.WorkspaceID, project.ID, job2.ID, steps2[0].ID, "timeline", "timeline_version", versionOne.ID, 1); err != nil {
 		t.Fatal(err)
 	}
 	paused, err := backend.RejectReview(bootstrap.WorkspaceID, project.ID, job2.ID, steps2[0].ID, "edit_then_resume")

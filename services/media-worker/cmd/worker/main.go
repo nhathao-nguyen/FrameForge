@@ -7,8 +7,10 @@ import (
 	"io"
 	"log"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strings"
+	"syscall"
 
 	"github.com/nhathao-nguyen/NH-Media/packages/shared-contracts/go/worker"
 	"github.com/nhathao-nguyen/NH-Media/services/media-worker/internal/executor"
@@ -73,6 +75,12 @@ func main() {
 			log.Fatal("at least one media worker capability is required")
 		}
 		errors := make(chan error, len(capabilities))
+		workerContext, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		stopSignal := make(chan os.Signal, 1)
+		signal.Notify(stopSignal, os.Interrupt, syscall.SIGTERM)
+		defer signal.Stop(stopSignal)
+		controllers := make([]*runtime.RedisController, 0, len(capabilities))
 		for _, capability := range capabilities {
 			controller, controllerErr := runtime.NewRedisController(runtime.RedisOptions{
 				Addr: firstNonEmpty(os.Getenv("NH_MEDIA_WORKER_QUEUE_ENDPOINT"), os.Getenv("NH_QUEUE_ENDPOINT")), Password: firstNonEmpty(os.Getenv("NH_QUEUE_PASSWORD"), os.Getenv("REDIS_PASSWORD")),
@@ -84,11 +92,21 @@ func main() {
 			if controllerErr != nil {
 				log.Fatal(controllerErr)
 			}
-			defer controller.Close()
-			go func() { errors <- controller.Run(context.Background()) }()
+			controllers = append(controllers, controller)
+			go func(controller *runtime.RedisController) { errors <- controller.Run(workerContext) }(controller)
 		}
-		if err := <-errors; err != nil {
+		go func() {
+			<-stopSignal
+			for _, controller := range controllers {
+				controller.BeginDrain()
+			}
+			cancel()
+		}()
+		if err := <-errors; err != nil && workerContext.Err() == nil {
 			log.Fatal(err)
+		}
+		for _, controller := range controllers {
+			_ = controller.Close()
 		}
 		return
 	}
