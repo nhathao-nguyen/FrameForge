@@ -42,7 +42,7 @@ func (f *fakeLeasePublisher) PublishWorkerCommand(context.Context, worker.Comman
 
 func TestClaimingDispatcherRegistersLeaseBeforeFastWorkerResult(t *testing.T) {
 	q := &fakeClaimQueue{deliveries: []queue.Delivery{{Stream: "stream", EntryID: "1-0", Message: queue.Message{MessageID: "msg_analysis_001", Capability: "analysis", JobID: "job_analysis_001", JobStepID: "step_analysis_001", Attempt: 1}}}}
-	command := worker.Command{SchemaVersion: worker.CommandSchemaVersion, MessageID: "msg_analysis_001", Capability: "analysis", ProjectID: "project_analysis_001", JobID: "job_analysis_001", PipelineRunID: "run_analysis_001", JobStepID: "step_analysis_001", Attempt: 1, InputRefs: []worker.ArtifactRef{}, Config: map[string]any{}}
+	command := worker.Command{SchemaVersion: worker.CommandSchemaVersion, MessageID: "msg_analysis_001", Capability: "analysis", WorkspaceID: "workspace_analysis_001", ProjectID: "project_analysis_001", JobID: "job_analysis_001", PipelineRunID: "run_analysis_001", JobStepID: "step_analysis_001", NodeKey: "analysis", Attempt: 1, InputRefs: []worker.ArtifactRef{}, Config: map[string]any{}}
 	leases := NewLeaseRegistry()
 	publisher := &fakeLeasePublisher{}
 	count, err := (ClaimingDispatcher{Queue: q, Resolver: fakeLeaseResolver{command: command}, Publisher: publisher, Claims: leases}).DispatchOnce(context.Background(), "analysis", "controller", 1)

@@ -75,12 +75,12 @@ func MovieRecap() Definition {
 		weights[entry.key] = 1
 	}
 	return Definition{
-		// Versions 2 and 3 are already durable in developer databases. Keep
-		// them immutable and publish the corrected catalog as the next native
-		// version instead of mutating an active graph in place.
-		SchemaVersion: DefinitionSchemaVersion, WorkflowKey: "movie_recap", Version: 4, Nodes: nodes,
+		// Versions 2 through 4 are already durable in developer databases. Keep
+		// them immutable and publish the Gate G execution repair as the next
+		// native version instead of mutating an active graph in place.
+		SchemaVersion: DefinitionSchemaVersion, WorkflowKey: "movie_recap", Version: 5, Nodes: nodes,
 		Policies:   Policies{Strict: false, Checkpoint: true, ArtifactRetention: "protected_until_explicit_delete", ProgressWeights: weights},
-		Provenance: Provenance{NHMediaRelease: "0.1.0-gate-f", ContractVersion: "worker/v1"},
+		Provenance: Provenance{NHMediaRelease: "0.1.0-gate-g-repair", ContractVersion: "worker/v1"},
 	}
 }
 

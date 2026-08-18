@@ -6,6 +6,20 @@ owner: repository owner / task assignee
 
 # Memory changelog
 
+## 2026-08-18 — Gate G worker execution and contract repair
+
+- Published immutable `movie_recap` v5 and connected every built-in system/AI/ML/probe/media/render
+  node to the real Redis worker path, including dependency-frontier scheduling, upstream Artifact
+  refs, direct scoped object transfer, terminal aggregate handling and retry delivery.
+- Added T500 bounded exponential retry with jitter/Retry-After and provider endpoint/configuration-
+  scoped circuit breakers; authentication, policy, permanent and cancellation errors remain
+  fail-closed.
+- Aligned canonical Timeline `source_ref` with renderer BGM rights requirements and kept semantic
+  music-rights validation strict.
+- Added full Product API → PostgreSQL 25 JobSteps → Redis → actual Python/Go workers → canonical
+  Timeline → reviewed-FFmpeg render/mix/QA/clip Artifact E2E. The complete Gate G acceptance runner
+  passes; external provider/model quality and T600–T605 remain unclaimed.
+
 ## 2026-08-18 — Gate G dependency closure and native capability acceptance
 
 - Inspected the actual Windows machine before Gate G and installed only the repository-pinned,

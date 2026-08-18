@@ -45,7 +45,7 @@ func (fakeProcess) Run(_ context.Context, spec process.Spec) (process.Result, er
 }
 
 func command(capability string) worker.Command {
-	return worker.Command{SchemaVersion: worker.CommandSchemaVersion, MessageID: "msg_probe_001", Capability: capability, ProjectID: "project_probe_001", JobID: "job_probe_001", PipelineRunID: "run_probe_001", JobStepID: "step_probe_001", Attempt: 1, InputRefs: []worker.ArtifactRef{{ArtifactID: "artifact_source_001", Role: "source", SHA256: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}}, Config: map[string]any{"declared_mime": "video/mp4"}}
+	return worker.Command{SchemaVersion: worker.CommandSchemaVersion, MessageID: "msg_probe_001", Capability: capability, WorkspaceID: "workspace_probe_001", ProjectID: "project_probe_001", JobID: "job_probe_001", PipelineRunID: "run_probe_001", JobStepID: "step_probe_001", NodeKey: "asset_probe", Attempt: 1, InputRefs: []worker.ArtifactRef{{ArtifactID: "artifact_source_001", Role: "source", SHA256: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}}, Config: map[string]any{"declared_mime": "video/mp4"}}
 }
 
 func TestProbeNodeStagesOnlyValidatedProbeArtifact(t *testing.T) {

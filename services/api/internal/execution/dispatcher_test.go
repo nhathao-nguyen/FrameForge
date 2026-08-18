@@ -40,7 +40,7 @@ func (f *fakeCommandPublisher) PublishWorkerCommand(context.Context, worker.Comm
 func TestDispatcherAcknowledgesOnlyAfterWorkerPublish(t *testing.T) {
 	q := &fakeExecutionQueue{deliveries: []queue.Delivery{{Stream: "nh-media:analysis", EntryID: "1-0", Message: queue.Message{MessageID: "msg_analysis_001", Capability: "analysis", JobID: "job_analysis_001", JobStepID: "step_analysis_001", Attempt: 1}}}}
 	publisher := &fakeCommandPublisher{}
-	command := worker.Command{SchemaVersion: worker.CommandSchemaVersion, MessageID: "msg_analysis_001", Capability: "analysis", ProjectID: "project_analysis_001", JobID: "job_analysis_001", PipelineRunID: "run_analysis_001", JobStepID: "step_analysis_001", Attempt: 1, InputRefs: []worker.ArtifactRef{}, Config: map[string]any{}}
+	command := worker.Command{SchemaVersion: worker.CommandSchemaVersion, MessageID: "msg_analysis_001", Capability: "analysis", WorkspaceID: "workspace_analysis_001", ProjectID: "project_analysis_001", JobID: "job_analysis_001", PipelineRunID: "run_analysis_001", JobStepID: "step_analysis_001", NodeKey: "analysis", Attempt: 1, InputRefs: []worker.ArtifactRef{}, Config: map[string]any{}}
 	count, err := (Dispatcher{Queue: q, Resolver: fakeCommandResolver{command: command}, Publisher: publisher}).DispatchOnce(context.Background(), "analysis", "controller_001", 10)
 	if err != nil || count != 1 || q.acked != 1 || publisher.published != 1 {
 		t.Fatalf("dispatch count=%d err=%v acked=%d published=%d", count, err, q.acked, publisher.published)

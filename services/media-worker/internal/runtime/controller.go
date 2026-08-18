@@ -44,7 +44,7 @@ func NewRedisController(options RedisOptions, executor Executor) (*RedisControll
 		return nil, errors.New("worker Redis address and executor are required")
 	}
 	capability := strings.TrimSpace(options.Capability)
-	if capability != "probe" && capability != "thumbnail" && capability != "analysis" {
+	if capability != "probe" && capability != "thumbnail" && capability != "analysis" && capability != "media" && capability != "render" {
 		return nil, errors.New("worker capability is not enabled")
 	}
 	prefix := strings.Trim(strings.TrimSpace(options.StreamPrefix), ":")

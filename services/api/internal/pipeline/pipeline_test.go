@@ -55,7 +55,7 @@ func TestMovieRecapValidatesAndHashIsStable(t *testing.T) {
 	if _, err := VerifyImmutableActive(first, definition, AllCapabilities()); err == nil {
 		t.Fatal("active definition mutation was accepted")
 	}
-	if catalog := BuiltinCatalog(); len(catalog) != 1 || catalog["movie_recap"].Version != 4 {
+	if catalog := BuiltinCatalog(); len(catalog) != 1 || catalog["movie_recap"].Version != 5 {
 		t.Fatalf("native catalog is not registered: %#v", catalog)
 	}
 }

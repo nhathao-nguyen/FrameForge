@@ -40,7 +40,7 @@ func TestPythonWorkerRedisRuntime(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	workerCommand := worker.Command{SchemaVersion: worker.CommandSchemaVersion, MessageID: "msg_analysis_redis_001", Capability: "analysis", ProjectID: "project_analysis_001", JobID: "job_analysis_001", PipelineRunID: "run_analysis_001", JobStepID: "step_analysis_001", Attempt: 1, InputRefs: []worker.ArtifactRef{}, Config: map[string]any{"mode": "deterministic"}}
+	workerCommand := worker.Command{SchemaVersion: worker.CommandSchemaVersion, MessageID: "msg_analysis_redis_001", Capability: "analysis", WorkspaceID: "workspace_analysis_001", ProjectID: "project_analysis_001", JobID: "job_analysis_001", PipelineRunID: "run_analysis_001", JobStepID: "step_analysis_001", NodeKey: "analysis", Attempt: 1, InputRefs: []worker.ArtifactRef{}, Config: map[string]any{"mode": "deterministic"}}
 	if _, err := transport.Enqueue(ctx, queue.Message{MessageID: workerCommand.MessageID, Capability: "analysis", JobID: workerCommand.JobID, PipelineRunID: workerCommand.PipelineRunID, JobStepID: workerCommand.JobStepID, Attempt: 1}); err != nil {
 		t.Fatal(err)
 	}
@@ -108,7 +108,7 @@ func TestPythonWorkerRedisRestartReclaimsPendingEntry(t *testing.T) {
 	if err := transport.Ping(ctx); err != nil {
 		t.Fatal(err)
 	}
-	command := worker.Command{SchemaVersion: worker.CommandSchemaVersion, MessageID: "msg_analysis_restart_001", Capability: "analysis", ProjectID: "project_analysis_001", JobID: "job_analysis_001", PipelineRunID: "run_analysis_001", JobStepID: "step_analysis_001", Attempt: 1, InputRefs: []worker.ArtifactRef{}, Config: map[string]any{"mode": "deterministic", "test_delay_ms": 1500}}
+	command := worker.Command{SchemaVersion: worker.CommandSchemaVersion, MessageID: "msg_analysis_restart_001", Capability: "analysis", WorkspaceID: "workspace_analysis_001", ProjectID: "project_analysis_001", JobID: "job_analysis_001", PipelineRunID: "run_analysis_001", JobStepID: "step_analysis_001", NodeKey: "analysis", Attempt: 1, InputRefs: []worker.ArtifactRef{}, Config: map[string]any{"mode": "deterministic", "test_delay_ms": 1500}}
 	if _, err := transport.Enqueue(ctx, queue.Message{MessageID: command.MessageID, Capability: command.Capability, JobID: command.JobID, PipelineRunID: command.PipelineRunID, JobStepID: command.JobStepID, Attempt: command.Attempt}); err != nil {
 		t.Fatal(err)
 	}

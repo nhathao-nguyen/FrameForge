@@ -108,6 +108,51 @@ func (b *DurableBackend) RequeueRetryingSteps(ctx context.Context) (int, error) 
 	return len(messages), nil
 }
 
+// ScheduleReadySteps advances dependency-satisfied frontiers after worker
+// results commit. PostgreSQL remains authoritative; Redis receives only the
+// stable ID-only messages returned by the transactional scheduler.
+func (b *DurableBackend) ScheduleReadySteps(ctx context.Context) (int, error) {
+	if b == nil || b.SQL == nil || b.Queue == nil {
+		return 0, nil
+	}
+	rows, err := b.SQL.DB.QueryContext(ctx, `SELECT j.project_id::text,j.id::text,r.id::text
+		FROM jobs j
+		JOIN projects p ON p.id=j.project_id
+		JOIN pipeline_runs r ON r.id=j.current_pipeline_run_id
+		WHERE p.workspace_id=$1::uuid AND j.status IN ('queued','running') AND r.status IN ('queued','running')
+		ORDER BY j.created_at,j.id`, b.Workspace)
+	if err != nil {
+		return 0, err
+	}
+	type activeRun struct{ projectID, jobID, runID string }
+	values := make([]activeRun, 0)
+	for rows.Next() {
+		var value activeRun
+		if err := rows.Scan(&value.projectID, &value.jobID, &value.runID); err != nil {
+			_ = rows.Close()
+			return 0, err
+		}
+		values = append(values, value)
+	}
+	if err := rows.Close(); err != nil {
+		return 0, err
+	}
+	count := 0
+	for _, value := range values {
+		messages, err := b.SQL.QueueReadySteps(ctx, b.Workspace, value.projectID, value.jobID, value.runID)
+		if err != nil {
+			return count, err
+		}
+		for _, message := range messages {
+			if _, err := b.Queue.Enqueue(ctx, message); err != nil {
+				return count, err
+			}
+			count++
+		}
+	}
+	return count, nil
+}
+
 func (b *DurableBackend) PauseJob(workspaceID, projectID, jobID string) (*product.Job, error) {
 	if err := b.controlJob(context.Background(), workspaceID, projectID, jobID, "pause"); err != nil {
 		return nil, err

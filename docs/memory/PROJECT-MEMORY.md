@@ -40,6 +40,12 @@ product boundary. Movie Narrator is external research/reference material only.
 - Go/Python boundaries use versioned language-neutral contracts; no pickle, gob, ORM or framework
   internals are durable/public payloads.
 - Providers, storage, queue and media processes use ports/adapters.
+- Built-in `movie_recap` execution crosses Product API scheduling, Redis capability queues and
+  disposable Python/Go workers. Workers exchange only Artifact refs on Redis and transfer bytes
+  directly through scoped object-store requests issued by the Product API control boundary.
+- Provider transient retry uses bounded exponential backoff with jitter and endpoint/configuration-
+  scoped circuit breakers; authentication, policy and permanent failures are never masked by retry
+  or fallback.
 - No `shell=True`, arbitrary executable/flag injection, unrestricted plugin auto-loading, secret/
   traceback/path leakage or large-media proxying through Product API.
 

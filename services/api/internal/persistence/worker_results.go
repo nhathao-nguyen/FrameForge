@@ -49,7 +49,7 @@ func (r ScopedResultApplier) ApplyClaimedResult(ctx context.Context, value execu
 			return err
 		}
 		for index, ref := range result.OutputRefs {
-			committed, err := r.Artifacts.CommitWorkerArtifact(ctx, r.Workspace, projectID, value.Claim.Message.JobID, value.Claim.Message.JobStepID, ref)
+			committed, err := r.Artifacts.CommitWorkerArtifact(ctx, r.Workspace, projectID, value.Claim.Message.JobID, value.Claim.Message.JobStepID, result.MessageID, ref)
 			if err != nil {
 				return err
 			}
@@ -161,8 +161,8 @@ func (s *SQLStore) ApplyWorkerResult(ctx context.Context, input WorkerResultInpu
 		}
 	}
 	var maxAttempts, currentAttempt int
-	var jobStatus, runStatus string
-	if err := tx.QueryRowContext(ctx, `SELECT n.max_attempts,s.current_attempt,j.status,r.status FROM job_steps s JOIN pipeline_nodes n ON n.id=s.pipeline_node_id JOIN pipeline_runs r ON r.id=s.pipeline_run_id JOIN jobs j ON j.id=r.job_id JOIN projects p ON p.id=j.project_id WHERE p.workspace_id=$1::uuid AND j.project_id=$2::uuid AND j.id=$3::uuid AND r.id=$4::uuid AND s.id=$5::uuid`, input.WorkspaceID, input.ProjectID, input.JobID, input.PipelineRunID, input.JobStepID).Scan(&maxAttempts, &currentAttempt, &jobStatus, &runStatus); err != nil {
+	var jobStatus, runStatus, failureMode string
+	if err := tx.QueryRowContext(ctx, `SELECT n.max_attempts,s.current_attempt,j.status,r.status,n.failure_mode FROM job_steps s JOIN pipeline_nodes n ON n.id=s.pipeline_node_id JOIN pipeline_runs r ON r.id=s.pipeline_run_id JOIN jobs j ON j.id=r.job_id JOIN projects p ON p.id=j.project_id WHERE p.workspace_id=$1::uuid AND j.project_id=$2::uuid AND j.id=$3::uuid AND r.id=$4::uuid AND s.id=$5::uuid`, input.WorkspaceID, input.ProjectID, input.JobID, input.PipelineRunID, input.JobStepID).Scan(&maxAttempts, &currentAttempt, &jobStatus, &runStatus, &failureMode); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return execution.ErrLeaseConflict
 		}
@@ -211,9 +211,14 @@ func (s *SQLStore) ApplyWorkerResult(ctx context.Context, input WorkerResultInpu
 		}
 	}
 	if targetStatus == "failed" {
-		exhaustedRetry := input.Result.SafeError != nil && retryableWorkerFailure(input.Result.SafeError) && input.Attempt >= maxAttempts
-		if err := failAggregateTx(ctx, tx, input.WorkspaceID, input.ProjectID, input.JobID, input.PipelineRunID, exhaustedRetry); err != nil {
-			return err
+		if failureMode != "soft" {
+			if err := terminateRemainingStepsTx(ctx, tx, input, "hard_dependency_failed"); err != nil {
+				return err
+			}
+			exhaustedRetry := input.Result.SafeError != nil && retryableWorkerFailure(input.Result.SafeError) && input.Attempt >= maxAttempts
+			if err := failAggregateTx(ctx, tx, input.WorkspaceID, input.ProjectID, input.JobID, input.PipelineRunID, exhaustedRetry); err != nil {
+				return err
+			}
 		}
 	}
 	if targetStatus == "cancelled" {
@@ -239,6 +244,51 @@ func retryableWorkerFailure(value *worker.SafeError) bool {
 	default:
 		return false
 	}
+}
+
+func terminateRemainingStepsTx(ctx context.Context, tx *sql.Tx, input WorkerResultInput, reason string) error {
+	rows, err := tx.QueryContext(ctx, `SELECT s.id::text,s.pipeline_node_id::text,s.node_key,s.status,s.current_attempt
+		FROM job_steps s WHERE s.pipeline_run_id=$1::uuid
+		  AND s.status IN ('pending','ready','queued','running','paused','waiting_for_review','retrying')
+		ORDER BY s.node_key FOR UPDATE OF s`, input.PipelineRunID)
+	if err != nil {
+		return err
+	}
+	type activeStep struct {
+		id, nodeID, nodeKey, status string
+		attempt                     int
+	}
+	values := make([]activeStep, 0)
+	for rows.Next() {
+		var value activeStep
+		if err := rows.Scan(&value.id, &value.nodeID, &value.nodeKey, &value.status, &value.attempt); err != nil {
+			_ = rows.Close()
+			return err
+		}
+		values = append(values, value)
+	}
+	if err := rows.Close(); err != nil {
+		return err
+	}
+	payload, _ := json.Marshal(map[string]any{"reason": reason, "failed_node_key": input.NodeKey})
+	for _, value := range values {
+		target := "cancelled"
+		if value.status == "pending" || value.status == "ready" {
+			target = "blocked"
+		}
+		if value.status == "running" && value.attempt > 0 {
+			if _, err := tx.ExecContext(ctx, `UPDATE job_step_attempts SET status='cancelled',error_code='upstream_failed',error_message='An upstream hard dependency failed.',retryable=false,completed_at=now(),updated_at=now() WHERE job_step_id=$1::uuid AND attempt=$2 AND status='running'`, value.id, value.attempt); err != nil {
+				return err
+			}
+		}
+		if _, _, err := transitionStep(ctx, tx, TransitionInput{Entity: execution.EntityStep, WorkspaceID: input.WorkspaceID, ProjectID: input.ProjectID, JobID: input.JobID, PipelineRunID: input.PipelineRunID, JobStepID: value.id, PipelineNodeID: value.nodeID, NodeKey: value.nodeKey, FromStatus: value.status, ToStatus: target, CorrelationID: input.JobID, Payload: payload}); err != nil {
+			return err
+		}
+		if _, err := appendEventAndOutboxTx(ctx, tx, EventInput{SchemaVersion: "1.0", EventType: execution.EventType(execution.EntityStep, value.status, target), CorrelationID: input.JobID, WorkspaceID: input.WorkspaceID, ProjectID: input.ProjectID, JobID: input.JobID, PipelineRunID: input.PipelineRunID, JobStepID: value.id, PipelineNodeID: value.nodeID, NodeKey: value.nodeKey, Payload: payload}); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func failAggregateTx(ctx context.Context, tx *sql.Tx, workspaceID, projectID, jobID, runID string, exhaustedRetry bool) error {
@@ -329,7 +379,7 @@ func cancelAggregateTx(ctx context.Context, tx *sql.Tx, workspaceID, projectID, 
 
 func completeAggregateTx(ctx context.Context, tx *sql.Tx, workspaceID, projectID, jobID, runID string) error {
 	var total, terminal, active int
-	if err := tx.QueryRowContext(ctx, `SELECT count(*),count(*) FILTER (WHERE status IN ('completed','skipped')),count(*) FILTER (WHERE status IN ('pending','ready','queued','running','paused','waiting_for_review','retrying')) FROM job_steps WHERE pipeline_run_id=$1::uuid`, runID).Scan(&total, &terminal, &active); err != nil {
+	if err := tx.QueryRowContext(ctx, `SELECT count(*),count(*) FILTER (WHERE s.status IN ('completed','skipped') OR (s.status='failed' AND n.failure_mode='soft')),count(*) FILTER (WHERE s.status IN ('pending','ready','queued','running','paused','waiting_for_review','retrying')) FROM job_steps s JOIN pipeline_nodes n ON n.id=s.pipeline_node_id WHERE s.pipeline_run_id=$1::uuid`, runID).Scan(&total, &terminal, &active); err != nil {
 		return err
 	}
 	var runStatus, jobStatus, stopAfter string

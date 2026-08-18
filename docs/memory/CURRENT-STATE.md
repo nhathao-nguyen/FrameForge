@@ -11,10 +11,10 @@ owner: repository owner / task assignee
 | Field | Value | Evidence |
 |---|---|---|
 | Working branch | `implementation/bootstrap` | `git branch --show-current` |
-| Baseline commit | `7f889b65840631f7605c2d73c94b46a35c1a0a9d` (`checkpoint: close Gate G local acceptance`) | user-requested Gate G starting checkpoint; implementation changes are the current audit delta |
-| Acceptance checkpoint | `a645ef3` (`checkpoint: close Gate G implementation audit`) | implementation and full acceptance evidence checkpoint on `implementation/bootstrap` |
+| Baseline commit | `e72e847865a5938126487acfd583797e3e8839d0` (`docs: close Gate G push handoff`) | exact local/remote checkpoint before the worker-execution contract repair |
+| Acceptance checkpoint | pending this task commit | implementation, E2E and full acceptance evidence are complete in the working tree |
 | Tracking branch | `origin/implementation/bootstrap` | `git status --short --branch` |
-| Push/merge action | pushed to `origin/implementation/bootstrap` at `7cc1a6c` | explicitly authorized by the Gate G task prompt; no branch switch or merge |
+| Push/merge action | checkpoint push pending | explicitly authorized by the user; no branch switch or merge |
 
 ## Gate and phase
 
@@ -43,11 +43,14 @@ owner: repository owner / task assignee
   uncommitted web edit; fresh N/N+1 owner re-signing is required before release-artifact handoff.
   The controlled physical second-device evidence remains separately recorded and is not used to
   hide this current package-freshness limitation.
-- Gate G status: PASS for T500–T532 and the reconciled `Txxx-S1` P5/P6 subtasks. The current
-  machine was preflighted; missing pinned uv/Node/Tauri/FFmpeg prerequisites were installed with
-  official or project-managed methods, Docker local infrastructure was started, and the deterministic
-  Python workflow plus real reviewed-FFmpeg render/clip/profile QA passed. Fake/local providers are
-  used because no approved external provider credentials or model runtime were available.
+- Gate G status: PASS for T500–T532 and the reconciled `Txxx-S1` P5/P6 subtasks after the worker-
+  execution contract repair. Immutable `movie_recap` v5 dispatches all 25 built-in JobSteps through
+  their system/AI/ML/probe/media/render Redis capabilities, passes upstream Artifact refs across each
+  dependency frontier, and closes the Job only after real Timeline/render/QA/clip Artifacts commit.
+  T500 now has bounded exponential backoff with jitter and provider-configuration/endpoint/capability-
+  scoped circuit breakers. Canonical Timeline `source_ref` now carries the same BGM rights fields that
+  semantic validation and the renderer require. Fake/local providers remain the accepted boundary
+  because no approved external provider credentials or model runtime were available.
 
 ## Current evidence
 
@@ -93,6 +96,12 @@ owner: repository owner / task assignee
 - Gate G evidence is in `docs/evidence/gate-g-dependency-preflight-20260818.md`,
   `docs/evidence/gate-g-capability-coverage.md` and the current implementation audit entry in
   `docs/memory/TEST-EVIDENCE.md`; executable acceptance is `tools/accept-gate-g.ps1`.
+- The current Gate G E2E starts from Product API authentication/Project/Job commands, snapshots
+  `movie_recap` v5 into PostgreSQL, executes all 25 JobSteps through Redis with the actual Python and
+  Go worker processes, transfers bytes directly to/from MinIO through scoped worker transfer grants,
+  and verifies a canonical multi-scene Timeline plus non-empty video/audio render, mix, QA and clip
+  export Artifacts. Scheduler dependency-frontier advancement, terminal hard/soft failure aggregation
+  and retry delivery are part of this executable path rather than package-only evidence.
 - Gate G native coverage includes provider ports, research/script/style, TTS, ASR/alignment,
   subtitles/translation/bilingual QA, scenes/filters/VLM/characters, text and visual embeddings,
   matching/coverage/candidates, reference style, typed audio/BGM policy, Timeline compilation,
@@ -114,8 +123,9 @@ vendors are later configuration choices.
 
 ```text
   Task: Gate G — T500–T532 native media/AI capability slice
-  Status: LOCAL ACCEPTANCE PASS; current-tree typed provider contracts, real FFmpeg scene/render/
-  clip/profile QA, full repository regression and security checks are current and reviewable.
+  Status: LOCAL ACCEPTANCE PASS; all 25 movie_recap v5 JobSteps execute through real Redis workers,
+  typed provider retry/circuit contracts and canonical BGM rights pass, and the reviewed FFmpeg
+  Timeline/render/clip path plus full repository regression/security checks are current.
   T434 signing remains a separate owner-controlled release boundary.
 Boundary: Canonical execution transitions/events, queue, scheduling, leases, media/AI worker contracts,
   durable graph bootstrap, controls, checkpoint/DLQ and SSE boundary

@@ -103,6 +103,13 @@ func main() {
 	if err != nil {
 		log.Fatalf("invalid API server: %v", err)
 	}
+	if durable, ok := productBackend.(*persistence.DurableBackend); ok && runtimeQueue != nil {
+		workerToken := strings.TrimSpace(os.Getenv("NH_MEDIA_WORKER_TOKEN"))
+		if len(workerToken) < 24 {
+			log.Fatalf("NH_MEDIA_WORKER_TOKEN must contain at least 24 characters when workers are enabled")
+		}
+		server.ConfigureWorkerArtifacts(persistence.WorkerTransfer{SQL: durable.SQL, Storage: backend, Workspace: durable.Workspace}, workerToken)
+	}
 	dispatchCtx, stopDispatch := context.WithCancel(context.Background())
 	defer stopDispatch()
 	if durable, ok := productBackend.(*persistence.DurableBackend); ok && runtimeQueue != nil {
@@ -111,7 +118,7 @@ func main() {
 		if repositoryErr != nil {
 			log.Fatalf("initialize worker Artifact repository: %v", repositoryErr)
 		}
-		for _, capability := range []string{"probe", "thumbnail", "analysis"} {
+		for _, capability := range []string{"probe", "thumbnail", "analysis", "ai", "ml", "media", "render", "system"} {
 			workerID := "api-controller-" + capability
 			controller := execution.ClaimingDispatcher{Queue: runtimeQueue, Resolver: persistence.ScopedClaimResolver{SQL: durable.SQL, Workspace: durable.Workspace, WorkerID: workerID, Duration: 2 * time.Minute}, Publisher: runtimeQueue, Claims: claims}
 			results := execution.LeaseAwareResultReconciler{Source: runtimeQueue, Claims: claims, Applier: persistence.ScopedResultApplier{SQL: durable.SQL, Workspace: durable.Workspace, WorkerID: workerID, Artifacts: persistence.WorkerArtifactCommitter{Storage: backend, Repository: artifactRepository}}}
@@ -136,6 +143,9 @@ func main() {
 			ticker := time.NewTicker(250 * time.Millisecond)
 			defer ticker.Stop()
 			for {
+				if _, err := durable.ScheduleReadySteps(dispatchCtx); err != nil && dispatchCtx.Err() == nil {
+					log.Printf("dependency scheduler stopped: %v", err)
+				}
 				if _, err := durable.RequeueRetryingSteps(dispatchCtx); err != nil && dispatchCtx.Err() == nil {
 					log.Printf("retry sweeper stopped: %v", err)
 				}

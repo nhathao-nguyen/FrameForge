@@ -40,7 +40,40 @@ try {
     Invoke-Checked $uv @('run', '--project', 'services/ml-worker', 'bandit', '-q', '-r', 'services/ml-worker/nh_media')
 
     Write-Output 'Gate G: Go contracts/render/regression'
-    $gofmtOutput = @(gofmt -l services/media-worker/internal/render)
+    $goFormatTargets = @(
+        'packages/shared-contracts/go/worker/worker.go',
+        'packages/shared-contracts/go/worker/worker_test.go',
+        'services/api/cmd/api/main.go',
+        'services/api/internal/domain/timeline.go',
+        'services/api/internal/domain/timeline_test.go',
+        'services/api/internal/execution/claiming_test.go',
+        'services/api/internal/execution/dispatcher_test.go',
+        'services/api/internal/httpapi/server.go',
+        'services/api/internal/httpapi/worker_transfer.go',
+        'services/api/internal/integration/gate_e_acceptance_test.go',
+        'services/api/internal/integration/gate_g_pipeline_e2e_test.go',
+        'services/api/internal/integration/python_redis_runtime_test.go',
+        'services/api/internal/persistence/jobs.go',
+        'services/api/internal/persistence/pipeline_catalog_test.go',
+        'services/api/internal/persistence/worker_artifacts.go',
+        'services/api/internal/persistence/worker_results.go',
+        'services/api/internal/persistence/worker_runtime.go',
+        'services/api/internal/persistence/worker_transfer.go',
+        'services/api/internal/pipeline/builtin.go',
+        'services/api/internal/pipeline/definition.go',
+        'services/api/internal/pipeline/pipeline_test.go',
+        'services/api/internal/storage/storage.go',
+        'services/media-worker/cmd/worker/main.go',
+        'services/media-worker/cmd/worker/main_test.go',
+        'services/media-worker/internal/executor/executor.go',
+        'services/media-worker/internal/executor/executor_test.go',
+        'services/media-worker/internal/executor/transfer.go',
+        'services/media-worker/internal/integration/python_worker_test.go',
+        'services/media-worker/internal/node/node_test.go',
+        'services/media-worker/internal/runtime/controller.go',
+        'services/media-worker/internal/runtime/controller_test.go'
+    )
+    $gofmtOutput = @(gofmt -l @goFormatTargets)
     if ($gofmtOutput.Count -gt 0) { throw ('gofmt required: ' + ($gofmtOutput -join ', ')) }
     Invoke-Checked go.exe @('vet', './...')
     Invoke-Checked go.exe @('test', './...')
@@ -66,6 +99,20 @@ try {
     $env:MINIO_ROOT_PASSWORD = 'GateB_Test_MinIO_2026'
     $env:MINIO_BUCKET = 'nh-media-artifacts'
     Invoke-Checked docker.exe @('compose', '--file', 'infrastructure/compose/docker-compose.yml', '--profile', 'local', 'config', '--quiet')
+
+    Write-Output 'Gate G: Product API -> PostgreSQL JobSteps -> Redis -> Python/media workers -> Timeline/render Artifact E2E'
+    Invoke-Checked docker.exe @('compose', '--file', 'infrastructure/compose/docker-compose.yml', '--profile', 'local', 'up', '-d', '--wait', 'postgres', 'redis', 'minio')
+    Invoke-Checked docker.exe @('compose', '--file', 'infrastructure/compose/docker-compose.yml', '--profile', 'local', 'run', '--rm', 'minio-bootstrap')
+    $migrationDsn = "postgresql://$($env:POSTGRES_MIGRATION_USER):$($env:POSTGRES_MIGRATION_PASSWORD)@127.0.0.1:5432/$($env:POSTGRES_DB)?sslmode=disable"
+    Invoke-Checked go.exe @('run', './services/api/cmd/migrate', '-dsn', $migrationDsn, '-app-role', $env:POSTGRES_APP_USER)
+    $env:NH_MEDIA_TEST_DATABASE_URL = "postgresql://$($env:POSTGRES_APP_USER):$($env:POSTGRES_APP_PASSWORD)@127.0.0.1:5432/$($env:POSTGRES_DB)?sslmode=disable"
+    $env:NH_MEDIA_TEST_REDIS_ADDR = '127.0.0.1:6379'
+    $env:NH_QUEUE_PASSWORD = $env:REDIS_PASSWORD
+    $env:NH_MEDIA_TEST_MINIO_ENDPOINT = '127.0.0.1:9000'
+    $env:NH_MEDIA_TEST_MINIO_ACCESS_KEY = $env:MINIO_ROOT_USER
+    $env:NH_MEDIA_TEST_MINIO_SECRET_KEY = $env:MINIO_ROOT_PASSWORD
+    $env:NH_MEDIA_TEST_MINIO_BUCKET = $env:MINIO_BUCKET
+    Invoke-Checked go.exe @('test', './services/api/internal/integration', '-run', 'TestGateGMovieRecapProductAPIThroughRedisWorkersToRenderArtifact', '-count=1', '-v')
     git diff --check
     if ($LASTEXITCODE -ne 0) { throw 'git diff --check failed' }
     Write-Output 'GATE G local acceptance checks: PASS'

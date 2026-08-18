@@ -196,8 +196,10 @@ the Internet/VPS production profile and do not block Local Functional Acceptance
 
 ## Gate G implementation disposition — 2026-08-18
 
-The T500–T532 implementation audit is complete on the requested `implementation/bootstrap` baseline.
-No architecture question was reopened: typed provider contracts, local deterministic conformance,
-real reviewed FFmpeg/ffprobe media proof and post-QA Artifact boundaries follow the approved
-decisions above. External provider credentials/model quality, hardened T600–T603 work and public
-T605 deployment remain explicitly outside this Gate G acceptance.
+The T500–T532 implementation audit and worker-execution repair are complete on
+`implementation/bootstrap`. No architecture question was reopened: typed provider contracts now
+include bounded retry/circuit behavior, canonical Timeline and renderer BGM rights agree, and
+immutable `movie_recap` v5 completes all 25 JobSteps through Product API, Redis and the actual
+Python/Go workers before reviewed-FFmpeg render/QA Artifacts commit. External provider credentials/
+model quality, hardened T600–T603 work and public T605 deployment remain explicitly outside this
+Gate G acceptance.

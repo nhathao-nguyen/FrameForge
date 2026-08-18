@@ -236,3 +236,18 @@ func TestTimelineValidatorUsesAbsoluteSceneSourceRange(t *testing.T) {
 		t.Fatal("scene source range outside the resolved scene was accepted")
 	}
 }
+
+func TestCanonicalTimelineCarriesAndEnforcesBGMSourceRights(t *testing.T) {
+	document := []byte(`{"schema_version":"1.0","timeline_id":"tl_music","timeline_version_id":"tlv_music","project_id":"proj_1","version":1,"duration_sec":2,"tracks":[{"id":"music_1","kind":"music","name":"BGM","order":0,"clips":[{"id":"music_clip_1","timeline_in_sec":0,"timeline_out_sec":2,"source":{"type":"artifact","artifact_id":"artifact_music_1","rights_status":"cleared","rights_metadata":{"license":"workspace-cleared"}},"origin":"user"}]}]}`)
+	if _, err := ValidateTimeline(document, TimelineValidationOptions{Resolver: timelineTestResolver{}}); err != nil {
+		t.Fatalf("canonical BGM rights fields were rejected: %v", err)
+	}
+	for _, invalid := range [][]byte{
+		[]byte(`{"schema_version":"1.0","timeline_id":"tl_music","timeline_version_id":"tlv_music","project_id":"proj_1","version":1,"duration_sec":2,"tracks":[{"id":"music_1","kind":"music","name":"BGM","order":0,"clips":[{"id":"music_clip_1","timeline_in_sec":0,"timeline_out_sec":2,"source":{"type":"artifact","artifact_id":"artifact_music_1","rights_status":"cleared"},"origin":"user"}]}]}`),
+		[]byte(`{"schema_version":"1.0","timeline_id":"tl_music","timeline_version_id":"tlv_music","project_id":"proj_1","version":1,"duration_sec":2,"tracks":[{"id":"music_1","kind":"music","name":"BGM","order":0,"clips":[{"id":"music_clip_1","timeline_in_sec":0,"timeline_out_sec":2,"source":{"type":"artifact","artifact_id":"artifact_music_1","rights_status":"rejected","rights_metadata":{"reason":"unknown"}},"origin":"user"}]}]}`),
+	} {
+		if _, err := ValidateTimeline(invalid, TimelineValidationOptions{Resolver: timelineTestResolver{}}); err == nil {
+			t.Fatal("non-renderable BGM rights state was accepted")
+		}
+	}
+}

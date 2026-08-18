@@ -183,6 +183,7 @@ class ProviderDescriptor:
     capabilities: tuple[str, ...]
     models: tuple[str, ...]
     deployment: str
+    endpoint_key: str = ""
 
     def validate(self) -> None:
         if not self.adapter_key or not self.adapter_version or not self.models or self.deployment not in {"local", "remote"}:
@@ -601,27 +602,9 @@ class ProviderRegistry:
 
 
 def resolve_with_fallback(registry: ProviderRegistry, kind: ProviderKind, adapter_keys: Sequence[str], request: Any, context: ProviderCallContext) -> Any:
-    if not adapter_keys:
-        raise ValueError("at least one provider is required")
-    errors: list[ProviderError] = []
-    for adapter_key in adapter_keys:
-        try:
-            provider = registry.resolve(kind, adapter_key)
-            if kind is ProviderKind.LLM:
-                return provider.complete(context, request if isinstance(request, LLMRequest) else LLMRequest("", (LLMMessage("user", str(request)),)))
-            if kind is ProviderKind.VLM:
-                return provider.analyze(context, request)
-            if kind is ProviderKind.TTS:
-                return provider.synthesize(context, request)
-            if kind is ProviderKind.ASR:
-                return provider.transcribe(context, request)
-            return provider.embed(context, request)
-        except ProviderError as error:
-            errors.append(error)
-            if not error.retryable:
-                raise
-    last = errors[-1]
-    raise ProviderError("internal", last.provider, retryable=False, safe_message="All approved provider fallbacks failed.", category="permanent", provider_request_id=last.provider_request_id)
+    from .resolver import resolve_with_fallback as bounded_resolve
+
+    return bounded_resolve(registry, kind, adapter_keys, request, context)
 
 
 def provider_conformance(registry: ProviderRegistry) -> dict[str, str]:

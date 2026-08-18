@@ -76,7 +76,7 @@ reviewable evidence is recorded.
 | T433 | Tauri client | T223, T340, T430 | complete | thin remote-only commands/capability manifest, exact LAN origin, direct browser upload, signed artifact-download URL, remote review/editor UI and current-tree LAN desktop bundle checks pass | T550 physical client |
 | T550 | Local Functional Acceptance | T323, T340, T430, T433 | complete | current local, exact-LAN server-path and controlled physical second-device runs pass the real Go/Redis/Python/SSE/upload flow; external run `lan-client-1353be68-e9ba-41d7-9ee1-b2f97340452e` reports `external_to_server=true` and current script hash match | T603 hardened acceptance |
 | T434 | Desktop packaging/security | T433 | complete | current-tree two-version signed NSIS packages pass external signature verification, fresh install/launch, N→N+1 update/launch, tamper rejection and rollback-pointer checks | Gate F physical client |
-| T500 | Provider ports/resolver | T235, T401 | complete | `services/ml-worker/nh_media/providers`; typed LLM/VLM/TTS/ASR/embedding ports, normalized errors, fallback, timeout/cancel, allowlist, redaction and five-kind conformance tests | real provider credentials remain unavailable; local typed conformance is complete |
+| T500 | Provider ports/resolver | T235, T401 | complete | `services/ml-worker/nh_media/providers`; typed LLM/VLM/TTS/ASR/embedding ports, normalized errors, allowlisted fallback, timeout budget, bounded exponential backoff+jitter, Retry-After and provider-configuration/endpoint/capability circuit-breaker tests | real provider credentials remain unavailable; local typed conformance is complete |
 | T510 | Research/script nodes | T402, T500 | complete | `generation/research.py`, `generation/script.py`; provenance, ScriptStyle perspective/control/density and immutable ScriptVersion tests | local fake provider only |
 | T511 | TTS/Narration | T231, T500, T510 | complete | `speech/tts.py`; typed TTS response consumption, measured WAV duration, voice/config/style fingerprint and ProducedBlob→Artifact handoff tests | external TTS quality not claimed |
 | T512 | ASR/alignment | T500–T511 | complete | `speech/asr.py`, `speech/alignment.py`; typed provider transcript timing, word/speaker validation and drift validation tests | local deterministic transcript only |
@@ -92,8 +92,8 @@ reviewable evidence is recorded.
 | T525 | Candidate evaluation/selection | T234, T500, T524 | complete | `evaluation/candidates.py`; immutable candidates, policy evaluation and user selection tests | deterministic local policy |
 | T526 | ReferenceStyleAnalysis | T234, T512, T520–T521 | complete | `video/reference_style.py`; consent/scope, abstract traits and no copied footage tests | style abstraction only |
 | T530 | Timeline compiler/media plan | T313, T420, T524 | complete | Go `internal/render`; canonical TimelineVersion/Profile deterministic allowlisted plan, multi-clip concat/crossfade/audio/subtitle compilation and provider/rematch-free tests | no arbitrary FFmpeg argv or provider decision dependency |
-| T530-S1 | Audio/templates/transitions/effects | T530 | complete | typed BGM rights, loudness/duck/mix report plus allowlisted transition/effect/template validation | local policy evidence; no licensed catalog claim |
-| T531 | Render/deliverable QA | T222, T332, T350, T530 | complete | Go render + ffprobe QA for non-empty output, dimensions, codecs, duration and required audio; incomplete-output rejection, Artifact commit-after-QA and real multi-clip FFmpeg proof | exact reviewed FFmpeg build |
+| T530-S1 | Audio/templates/transitions/effects | T530 | complete | canonical Timeline `source_ref` and semantic validation share typed BGM rights fields; loudness/duck/mix report plus allowlisted transition/effect/template validation | local policy evidence; no licensed catalog claim |
+| T531 | Render/deliverable QA | T222, T332, T350, T530 | complete | native Go Redis executor resolves Timeline/input Artifact refs, runs render + ffprobe QA for non-empty output, dimensions, codecs, duration and required audio, then stages verified outputs for commit; real multi-clip FFmpeg and full DAG E2E pass | exact reviewed FFmpeg build |
 | T531-S1 | Clips/shorts export | T531 | complete | typed `ExportClips`; real selection/profile/codec/size/checksum manifest test | one deterministic derivative path proven |
 | T532 | Multi-profile reuse | T531 | complete | 16:9/9:16/1:1 real outputs reuse source fingerprint with zero provider calls | subject-aware reframe remains typed intermediate |
 | T532-S1 | Subject-aware auto-reframe disposition | T532 | complete | missing subject boxes fail closed; typed reframe plan/reuse fingerprint tests | no silent center crop |
@@ -106,8 +106,10 @@ reviewable evidence is recorded.
 
 Gate C+D, Gate E T300–T350, Gate F and Gate G T500–T532 are present in the current working tree.
 Gate G is locally accepted with deterministic fake/local providers and real reviewed FFmpeg render,
-clip-export and ffprobe evidence. T600–T605 remain separate future gates; external provider quality,
-GPU model execution and public production are not claimed.
+clip-export and ffprobe evidence. The immutable `movie_recap` v5 graph is also accepted end to end:
+Product API → PostgreSQL 25-step snapshot → Redis → actual Python/Go workers → canonical Timeline →
+render/mix/QA/clip Artifacts. T600–T605 remain separate future gates; external provider quality, GPU
+model execution and public production are not claimed.
 
 The 2026-08-18 current-tree repair audit added executable proof for the exact movie_recap graph and
 artifact-role contracts, canonical Timeline JSON Schema plus semantic/reference/safety validation,

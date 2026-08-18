@@ -27,22 +27,25 @@ type Command struct {
 	SchemaVersion  string         `json:"schema_version"`
 	MessageID      string         `json:"message_id"`
 	Capability     string         `json:"capability"`
+	WorkspaceID    string         `json:"workspace_id"`
 	ProjectID      string         `json:"project_id"`
 	JobID          string         `json:"job_id"`
 	PipelineRunID  string         `json:"pipeline_run_id"`
 	JobStepID      string         `json:"job_step_id"`
 	PipelineNodeID string         `json:"pipeline_node_id,omitempty"`
+	NodeKey        string         `json:"node_key"`
 	Attempt        int            `json:"attempt"`
 	InputRefs      []ArtifactRef  `json:"input_refs"`
 	Config         map[string]any `json:"config"`
 }
 
 type OutputRef struct {
-	ArtifactID string `json:"artifact_id"`
-	Kind       string `json:"kind"`
-	Role       string `json:"role"`
-	SHA256     string `json:"sha256"`
-	SizeBytes  int64  `json:"size_bytes"`
+	ArtifactID  string `json:"artifact_id"`
+	Kind        string `json:"kind"`
+	Role        string `json:"role"`
+	SHA256      string `json:"sha256"`
+	SizeBytes   int64  `json:"size_bytes"`
+	ContentType string `json:"content_type,omitempty"`
 }
 
 type SafeError struct {
@@ -87,16 +90,16 @@ func DecodeCommand(value []byte) (Command, error) {
 }
 
 func ValidateCommand(value Command) error {
-	if value.SchemaVersion != CommandSchemaVersion || value.Attempt < 1 || value.Attempt > 1000 || !validID(value.MessageID) || !validID(value.ProjectID) || !validID(value.JobID) || !validID(value.PipelineRunID) || !validID(value.JobStepID) {
+	if value.SchemaVersion != CommandSchemaVersion || value.Attempt < 1 || value.Attempt > 1000 || !validID(value.MessageID) || !validID(value.WorkspaceID) || !validID(value.ProjectID) || !validID(value.JobID) || !validID(value.PipelineRunID) || !validID(value.JobStepID) || !validField(value.NodeKey) {
 		return errors.New("invalid worker command identity/version/attempt")
 	}
 	if value.PipelineNodeID != "" && !validID(value.PipelineNodeID) {
 		return errors.New("invalid worker pipeline node ID")
 	}
-	if value.Capability != "probe" && value.Capability != "thumbnail" && value.Capability != "analysis" {
+	if value.Capability != "probe" && value.Capability != "thumbnail" && value.Capability != "analysis" && value.Capability != "ai" && value.Capability != "ml" && value.Capability != "media" && value.Capability != "render" && value.Capability != "system" {
 		return errors.New("unsupported worker capability")
 	}
-	if value.InputRefs == nil {
+	if value.InputRefs == nil || len(value.InputRefs) > 100 {
 		return errors.New("worker input refs must be an array")
 	}
 	for _, ref := range value.InputRefs {
@@ -127,8 +130,11 @@ func ValidateResult(value Result) error {
 	default:
 		return errors.New("invalid worker result status")
 	}
+	if value.OutputRefs == nil || len(value.OutputRefs) > 100 {
+		return errors.New("worker output refs must be an array")
+	}
 	for _, ref := range value.OutputRefs {
-		if !validID(ref.ArtifactID) || !validField(ref.Kind) || !validField(ref.Role) || !sha256Hex.MatchString(ref.SHA256) || ref.SizeBytes < 0 {
+		if !validID(ref.ArtifactID) || !validField(ref.Kind) || !validField(ref.Role) || !sha256Hex.MatchString(ref.SHA256) || ref.SizeBytes < 0 || len(ref.ContentType) > 128 || strings.ContainsAny(ref.ContentType, "\r\n") {
 			return errors.New("invalid worker output Artifact ref")
 		}
 	}

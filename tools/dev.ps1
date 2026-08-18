@@ -93,6 +93,8 @@ function Set-AppDefaults {
     if ([string]::IsNullOrWhiteSpace($env:NH_QUEUE_ENDPOINT)) { $env:NH_QUEUE_ENDPOINT = 'redis://127.0.0.1:6379' }
     if ([string]::IsNullOrWhiteSpace($env:NH_MEDIA_WORKER_QUEUE_ENDPOINT)) { $env:NH_MEDIA_WORKER_QUEUE_ENDPOINT = '127.0.0.1:6379' }
     if ([string]::IsNullOrWhiteSpace($env:NH_QUEUE_PASSWORD)) { $env:NH_QUEUE_PASSWORD = $env:REDIS_PASSWORD }
+    if ([string]::IsNullOrWhiteSpace($env:NH_MEDIA_WORKER_TOKEN)) { $env:NH_MEDIA_WORKER_TOKEN = ([Guid]::NewGuid().ToString('N') + [Guid]::NewGuid().ToString('N')) }
+    if ([string]::IsNullOrWhiteSpace($env:NH_MEDIA_WORKER_API_URL)) { $env:NH_MEDIA_WORKER_API_URL = 'http://127.0.0.1:8080' }
     if ([string]::IsNullOrWhiteSpace($env:NEXT_PUBLIC_NH_MEDIA_API_URL)) {
         $env:NEXT_PUBLIC_NH_MEDIA_API_URL = if ($Profile -eq 'lan') { 'http://' + $resolvedLanServerIp + ':8080' } else { 'http://127.0.0.1:8080' }
     }
@@ -259,10 +261,13 @@ function Start-NHStack {
         }
 
         $env:NH_MEDIA_REDIS_WORKER = '1'
-        $env:NH_MEDIA_QUEUE_CAPABILITY = 'probe'
+		if ([string]::IsNullOrWhiteSpace($env:NH_MEDIA_FFMPEG_PATH) -or [string]::IsNullOrWhiteSpace($env:NH_MEDIA_FFPROBE_PATH)) {
+			throw 'NH_MEDIA_FFMPEG_PATH and NH_MEDIA_FFPROBE_PATH are required for native media workers.'
+		}
+		$env:NH_MEDIA_QUEUE_CAPABILITIES = 'probe,thumbnail,media,render'
         $records += Start-NHProcess 'media-worker' $mediaBinary @() $repoRoot
         Write-ProcessState $records
-        $env:NH_MEDIA_QUEUE_CAPABILITY = 'analysis'
+		$env:NH_MEDIA_QUEUE_CAPABILITIES = 'ai,ml,system'
         $records += Start-NHProcess 'ml-worker' $uv @('run', '--project', 'services/ml-worker', 'python', '-m', 'nh_media.worker') $repoRoot
         Write-ProcessState $records
 

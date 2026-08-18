@@ -26,7 +26,8 @@
         "kind": {"type": "string", "pattern": "^[a-z][a-z0-9_-]{1,63}$"},
         "role": {"type": "string", "pattern": "^[a-z][a-z0-9_-]{1,63}$"},
         "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
-        "size_bytes": {"type": "integer", "minimum": 0}
+        "size_bytes": {"type": "integer", "minimum": 0},
+        "content_type": {"type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[^\\r\\n]+$"}
       }
     },
     "safeError": {

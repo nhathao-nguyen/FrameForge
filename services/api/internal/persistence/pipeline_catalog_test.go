@@ -41,7 +41,7 @@ func TestNativeMovieRecapPersistenceInputKeepsSemanticNodesAndEdges(t *testing.T
 	if err := json.Unmarshal(input.Definition, &definition); err != nil {
 		t.Fatal(err)
 	}
-	if definition["version"] != float64(4) {
+	if definition["version"] != float64(5) {
 		t.Fatalf("native definition version was not persisted: %#v", definition["version"])
 	}
 	if len(input.Dependencies) == 0 {

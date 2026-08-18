@@ -19,7 +19,7 @@ func TestPythonWorkerRoundTripUsesVersionedContract(t *testing.T) {
 	}
 	_, file, _, _ := runtime.Caller(0)
 	repository := filepath.Clean(filepath.Join(filepath.Dir(file), "..", "..", "..", ".."))
-	command := worker.Command{SchemaVersion: worker.CommandSchemaVersion, MessageID: "msg_go_python_001", Capability: "analysis", ProjectID: "project_go_python_001", JobID: "job_go_python_001", PipelineRunID: "run_go_python_001", JobStepID: "step_go_python_001", Attempt: 1, InputRefs: []worker.ArtifactRef{}, Config: map[string]any{"mode": "deterministic"}}
+	command := worker.Command{SchemaVersion: worker.CommandSchemaVersion, MessageID: "msg_go_python_001", Capability: "analysis", WorkspaceID: "workspace_go_python_001", ProjectID: "project_go_python_001", JobID: "job_go_python_001", PipelineRunID: "run_go_python_001", JobStepID: "step_go_python_001", NodeKey: "analysis", Attempt: 1, InputRefs: []worker.ArtifactRef{}, Config: map[string]any{"mode": "deterministic"}}
 	payload, err := json.Marshal(command)
 	if err != nil {
 		t.Fatal(err)

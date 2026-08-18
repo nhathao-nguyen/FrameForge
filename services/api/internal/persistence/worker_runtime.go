@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -86,7 +87,7 @@ func (s *SQLStore) QueueReadySteps(ctx context.Context, workspaceID, projectID, 
 	_ = rows.Close()
 	messages := make([]queue.Message, 0, len(steps))
 	for _, step := range steps {
-		capability, err := capabilityForExecutionClass(step.executionClass)
+		capability, err := capabilityForStep(step.executionClass, step.nodeKey)
 		if err != nil {
 			return nil, err
 		}
@@ -146,7 +147,7 @@ func (s *SQLStore) QueueQueuedSteps(ctx context.Context, workspaceID, projectID,
 		if err := rows.Scan(&stepID, &nodeID, &nodeKey, &executionClass, &currentAttempt); err != nil {
 			return nil, err
 		}
-		capability, err := capabilityForExecutionClass(executionClass)
+		capability, err := capabilityForStep(executionClass, nodeKey)
 		if err != nil {
 			return nil, err
 		}
@@ -256,7 +257,7 @@ func (s *SQLStore) QueueRetryingSteps(ctx context.Context, workspaceID string) (
 		if _, err := appendEventAndOutboxTx(ctx, tx, EventInput{SchemaVersion: "1.0", EventType: "node.queued", CorrelationID: value.jobID, WorkspaceID: workspaceID, ProjectID: value.projectID, JobID: value.jobID, PipelineRunID: value.runID, JobStepID: value.stepID, PipelineNodeID: value.nodeID, NodeKey: value.nodeKey, Payload: json.RawMessage(`{"reason":"retry_ready"}`)}); err != nil {
 			return nil, err
 		}
-		capability, err := capabilityForExecutionClass(value.executionClass)
+		capability, err := capabilityForStep(value.executionClass, value.nodeKey)
 		if err != nil {
 			return nil, err
 		}
@@ -275,55 +276,114 @@ func (s *SQLStore) ResolveWorkerCommand(ctx context.Context, workspaceID string,
 	if s == nil || s.DB == nil {
 		return worker.Command{}, errors.New("database is required")
 	}
-	var projectID, runID, stepID, nodeID, nodeKey, executionClass, status string
+	var workspaceRef, projectID, runID, stepID, nodeID, nodeKey, executionClass, status string
 	var configJSON, inputRefsJSON []byte
 	var currentAttempt int
-	err := s.DB.QueryRowContext(ctx, `SELECT j.project_id::text,r.id::text,s.id::text,n.id::text,s.node_key,n.execution_class,n.config,s.input_refs,s.status,s.current_attempt
+	err := s.DB.QueryRowContext(ctx, `SELECT p.workspace_id::text,j.project_id::text,r.id::text,s.id::text,n.id::text,s.node_key,n.execution_class,n.config,s.input_refs,s.status,s.current_attempt
 		FROM job_steps s
 		JOIN pipeline_runs r ON r.id=s.pipeline_run_id
 		JOIN jobs j ON j.id=r.job_id
 		JOIN projects p ON p.id=j.project_id
 		JOIN pipeline_nodes n ON n.id=s.pipeline_node_id
 		WHERE p.workspace_id=$1::uuid AND j.id=$2::uuid AND r.id=$3::uuid AND s.id=$4::uuid
-		  AND s.status='queued' AND s.current_attempt=$5`, workspaceID, message.JobID, message.PipelineRunID, message.JobStepID, message.Attempt-1).Scan(&projectID, &runID, &stepID, &nodeID, &nodeKey, &executionClass, &configJSON, &inputRefsJSON, &status, &currentAttempt)
+		  AND s.status='queued' AND s.current_attempt=$5`, workspaceID, message.JobID, message.PipelineRunID, message.JobStepID, message.Attempt-1).Scan(&workspaceRef, &projectID, &runID, &stepID, &nodeID, &nodeKey, &executionClass, &configJSON, &inputRefsJSON, &status, &currentAttempt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return worker.Command{}, execution.ErrLeaseConflict
 	}
 	if err != nil {
 		return worker.Command{}, err
 	}
-	capability, err := capabilityForExecutionClass(executionClass)
+	capability, err := capabilityForStep(executionClass, nodeKey)
 	if err != nil || capability != message.Capability || status != "queued" || currentAttempt+1 != message.Attempt {
 		return worker.Command{}, errors.New("queue delivery does not match current step")
 	}
-	refs := make([]worker.ArtifactRef, 0)
-	if len(inputRefsJSON) > 0 && string(inputRefsJSON) != "{}" {
-		if err := json.Unmarshal(inputRefsJSON, &refs); err != nil {
-			// Upload/bootstrap commands may still contain a domain input
-			// snapshot rather than Artifact refs. That is not a path-bearing
-			// command; the node resolves it through its declared boundary.
-			refs = make([]worker.ArtifactRef, 0)
+	refs := artifactRefsFromSnapshot(inputRefsJSON)
+	rows, err := s.DB.QueryContext(ctx, `SELECT a.output_refs
+		FROM job_steps completed_step
+		JOIN job_step_attempts a ON a.job_step_id=completed_step.id AND a.attempt=completed_step.current_attempt
+		WHERE completed_step.pipeline_run_id=$1::uuid AND completed_step.status='completed' AND a.status='completed'
+		ORDER BY completed_step.node_key,a.attempt`, runID)
+	if err != nil {
+		return worker.Command{}, err
+	}
+	for rows.Next() {
+		var outputJSON []byte
+		if err := rows.Scan(&outputJSON); err != nil {
+			_ = rows.Close()
+			return worker.Command{}, err
+		}
+		var outputs []worker.OutputRef
+		if json.Unmarshal(outputJSON, &outputs) == nil {
+			for _, output := range outputs {
+				refs = append(refs, worker.ArtifactRef{ArtifactID: output.ArtifactID, Role: output.Role, SHA256: output.SHA256})
+			}
 		}
 	}
-	command := worker.Command{SchemaVersion: worker.CommandSchemaVersion, MessageID: message.MessageID, Capability: capability, ProjectID: contractID("project", projectID), JobID: contractID("job", message.JobID), PipelineRunID: contractID("run", runID), JobStepID: contractID("step", stepID), PipelineNodeID: contractID("node", nodeID), Attempt: message.Attempt, InputRefs: refs, Config: mapFromJSON(configJSON)}
+	if err := rows.Close(); err != nil {
+		return worker.Command{}, err
+	}
+	refs = uniqueArtifactRefs(refs)
+	if len(refs) > 100 {
+		return worker.Command{}, errors.New("worker input Artifact ref limit exceeded")
+	}
+	command := worker.Command{SchemaVersion: worker.CommandSchemaVersion, MessageID: message.MessageID, Capability: capability, WorkspaceID: contractID("workspace", workspaceRef), ProjectID: contractID("project", projectID), JobID: contractID("job", message.JobID), PipelineRunID: contractID("run", runID), JobStepID: contractID("step", stepID), PipelineNodeID: contractID("node", nodeID), NodeKey: nodeKey, Attempt: message.Attempt, InputRefs: refs, Config: mapFromJSON(configJSON)}
 	if err := worker.ValidateCommand(command); err != nil {
 		return worker.Command{}, err
 	}
-	_ = nodeKey
 	return command, nil
 }
 
-func capabilityForExecutionClass(value string) (string, error) {
+func capabilityForStep(value, nodeKey string) (string, error) {
+	if nodeKey == "analysis" {
+		return "analysis", nil
+	}
 	switch value {
 	case "probe":
 		return "probe", nil
-	case "ai", "ml":
-		return "analysis", nil
-	case "media", "render":
-		return "thumbnail", nil
+	case "ai", "ml", "media", "render", "system":
+		return value, nil
 	default:
 		return "", fmt.Errorf("execution class %q has no enabled worker capability", value)
 	}
+}
+
+func artifactRefsFromSnapshot(raw []byte) []worker.ArtifactRef {
+	var direct []worker.ArtifactRef
+	if json.Unmarshal(raw, &direct) == nil {
+		return direct
+	}
+	var value map[string]any
+	if json.Unmarshal(raw, &value) != nil {
+		return nil
+	}
+	for _, key := range []string{"artifacts", "input_refs"} {
+		if encoded, err := json.Marshal(value[key]); err == nil && json.Unmarshal(encoded, &direct) == nil && direct != nil {
+			return direct
+		}
+	}
+	if nested, ok := value["input"].(map[string]any); ok {
+		if encoded, err := json.Marshal(nested); err == nil {
+			return artifactRefsFromSnapshot(encoded)
+		}
+	}
+	return nil
+}
+
+func uniqueArtifactRefs(values []worker.ArtifactRef) []worker.ArtifactRef {
+	byKey := make(map[string]worker.ArtifactRef, len(values))
+	for _, value := range values {
+		byKey[value.ArtifactID+"\x00"+value.Role] = value
+	}
+	keys := make([]string, 0, len(byKey))
+	for key := range byKey {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	result := make([]worker.ArtifactRef, 0, len(keys))
+	for _, key := range keys {
+		result = append(result, byKey[key])
+	}
+	return result
 }
 
 func contractID(prefix, value string) string {

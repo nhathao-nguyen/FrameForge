@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -59,11 +60,11 @@ type UploadSession struct {
 }
 
 type SignedRequest struct {
-	Method     string
-	URL        string
-	Headers    map[string]string
-	ExpiresAt  time.Time
-	PartNumber int
+	Method     string            `json:"method"`
+	URL        string            `json:"url"`
+	Headers    map[string]string `json:"headers"`
+	ExpiresAt  time.Time         `json:"expires_at"`
+	PartNumber int               `json:"part_number,omitempty"`
 }
 
 type UploadedPart struct {
@@ -103,6 +104,24 @@ type StoragePort interface {
 	PresignDownload(context.Context, StorageLocator, time.Duration, string) (SignedRequest, error)
 	Delete(context.Context, StorageLocator, Preconditions) error
 	ListStaging(context.Context, string) ([]StorageLocator, error)
+}
+
+// WorkerTransferPort grants lease-scoped executors direct object-store
+// transfer without serializing StorageLocator or local paths in queue
+// commands. Product state still stores only committed Artifact refs.
+type WorkerTransferPort interface {
+	WorkerBackend() string
+	PresignWorkerUpload(context.Context, string, time.Duration, string) (SignedRequest, error)
+	VerifyWorkerStage(context.Context, string, string, int64, string) (StagedObject, error)
+}
+
+func WorkerStageKey(workspaceRef, projectRef, messageID, artifactID string) (string, error) {
+	for _, value := range []string{workspaceRef, projectRef, messageID, artifactID} {
+		if strings.TrimSpace(value) == "" || strings.ContainsAny(value, "/\\:\r\n\t") || value == "." || value == ".." {
+			return "", errors.New("worker stage identity is invalid")
+		}
+	}
+	return "workspaces/" + workspaceRef + "/projects/" + projectRef + "/staging/workers/" + messageID + "/" + artifactID, nil
 }
 
 type ByteRange struct{ Start, End int64 }
@@ -474,6 +493,19 @@ func (s *LocalStorage) ListStaging(_ context.Context, prefix string) ([]StorageL
 	return result, err
 }
 
+func (s *LocalStorage) WorkerBackend() string { return "local" }
+
+func (s *LocalStorage) PresignWorkerUpload(_ context.Context, key string, ttl time.Duration, contentType string) (SignedRequest, error) {
+	if err := validateKey(key); err != nil || ttl <= 0 || ttl > 15*time.Minute || strings.TrimSpace(contentType) == "" {
+		return SignedRequest{}, errors.New("worker upload request is invalid")
+	}
+	return SignedRequest{Method: "PUT", URL: "nh-local://" + url.PathEscape(key), Headers: map[string]string{"Content-Type": contentType}, ExpiresAt: time.Now().UTC().Add(ttl)}, nil
+}
+
+func (s *LocalStorage) VerifyWorkerStage(ctx context.Context, key, expectedSHA string, expectedSize int64, contentType string) (StagedObject, error) {
+	return verifyWorkerStage(ctx, s, StorageLocator{Backend: "local", ObjectKey: key}, expectedSHA, expectedSize, contentType)
+}
+
 type sectionReadCloser struct {
 	io.Reader
 	closer io.Closer
@@ -729,4 +761,45 @@ func (s *S3Storage) ListStaging(ctx context.Context, prefix string) ([]StorageLo
 		result = append(result, StorageLocator{Backend: "minio", ObjectKey: object.Key, ObjectVersion: object.VersionID})
 	}
 	return result, nil
+}
+
+func (s *S3Storage) WorkerBackend() string { return "minio" }
+
+func (s *S3Storage) PresignWorkerUpload(ctx context.Context, key string, ttl time.Duration, contentType string) (SignedRequest, error) {
+	if err := validateKey(key); err != nil || ttl <= 0 || ttl > 15*time.Minute || strings.TrimSpace(contentType) == "" {
+		return SignedRequest{}, errors.New("worker upload request is invalid")
+	}
+	signed, err := s.client.Client.PresignedPutObject(ctx, s.bucket, key, ttl)
+	if err != nil {
+		return SignedRequest{}, err
+	}
+	return SignedRequest{Method: "PUT", URL: signed.String(), Headers: map[string]string{"Content-Type": contentType}, ExpiresAt: time.Now().UTC().Add(ttl)}, nil
+}
+
+func (s *S3Storage) VerifyWorkerStage(ctx context.Context, key, expectedSHA string, expectedSize int64, contentType string) (StagedObject, error) {
+	return verifyWorkerStage(ctx, s, StorageLocator{Backend: "minio", ObjectKey: key}, expectedSHA, expectedSize, contentType)
+}
+
+func verifyWorkerStage(ctx context.Context, backend StoragePort, locator StorageLocator, expectedSHA string, expectedSize int64, contentType string) (StagedObject, error) {
+	if !regexp.MustCompile(`^[0-9a-f]{64}$`).MatchString(expectedSHA) || expectedSize < 0 || strings.TrimSpace(contentType) == "" {
+		return StagedObject{}, errors.New("worker stage metadata is invalid")
+	}
+	reader, err := backend.OpenRead(ctx, locator, nil)
+	if err != nil {
+		return StagedObject{}, err
+	}
+	hash := sha256.New()
+	size, copyErr := io.Copy(hash, reader)
+	closeErr := reader.Close()
+	if copyErr != nil {
+		return StagedObject{}, copyErr
+	}
+	if closeErr != nil {
+		return StagedObject{}, closeErr
+	}
+	actualSHA := hex.EncodeToString(hash.Sum(nil))
+	if size != expectedSize || actualSHA != expectedSHA {
+		return StagedObject{}, errors.New("worker stage checksum or size mismatch")
+	}
+	return StagedObject{Locator: locator, SizeBytes: size, SHA256: actualSHA, ContentType: contentType}, nil
 }

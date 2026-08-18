@@ -1,8 +1,9 @@
 # Gate G P5/P6 capability coverage
 
-Status: Gate G local implementation and acceptance complete for the scoped P5/P6 rows. The new
-`Txxx-S1` labels are subtasks of existing IDs; no existing task was renumbered or replaced.
-`DEFER` rows from the matrix are intentionally excluded.
+Status: Gate G local implementation and acceptance complete for the scoped P5/P6 rows. Immutable
+`movie_recap` v5 dispatches the listed built-in capabilities through the actual Redis Python/Go
+worker path and a 25-step Product API E2E. The `Txxx-S1` labels are subtasks of existing IDs; no
+existing task was renumbered or replaced. `DEFER` rows from the matrix are intentionally excluded.
 
 | Capability | Phase/class | Existing task/subtask | Native target | Acceptance evidence | State |
 |---|---|---|---|---|---|
@@ -48,3 +49,13 @@ The previously implicit P5/P6 rows are now assigned to T512-S1, T520-S1, T523-S1
 T530-S1, T531-S1 and T532-S1. Their code/tests stay within existing Gate G boundaries and do not
 introduce a new architecture or any Movie Narrator dependency. The local evidence is deterministic
 and provider-free; it does not claim external provider quality or production ML coverage.
+
+## Runtime closure
+
+Package-level capability functions are reached by the production-shaped worker boundary. The
+Product API snapshots `movie_recap` v5, advances dependency frontiers, maps execution classes to
+system/AI/ML/probe/media/render queues and includes completed upstream Artifact refs in each command.
+Python dispatches research, script, TTS, ASR, VLM, embeddings, matching, candidate, subtitle,
+Timeline-build and QA nodes; Go dispatches source probe/preparation, audio mix, Timeline render,
+deliverable QA and clip export. Internal authenticated transfer endpoints issue scoped direct object
+transfers, so Redis carries refs and checksums rather than media bytes or signed URLs.

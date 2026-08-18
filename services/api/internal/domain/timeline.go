@@ -191,6 +191,17 @@ func ValidateTimeline(document json.RawMessage, options TimelineValidationOption
 			if kind == "subtitle" && clip["subtitle"] == nil {
 				return "", fmt.Errorf("subtitle track clip %q requires subtitle cue", clipID)
 			}
+			if kind == "music" {
+				source := clip["source"].(map[string]any)
+				status, _ := source["rights_status"].(string)
+				metadata, _ := source["rights_metadata"].(map[string]any)
+				if status != "owned" && status != "cleared" {
+					return "", fmt.Errorf("music track clip %q is rejected by the BGM rights policy", clipID)
+				}
+				if len(metadata) == 0 {
+					return "", fmt.Errorf("music track clip %q requires rights metadata", clipID)
+				}
+			}
 			if err := validateSubtitleCue(clip, out-in); err != nil {
 				return "", fmt.Errorf("clip %q: %w", clipID, err)
 			}

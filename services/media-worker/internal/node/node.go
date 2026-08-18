@@ -121,7 +121,7 @@ func (n Node) executeThumbnail(ctx context.Context, command worker.Command, mate
 }
 
 func failed(command worker.Command, code, message string) worker.Result {
-	return worker.Result{SchemaVersion: worker.ResultSchemaVersion, MessageID: command.MessageID, JobID: command.JobID, JobStepID: command.JobStepID, Status: "failed", SafeError: &worker.SafeError{Code: code, Category: "permanent", Retryable: false, SafeMessage: message}}
+	return worker.Result{SchemaVersion: worker.ResultSchemaVersion, MessageID: command.MessageID, JobID: command.JobID, JobStepID: command.JobStepID, Status: "failed", OutputRefs: []worker.OutputRef{}, SafeError: &worker.SafeError{Code: code, Category: "permanent", Retryable: false, SafeMessage: message}}
 }
 
 func configString(config map[string]any, key string) string {

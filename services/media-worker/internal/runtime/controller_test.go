@@ -18,7 +18,7 @@ func (f fakeExecutor) Execute(_ context.Context, command worker.Command) (worker
 }
 
 func TestFailedResultIsContractSafeAndBounded(t *testing.T) {
-	command := worker.Command{SchemaVersion: worker.CommandSchemaVersion, MessageID: "msg_analysis_001", Capability: "analysis", ProjectID: "project_analysis_001", JobID: "job_analysis_001", PipelineRunID: "run_analysis_001", JobStepID: "step_analysis_001", Attempt: 1, InputRefs: []worker.ArtifactRef{}, Config: map[string]any{}}
+	command := worker.Command{SchemaVersion: worker.CommandSchemaVersion, MessageID: "msg_analysis_001", Capability: "analysis", WorkspaceID: "workspace_analysis_001", ProjectID: "project_analysis_001", JobID: "job_analysis_001", PipelineRunID: "run_analysis_001", JobStepID: "step_analysis_001", NodeKey: "analysis", Attempt: 1, InputRefs: []worker.ArtifactRef{}, Config: map[string]any{}}
 	result := failedResult(command, errors.New("internal path C:/not-safe-to-return"))
 	if err := worker.ValidateResult(result); err != nil {
 		t.Fatal(err)

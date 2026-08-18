@@ -20,7 +20,7 @@ def test_worker_fixtures_validate_without_local_paths() -> None:
 
 
 def test_worker_contract_rejects_path_and_unknown_status() -> None:
-    command = json.loads('{"schema_version":"worker-command/v1","message_id":"msg_probe_001","capability":"probe","project_id":"project_probe_001","job_id":"job_probe_001","pipeline_run_id":"run_probe_001","job_step_id":"step_probe_001","attempt":1,"input_refs":[],"config":{"local_path":"C:/secret"}}')
+    command = json.loads('{"schema_version":"worker-command/v1","message_id":"msg_probe_001","capability":"probe","workspace_id":"workspace_probe_001","project_id":"project_probe_001","job_id":"job_probe_001","pipeline_run_id":"run_probe_001","job_step_id":"step_probe_001","node_key":"asset_probe","attempt":1,"input_refs":[],"config":{"local_path":"C:/secret"}}')
     try:
         validate_worker_command(command)
     except ValueError:
@@ -34,3 +34,13 @@ def test_worker_contract_rejects_path_and_unknown_status() -> None:
         pass
     else:
         raise AssertionError("non-canonical worker status was accepted")
+
+
+def test_worker_result_rejects_non_object_output_ref() -> None:
+    result = json.loads('{"schema_version":"worker-result/v1","message_id":"msg_probe_001","job_id":"job_probe_001","job_step_id":"step_probe_001","status":"completed","output_refs":[null]}')
+    try:
+        validate_worker_result(result)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("non-object worker output ref was accepted")

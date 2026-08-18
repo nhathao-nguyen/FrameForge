@@ -376,8 +376,11 @@ The normative classification is in `UPSTREAM-CAPABILITY-MATRIX.md`.
 
 The current native implementation keeps provider decisions behind typed LLM, VLM, TTS, ASR and
 embedding ports. Provider results carry adapter/configuration/model provenance; normalized errors,
-allowlisted fallback and credential redaction are tested. Domain nodes do not call a universal
-untyped provider method.
+allowlisted fallback and credential redaction are tested. Transient timeout/network/rate-limit
+failures consume a bounded node retry budget with exponential backoff, jitter and bounded
+Retry-After. Circuit state is isolated by provider configuration, endpoint and capability;
+authentication, policy, permanent and cancellation errors do not retry or fall through. Domain
+nodes do not call a universal untyped provider method.
 
 The Go renderer consumes the canonical TimelineVersion document and profile, compiles multiple
 video clips with allowlisted transitions, audio mixing and sandboxed subtitle files, and performs
@@ -386,3 +389,15 @@ Artifact commit is offered. Real reviewed FFmpeg/ffprobe tests cover Python scen
 frame-derived features, three-clip render with audio/subtitles, clip export, and 16:9/9:16/1:1
 profile reuse. This is local deterministic/provider-free acceptance; external provider quality,
 GPU model execution and production deployment remain unclaimed.
+
+The accepted built-in snapshot is immutable `movie_recap` v5. Product API scheduling advances each
+completed dependency frontier and sends only scoped identity plus Artifact refs through Redis.
+Python workers dispatch the system/AI/ML nodes and Go workers dispatch probe/media/render nodes.
+Workers resolve inputs and stage outputs through authenticated internal transfer grants, while bytes
+move directly against the configured object store. A live acceptance starts the Job through Product
+API, completes all 25 PostgreSQL JobSteps through actual worker processes, validates the canonical
+multi-scene Timeline and probes committed render video/audio plus mix/QA/clip outputs.
+
+Canonical `source_ref` includes bounded `rights_status` and non-empty `rights_metadata`. A music clip
+is valid only when rights are `owned` or `cleared`; Product API semantic validation and renderer
+compilation enforce the same contract.

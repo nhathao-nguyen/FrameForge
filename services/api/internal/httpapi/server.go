@@ -26,13 +26,15 @@ const requestIDKey contextKey = "request_id"
 const correlationIDKey contextKey = "correlation_id"
 
 type Server struct {
-	Config     config.APIConfig
-	Auth       auth.AuthPort
-	LocalAuth  *auth.LocalAuthProvider
-	Health     *health.Registry
-	HTTPServer *http.Server
-	Product    product.Backend
-	Storage    storage.StoragePort
+	Config          config.APIConfig
+	Auth            auth.AuthPort
+	LocalAuth       *auth.LocalAuthProvider
+	Health          *health.Registry
+	HTTPServer      *http.Server
+	Product         product.Backend
+	Storage         storage.StoragePort
+	WorkerArtifacts WorkerArtifactTransfer
+	WorkerToken     string
 }
 
 func NewServer(value config.APIConfig, provider *auth.LocalAuthProvider, registry *health.Registry) (*Server, error) {
@@ -74,8 +76,15 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/workspaces", s.workspaces)
 	mux.HandleFunc("GET /api/v1/workspaces/{workspace_id}", s.workspace)
 	mux.HandleFunc("GET /api/v1/diagnostics", s.diagnostics)
+	mux.HandleFunc("POST /internal/v1/worker/artifacts/resolve", s.resolveWorkerArtifact)
+	mux.HandleFunc("POST /internal/v1/worker/artifacts/stage", s.stageWorkerArtifact)
 	s.registerProjectRoutes(mux)
 	return s.middleware(mux)
+}
+
+func (s *Server) ConfigureWorkerArtifacts(transfer WorkerArtifactTransfer, token string) {
+	s.WorkerArtifacts = transfer
+	s.WorkerToken = strings.TrimSpace(token)
 }
 
 func (s *Server) version(w http.ResponseWriter, r *http.Request) {

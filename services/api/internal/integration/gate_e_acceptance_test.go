@@ -41,6 +41,8 @@ type gateEDurableFixture struct {
 	workspaceID string
 	server      *httptest.Server
 	client      *http.Client
+	queuePrefix string
+	workerToken string
 }
 
 func newGateEDurableFixture(t *testing.T) *gateEDurableFixture {
@@ -83,8 +85,9 @@ func newGateEDurableFixture(t *testing.T) *gateEDurableFixture {
 		db.Close()
 		t.Fatal(err)
 	}
+	queuePrefix := "gate-e-" + suffix
 	transport, err := queue.NewRedisQueue(queue.RedisOptions{
-		Addr: redisAddress, Password: os.Getenv("NH_QUEUE_PASSWORD"), StreamPrefix: "gate-e-" + suffix,
+		Addr: redisAddress, Password: os.Getenv("NH_QUEUE_PASSWORD"), StreamPrefix: queuePrefix,
 		ConsumerGroup: "gate-e-workers-" + suffix,
 	})
 	if err != nil {
@@ -136,8 +139,10 @@ func newGateEDurableFixture(t *testing.T) *gateEDurableFixture {
 		db.Close()
 		t.Fatal(err)
 	}
+	workerToken := "gate-e-worker-token-" + suffix + "-local"
+	server.ConfigureWorkerArtifacts(persistence.WorkerTransfer{SQL: store, Storage: objectStore, Workspace: bootstrap.WorkspaceID}, workerToken)
 	httpServer := httptest.NewServer(server.Handler())
-	f := &gateEDurableFixture{db: db, store: store, backend: backend, queue: transport, objectStore: objectStore, userID: bootstrap.UserID, workspaceID: bootstrap.WorkspaceID, server: httpServer, client: httpServer.Client()}
+	f := &gateEDurableFixture{db: db, store: store, backend: backend, queue: transport, objectStore: objectStore, userID: bootstrap.UserID, workspaceID: bootstrap.WorkspaceID, server: httpServer, client: httpServer.Client(), queuePrefix: queuePrefix, workerToken: workerToken}
 	t.Cleanup(func() {
 		httpServer.Close()
 		transport.Close()

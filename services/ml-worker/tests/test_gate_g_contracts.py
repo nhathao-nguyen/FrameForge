@@ -32,11 +32,14 @@ from nh_media.gate_g import (
     transcribe_segments,
 )
 from nh_media.providers.contracts import (
+    ASRRequest,
+    EmbeddingRequest,
     EmbeddingResponse,
     EmbeddingVector,
     ProviderTranscript,
     ProviderTranscriptSegment,
     ProviderTranscriptWord,
+    TTSRequest,
     TTSResponse,
 )
 
@@ -67,7 +70,7 @@ class ExactTTS(FakeProvider):
         super().__init__(ProviderKind.TTS, "exact-tts", model="exact-tts-v1")
         self.audio = wav_fixture()
 
-    def synthesize(self, context, request) -> TTSResponse:
+    def synthesize(self, context: ProviderCallContext, request: TTSRequest) -> TTSResponse:
         base = super().synthesize(context, request)
         return TTSResponse(ProducedBlob("audio", "narration", self.audio, "audio/wav", {"fixture": "exact"}), 0.25, None, base.meta)
 
@@ -77,7 +80,7 @@ class ExactASR(FakeProvider):
         super().__init__(ProviderKind.ASR, "exact-asr", model="exact-asr-v1")
         self.invalid = invalid
 
-    def transcribe(self, context, request) -> ProviderTranscript:
+    def transcribe(self, context: ProviderCallContext, request: ASRRequest) -> ProviderTranscript:
         base = super().transcribe(context, request)
         end = 0.1 if self.invalid else 0.8
         word = ProviderTranscriptWord("provider", 0.1, 0.4, 0.9)
@@ -89,7 +92,7 @@ class KnownEmbedding(FakeProvider):
     def __init__(self) -> None:
         super().__init__(ProviderKind.EMBEDDING, "known-embedding", model="known-embedding-v1")
 
-    def embed(self, context, request) -> EmbeddingResponse:
+    def embed(self, context: ProviderCallContext, request: EmbeddingRequest) -> EmbeddingResponse:
         base = super().embed(context, request)
         values = ((1.0, 0.0, 0.0), (0.0, 1.0, 0.0))
         vectors = tuple(EmbeddingVector(item.item_id, values[index]) for index, item in enumerate(request.items))
