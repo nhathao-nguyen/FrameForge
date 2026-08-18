@@ -12,9 +12,9 @@ owner: repository owner / task assignee
 |---|---|---|
 | Working branch | `implementation/bootstrap` | `git branch --show-current` |
 | Baseline commit | `7f889b65840631f7605c2d73c94b46a35c1a0a9d` (`checkpoint: close Gate G local acceptance`) | user-requested Gate G starting checkpoint; implementation changes are the current audit delta |
-| Acceptance checkpoint | pending checkpoint commit | created only after the current-tree implementation and full acceptance evidence are recorded |
+| Acceptance checkpoint | `a645ef3` (`checkpoint: close Gate G implementation audit`) | implementation and full acceptance evidence checkpoint on `implementation/bootstrap` |
 | Tracking branch | `origin/implementation/bootstrap` | `git status --short --branch` |
-| Push/merge action | pending final checkpoint push | explicitly authorized by the Gate G task prompt; no branch switch or merge |
+| Push/merge action | final checkpoint push in progress | explicitly authorized by the Gate G task prompt; no branch switch or merge |
 
 ## Gate and phase
 
