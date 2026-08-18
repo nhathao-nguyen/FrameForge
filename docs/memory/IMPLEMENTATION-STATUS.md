@@ -1,5 +1,5 @@
 ---
-last_verified: 2026-08-17
+last_verified: 2026-08-18
 source: ../IMPLEMENTATION-ORDER.md; ../10-DEVELOPMENT-ROADMAP.md; CURRENT-STATE.md; TEST-EVIDENCE.md
 owner: repository owner / task assignee
 ---
@@ -65,17 +65,17 @@ reviewable evidence is recorded.
 | T340 | SSE progress | T301, T331–T332 | complete | live Product API durable snapshot/replay/reconnect with `Last-Event-ID`, ordered deduped IDs, auth/scope/invalid-cursor checks, bounded REST replay and terminal close pass; retention reset path is implemented | no external production load claim |
 | T341 | Future bidirectional transport evaluation | T340 | blocked | none | deferred nonblocking after SSE evidence |
 | T350 | Job/Run/Step/Render commands | T230–T235, T300–T340 | complete | native REST and durable Store/SQL surfaces cover create/list/get/start/pause/resume/cancel/retry, runs/steps, review decisions, and Render list/get/cancel/retry; live durable command harness passes | T400/Gate F remains outside this task |
-| T400 | DAG validation | T202, T320 | blocked | none | after dependencies |
-| T401 | Node conformance | T311–T313, T330, T400 | blocked | none | after dependencies |
-| T402 | Built-in movie-recap graph | T400, T401 | blocked | none | after dependencies |
-| T410 | Review orchestration | T231, T233–T234, T331, T402 | blocked | none | after dependencies |
-| T420 | Build timeline | T232, T401–T410 | blocked | none | after dependencies |
-| T430 | Web shell/SDK | T210, T230, T340 | blocked | none | after dependencies |
-| T431 | Script editor | T231, T410, T430 | blocked | none | after dependencies |
-| T432 | Timeline/Scene editor | T233–T234, T410, T420, T430 | blocked | none | after dependencies |
-| T433 | Tauri client | T223, T340, T430 | blocked | none | after web client contract |
-| T550 | Local Functional Acceptance | T323, T340, T430, T433 | blocked | none | certify functional local/LAN path |
-| T434 | Desktop packaging/security | T433 | blocked | none | after T433 |
+| T400 | DAG validation | T202, T320 | complete | `services/api/internal/pipeline/definition.go`, negative validator corpus and `go test ./services/api/internal/pipeline` | T401 |
+| T401 | Node conformance | T311–T313, T330, T400 | complete | `pipeline/runtime.go` retry/timeout/cancel/review/soft-failure/checkpoint/idempotency tests | T402 |
+| T402 | Built-in movie-recap graph | T400, T401 | complete | native `MovieRecap`/`BuiltinCatalog`, 25-node graph and immutable hash/policy validation | T410 |
+| T410 | Review orchestration | T231, T233–T234, T331, T402 | complete | typed review approval/rejection, proposed-resource type check, stale revision conflict and durable actor/revision fields | T420 |
+| T420 | Build timeline | T232, T401–T410 | complete | `timeline_builder.go` + tests: proposal/evidence refs, user overrides, canonical validation/hash, no render/rematch | T430 |
+| T430 | Web shell/SDK | T210, T230, T340 | complete | `packages/sdk/src/client.ts`, Next web shell, in-memory auth token, REST/SSE Last-Event-ID reconnect, `pnpm typecheck` | T431 |
+| T431 | Script editor | T231, T410, T430 | complete | web ScriptVersion form with If-Match revision, immutable server submission and safe JSON validation | T432 |
+| T432 | Timeline/Scene editor | T233–T234, T410, T420, T430 | complete | web `UpdateScene` command form with based-on version and expected document version conflict path | T433 |
+| T433 | Tauri client | T223, T340, T430 | complete | thin remote-only commands/capability manifest/CSP; `cargo fmt --check`, `cargo check`, live `cargo-tauri dev` | T550/T434 |
+| T550 | Local Functional Acceptance | T323, T340, T430, T433 | complete with limitation | `tools/accept-local.ps1` local and LAN server-path PASS: auth/workspace/project/upload/MinIO/Job/Go/Python/SSE/FFmpeg; physical second device external/uncontrolled | T434/T603 |
+| T434 | Desktop packaging/security | T433 | blocked | staging boundary validation and rollback PASS; package action correctly stops without release bundle/external signing key | rerun with external Tauri signing key |
 | T500 | Provider ports/resolver | T235, T401 | blocked | none | after dependencies |
 | T510 | Research/script nodes | T402, T500 | blocked | none | after dependencies |
 | T511 | TTS/Narration | T231, T500, T510 | blocked | none | after dependencies |
@@ -97,6 +97,7 @@ reviewable evidence is recorded.
 | T604 | Upstream research refresh | T001, T003, T108 | blocked | none | research evidence only |
 | T605 | Internet/VPS production release | T603 | blocked | none | explicit production approval |
 
-Gate C+D implementation and the Gate E T300–T350 Local/LAN execution slice are present in the current
-working tree. Their focused and live evidence is recorded below; T400/Gate F, desktop T550, hardened
-T603 and public T605 remain pending and are not silently promoted.
+Gate C+D, Gate E T300–T350 and the Gate F T400–T433/T550 implementation are present in the current
+working tree. T434 remains blocked by external release signing material; physical second-device LAN
+verification is also not controlled here. Overall Gate F is therefore NOT PASS and is not silently
+promoted.

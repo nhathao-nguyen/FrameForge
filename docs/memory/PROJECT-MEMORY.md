@@ -1,5 +1,5 @@
 ---
-last_verified: 2026-08-17
+last_verified: 2026-08-18
 source: ../../PROJECT_REBUILD_PLAN.md; ../00-PROJECT-CONTEXT.md; ../GLOSSARY.md; ../CODEX-INSTRUCTIONS.md
 owner: repository owner / task assignee
 ---

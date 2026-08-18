@@ -40,7 +40,7 @@ func (f *fakeLeasePublisher) PublishWorkerCommand(context.Context, worker.Comman
 	return "1-0", nil
 }
 
-func TestClaimingDispatcherStoresLeaseOnlyAfterPublish(t *testing.T) {
+func TestClaimingDispatcherRegistersLeaseBeforeFastWorkerResult(t *testing.T) {
 	q := &fakeClaimQueue{deliveries: []queue.Delivery{{Stream: "stream", EntryID: "1-0", Message: queue.Message{MessageID: "msg_analysis_001", Capability: "analysis", JobID: "job_analysis_001", JobStepID: "step_analysis_001", Attempt: 1}}}}
 	command := worker.Command{SchemaVersion: worker.CommandSchemaVersion, MessageID: "msg_analysis_001", Capability: "analysis", ProjectID: "project_analysis_001", JobID: "job_analysis_001", PipelineRunID: "run_analysis_001", JobStepID: "step_analysis_001", Attempt: 1, InputRefs: []worker.ArtifactRef{}, Config: map[string]any{}}
 	leases := NewLeaseRegistry()

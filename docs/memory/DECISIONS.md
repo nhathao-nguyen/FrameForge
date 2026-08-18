@@ -1,5 +1,5 @@
 ---
-last_verified: 2026-08-17
+last_verified: 2026-08-18
 source: owner instruction; AGENTS.md; ../OPEN-QUESTIONS.md; ../CODEX-INSTRUCTIONS.md
 owner: repository owner / task assignee
 ---

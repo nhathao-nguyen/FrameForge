@@ -1,6 +1,6 @@
 ---
-last_verified: 2026-08-17
-source: git status/log/branch metadata; ../SPEC-AUDIT-REPORT.md; ../IMPLEMENTATION-ORDER.md
+last_verified: 2026-08-18
+source: git status/log/branch metadata; ../SPEC-AUDIT-REPORT.md; ../IMPLEMENTATION-ORDER.md; TEST-EVIDENCE.md
 owner: repository owner / task assignee
 ---
 
@@ -37,6 +37,10 @@ owner: repository owner / task assignee
   crash/resume, retry/DLQ/replay, cancellation, partial stop-after resume, and authenticated SSE
   snapshot/replay/reconnect tests pass against the current working tree.
   T400/Gate F, desktop T550 acceptance, hardened T603, and public/VPS T605 remain explicitly out of scope.
+- Gate F status: T400–T433 are implemented in the current uncommitted working tree. T550 local
+  acceptance and LAN server-path checks pass, with physical second-device verification explicitly
+  external/uncontrolled. T434 staging validation and rollback pass, but production packaging/signing
+  is not pass because no release bundle or external signing key is present. Overall Gate F: NOT PASS.
 
 ## Current evidence
 
@@ -68,6 +72,10 @@ owner: repository owner / task assignee
   hashed `auth_sessions` row; direct multipart PUT to private MinIO returned an ETag, complete created a
   durable `asset_probe` Job, `asset_uploads.status=completed`, and Asset status `validating`; duplicate
   Project request replayed the same response with one database row.
+- Gate F evidence (2026-08-18) covers the native immutable DAG catalog/runtime, durable typed review
+  decisions, timeline builder, web SDK/editor, Tauri remote-only shell, local/LAN startup and the
+  upload-to-MinIO/Go-worker/Python/FFmpeg acceptance harness. It does not claim real provider/ML
+  execution or a physical second device.
 - Local Functional Acceptance is T550; Local/LAN Hardened Acceptance is T603; Internet/VPS
   production is T605.
 - Gate E includes canonical transitions/events/outbox replay, Redis Streams QueuePort, DAG scheduling,
@@ -85,11 +93,12 @@ vendors are later configuration choices.
 ## Handoff
 
 ```text
-Task: Gate E — T300–T350 Local/LAN execution slice
-Status: complete after acceptance checkpoint; later client/hardened/public gates pending
+Task: Gate F — T400–T434 and T550 client/local acceptance slice
+Status: NOT PASS; T400–T433 and T550 evidence are present, while T434 production signing is unavailable
 Boundary: Canonical execution transitions/events, queue, scheduling, leases, media/AI worker contracts,
   durable graph bootstrap, controls, checkpoint/DLQ and SSE boundary
   Application code: API, persistence, media worker, Python worker, contracts, and execution adapters
 Upstream relationship: research/reference only; no operational dependency
-Next: preserve this Gate E boundary; only start T400/Gate F after explicit owner approval and a new task.
+Next: provide an external Tauri signing key/release bundle, then rerun T434 and arrange a controlled
+  second-device LAN verification before promoting Gate F.
 ```

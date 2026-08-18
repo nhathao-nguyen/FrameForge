@@ -204,6 +204,22 @@ func (s *Store) ApproveReview(workspaceID, projectID, jobID, stepID, resourceID 
 	return s.resolveReview(workspaceID, projectID, jobID, stepID, "approve", resourceID, resourceRevision, "")
 }
 
+func (s *Store) ApproveReviewWithType(workspaceID, projectID, jobID, stepID, resourceType, resourceID string, resourceRevision int64) (*Job, error) {
+	s.mu.RLock()
+	var expectedType string
+	for _, review := range s.reviews {
+		if review.JobID == jobID && review.JobStepID == stepID && review.Status == "open" {
+			expectedType = review.ProposedResourceType
+			break
+		}
+	}
+	s.mu.RUnlock()
+	if expectedType == "" || resourceType != expectedType {
+		return nil, ErrConflict
+	}
+	return s.resolveReview(workspaceID, projectID, jobID, stepID, "approve", resourceID, resourceRevision, "")
+}
+
 // OpenReview is called by orchestration when a node reaches a human gate. It
 // is intentionally separate from pause: a review has a resource/version and
 // an actor decision, while pause is only a safe execution checkpoint.
@@ -290,6 +306,9 @@ func (s *Store) resolveReview(workspaceID, projectID, jobID, stepID, decision, r
 	if decision == "approve" && (resourceID == "" || resourceRevision < 1) {
 		return nil, ErrConflict
 	}
+	if decision == "approve" && resourceRevision < review.ProposedResourceRevision {
+		return nil, ErrConflict
+	}
 	if decision != "approve" && decision != "reject" {
 		return nil, ErrConflict
 	}
@@ -298,6 +317,7 @@ func (s *Store) resolveReview(workspaceID, projectID, jobID, stepID, decision, r
 	}
 	review.Status = map[string]string{"approve": "approved", "reject": "rejected"}[decision]
 	review.Decision = decision
+	review.SelectedResourceType = review.ProposedResourceType
 	review.SelectedResourceID = resourceID
 	review.SelectedResourceRevision = resourceRevision
 	review.DecisionComment = action
@@ -312,7 +332,6 @@ func (s *Store) resolveReview(workspaceID, projectID, jobID, stepID, decision, r
 		s.transitionJobLocked(value, domain.JobPaused)
 		s.appendJobEventLocked(jobID, "review.rejected", map[string]any{"review_id": review.ID, "action": action})
 	} else {
-		review.SelectedResourceType = review.ProposedResourceType
 		s.transitionStepLocked(jobID, step, "completed")
 		s.transitionRunLocked(jobID, run, "queued")
 		s.transitionJobLocked(value, domain.JobQueued)

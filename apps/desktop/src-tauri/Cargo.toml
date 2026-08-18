@@ -6,7 +6,7 @@ authors = ["NH-Media"]
 edition = "2024"
 
 [build-dependencies]
-tauri-build = { version = "2.5.1" }
+tauri-build = { version = "2.5.1", features = [] }
 
 [dependencies]
 tauri = { version = "2.8.5", features = [] }

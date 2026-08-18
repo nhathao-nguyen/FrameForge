@@ -30,10 +30,11 @@ func TestPythonWorkerRoundTripUsesVersionedContract(t *testing.T) {
 	process.Dir = repository
 	process.Stdin = bytes.NewReader(append(payload, '\n'))
 	var output bytes.Buffer
+	var diagnostics bytes.Buffer
 	process.Stdout = &output
-	process.Stderr = &output
+	process.Stderr = &diagnostics
 	if err := process.Run(); err != nil {
-		t.Fatalf("Python worker process failed: %v; output=%s", err, output.String())
+		t.Fatalf("Python worker process failed: %v; output=%s; diagnostics=%s", err, output.String(), diagnostics.String())
 	}
 	var result worker.Result
 	if err := json.Unmarshal(bytes.TrimSpace(output.Bytes()), &result); err != nil {

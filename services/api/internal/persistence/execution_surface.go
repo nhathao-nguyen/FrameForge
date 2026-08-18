@@ -171,6 +171,23 @@ func (b *DurableBackend) ApproveReview(workspaceID, projectID, jobID, stepID, re
 	return b.resolveReview(context.Background(), workspaceID, projectID, jobID, stepID, "approve", "", resourceID, resourceRevision)
 }
 
+func (b *DurableBackend) ApproveReviewWithType(workspaceID, projectID, jobID, stepID, resourceType, resourceID string, resourceRevision int64) (*product.Job, error) {
+	if resourceType == "" {
+		return nil, product.ErrConflict
+	}
+	var proposedType string
+	if err := b.SQL.DB.QueryRowContext(context.Background(), `SELECT r.proposed_resource_type FROM reviews r JOIN projects p ON p.id=r.project_id WHERE p.workspace_id=$1::uuid AND r.project_id=$2::uuid AND r.job_id=$3::uuid AND r.job_step_id=$4::uuid AND r.status='open'`, workspaceID, projectID, jobID, stepID).Scan(&proposedType); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, product.ErrNotFound
+		}
+		return nil, err
+	}
+	if proposedType != resourceType {
+		return nil, product.ErrConflict
+	}
+	return b.ApproveReview(workspaceID, projectID, jobID, stepID, resourceID, resourceRevision)
+}
+
 func (b *DurableBackend) RejectReview(workspaceID, projectID, jobID, stepID, action string) (*product.Job, error) {
 	if action == "" {
 		action = "fail"

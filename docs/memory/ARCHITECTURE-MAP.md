@@ -1,5 +1,5 @@
 ---
-last_verified: 2026-08-17
+last_verified: 2026-08-18
 source: ../01-ARCHITECTURE.md; ../04-API-CONTRACT.md; ../13-WORKER-ARCHITECTURE.md
 owner: architecture owner / task assignee
 ---

@@ -1,5 +1,5 @@
 ---
-last_verified: 2026-08-17
+last_verified: 2026-08-18
 source: ../08-SECURITY.md; ../12-STORAGE-ARCHITECTURE.md; ../13-WORKER-ARCHITECTURE.md
 owner: security owner / release owner
 ---

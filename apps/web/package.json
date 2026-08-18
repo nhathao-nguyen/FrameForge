@@ -2,8 +2,9 @@
   "name": "@nh-media/web",
   "private": true,
   "version": "0.1.0-foundation",
-  "scripts": { "typecheck": "tsc --noEmit" },
+  "scripts": { "dev": "next dev", "typecheck": "tsc --noEmit" },
   "dependencies": {
+    "@nh-media/sdk": "workspace:*",
     "next": "15.5.3",
     "react": "19.1.1",
     "react-dom": "19.1.1"

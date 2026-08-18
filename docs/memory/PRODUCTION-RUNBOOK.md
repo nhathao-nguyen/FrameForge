@@ -1,5 +1,5 @@
 ---
-last_verified: 2026-08-17
+last_verified: 2026-08-18
 source: ../08-SECURITY.md; ../10-DEVELOPMENT-ROADMAP.md; ../13-WORKER-ARCHITECTURE.md; ../PRODUCTION-PLAN.md
 owner: operations owner / release owner
 ---

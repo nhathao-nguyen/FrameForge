@@ -338,6 +338,7 @@ type Review struct {
 	SelectedResourceRevision int64  `json:"selected_resource_revision,omitempty"`
 	Decision                 string `json:"decision,omitempty"`
 	DecisionComment          string `json:"decision_comment,omitempty"`
+	ActorID                  string `json:"actor_id,omitempty"`
 }
 
 type JobCreateInput struct {
@@ -363,6 +364,13 @@ type ExecutionSurface interface {
 	ListJobSteps(string, string, string, string) ([]JobStep, error)
 	ApproveReview(string, string, string, string, string, int64) (*Job, error)
 	RejectReview(string, string, string, string, string) (*Job, error)
+}
+
+// ReviewResourceSurface is the stricter Gate F review command. The legacy
+// ExecutionSurface method remains source-compatible for existing integrations;
+// HTTP clients use this method when the selected resource type is available.
+type ReviewResourceSurface interface {
+	ApproveReviewWithType(string, string, string, string, string, string, int64) (*Job, error)
 }
 
 type RenderSurface interface {

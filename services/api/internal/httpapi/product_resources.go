@@ -235,13 +235,24 @@ func (s *Server) approveReview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var input struct {
+		SelectedResourceType     string `json:"selected_resource_type"`
 		SelectedResourceID       string `json:"selected_resource_id"`
 		SelectedResourceRevision int64  `json:"selected_resource_revision"`
 	}
 	if !s.decodeResource(w, r, &input) {
 		return
 	}
-	value, err := surface.ApproveReview(principal.WorkspaceID, r.PathValue("project_id"), r.PathValue("job_id"), r.PathValue("job_step_id"), input.SelectedResourceID, input.SelectedResourceRevision)
+	if input.SelectedResourceType == "" {
+		s.writeError(w, r, http.StatusUnprocessableEntity, "REVIEW_RESOURCE_TYPE_REQUIRED", "Selected resource type is required.")
+		return
+	}
+	var value *product.Job
+	var err error
+	if typed, ok := s.Product.(product.ReviewResourceSurface); ok {
+		value, err = typed.ApproveReviewWithType(principal.WorkspaceID, r.PathValue("project_id"), r.PathValue("job_id"), r.PathValue("job_step_id"), input.SelectedResourceType, input.SelectedResourceID, input.SelectedResourceRevision)
+	} else {
+		value, err = surface.ApproveReview(principal.WorkspaceID, r.PathValue("project_id"), r.PathValue("job_id"), r.PathValue("job_step_id"), input.SelectedResourceID, input.SelectedResourceRevision)
+	}
 	if err != nil {
 		s.storeError(w, r, err)
 		return

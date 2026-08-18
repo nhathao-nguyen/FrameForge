@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "main-capability",
+  "description": "Thin remote-first client permissions. No filesystem, shell, process, database or network plugin permissions.",
+  "windows": ["main"],
+  "permissions": ["core:default"]
+}

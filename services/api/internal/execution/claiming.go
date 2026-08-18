@@ -67,10 +67,14 @@ func (d ClaimingDispatcher) DispatchOnce(ctx context.Context, capability, consum
 		if err != nil {
 			return processed, err
 		}
+		// Register the lease before publishing. A fast worker can finish the
+		// command before PublishWorkerCommand returns, so registering after the
+		// publish creates a result-reconciliation race.
+		d.Claims.Put(ClaimedCommand{Message: delivery.Message, Command: command, Lease: lease})
 		if _, err := d.Publisher.PublishWorkerCommand(ctx, command); err != nil {
+			d.Claims.Take(command.MessageID)
 			return processed, err
 		}
-		d.Claims.Put(ClaimedCommand{Message: delivery.Message, Command: command, Lease: lease})
 		if err := d.Queue.Ack(ctx, delivery.Stream, delivery.EntryID); err != nil {
 			return processed, err
 		}
