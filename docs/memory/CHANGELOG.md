@@ -6,6 +6,16 @@ owner: repository owner / task assignee
 
 # Memory changelog
 
+## 2026-08-18 — Current-tree Gate F implementation audit
+
+- Repaired and regression-tested the canonical movie_recap graph, native Artifact role contracts,
+  closed node schemas, Timeline schema/semantic validator boundary, durable TimelineVersion identity,
+  and server-authoritative web/SDK edit-reload-undo behavior.
+- Full verification and local T550 end-to-end acceptance pass, including Go/Python/Redis/SSE/upload
+  recovery after tracked application restart.
+- Current signed T434 staging was intentionally not treated as proof: its manifest predates the
+  current web edit. Owner-controlled N/N+1 re-signing is still required for a fresh release artifact.
+
 ## 2026-08-18 — Gate F current physical-client closure
 
 - Verified new external run `lan-client-1353be68-e9ba-41d7-9ee1-b2f97340452e` from

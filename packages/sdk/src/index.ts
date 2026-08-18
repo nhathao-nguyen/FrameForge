@@ -13,3 +13,4 @@ export interface ApiErrorEnvelope {
 }
 
 export * from "./client";
+export * from "./timeline-history";

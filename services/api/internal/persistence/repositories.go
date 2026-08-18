@@ -18,6 +18,40 @@ var ErrNotFound = errors.New("resource not found")
 var ErrScopeDenied = errors.New("workspace scope denied")
 var ErrVersionConflict = errors.New("version conflict")
 
+const pipelineSnapshotExpression = `jsonb_build_object(
+	'pipeline_id',p.id::text,
+	'version',p.version,
+	'schema_version',p.schema_version,
+	'definition',p.definition,
+	'nodes',COALESCE((SELECT jsonb_agg(jsonb_build_object(
+		'node_key',n.node_key,
+		'node_type',n.node_type,
+		'display_name',n.display_name,
+		'execution_class',n.execution_class,
+		'is_optional',n.is_optional,
+		'failure_mode',n.failure_mode,
+		'review_policy',n.review_policy,
+		'input_schema',n.input_schema,
+		'output_schema',n.output_schema,
+		'required_artifact_roles',n.required_artifact_roles,
+		'produced_artifact_roles',n.produced_artifact_roles,
+		'config',n.config,
+		'timeout_sec',n.timeout_sec,
+		'max_attempts',n.max_attempts,
+		'retry_policy',n.retry_policy,
+		'checkpoint_policy',n.checkpoint_policy,
+		'resource_requirements',n.resource_requirements,
+		'idempotency_policy',n.idempotency_policy,
+		'progress_weight',n.progress_weight,
+		'dependencies',COALESCE((SELECT jsonb_agg(jsonb_build_object(
+			'node_key',n.node_key,
+			'depends_on_node_key',parent.node_key,
+			'condition',d.condition,
+			'required',d.required
+		) ORDER BY parent.node_key) FROM pipeline_node_dependencies d JOIN pipeline_nodes parent ON parent.id=d.depends_on_node_id WHERE d.pipeline_id=n.pipeline_id AND d.node_id=n.id),'[]'::jsonb)
+	) ORDER BY n.node_key) FROM pipeline_nodes n WHERE n.pipeline_id=p.id),'[]'::jsonb)
+)`
+
 type SQLStore struct{ DB *sql.DB }
 
 func (s *SQLStore) CreateSession(ctx context.Context, userID, tokenHash, clientKind string, expiresAt time.Time) error {
@@ -498,7 +532,7 @@ func (s *SQLStore) CreateProjectJob(ctx context.Context, userID, workspaceID, pr
 	}
 	var workflowID, pipelineID string
 	var pipelineSnapshot json.RawMessage
-	err = s.DB.QueryRowContext(ctx, `SELECT w.id::text,p.id::text,jsonb_build_object('pipeline_id',p.id::text,'version',p.version,'schema_version',p.schema_version,'definition',p.definition,'nodes',COALESCE((SELECT jsonb_agg(jsonb_build_object('node_key',n.node_key,'node_type',n.node_type,'execution_class',n.execution_class,'config',n.config) ORDER BY n.node_key) FROM pipeline_nodes n WHERE n.pipeline_id=p.id),'[]'::jsonb)) FROM projects pr JOIN workflows project_workflow ON project_workflow.id=pr.workflow_id JOIN workflows w ON w.workflow_key=project_workflow.workflow_key AND w.status='active' AND (w.workspace_id IS NULL OR w.workspace_id=$2) JOIN pipelines p ON p.workflow_id=w.id AND p.status='active' WHERE pr.id=$1 AND pr.workspace_id=$2 ORDER BY p.version DESC LIMIT 1`, projectID, workspaceID).Scan(&workflowID, &pipelineID, &pipelineSnapshot)
+	err = s.DB.QueryRowContext(ctx, `SELECT w.id::text,p.id::text,`+pipelineSnapshotExpression+` FROM projects pr JOIN workflows project_workflow ON project_workflow.id=pr.workflow_id JOIN workflows w ON w.workflow_key=project_workflow.workflow_key AND w.status='active' AND (w.workspace_id IS NULL OR w.workspace_id=$2) JOIN pipelines p ON p.workflow_id=w.id AND p.status='active' WHERE pr.id=$1 AND pr.workspace_id=$2 ORDER BY p.version DESC LIMIT 1`, projectID, workspaceID).Scan(&workflowID, &pipelineID, &pipelineSnapshot)
 	if errors.Is(err, sql.ErrNoRows) {
 		return JobRecord{}, ErrNotFound
 	}
@@ -561,7 +595,7 @@ func (s *SQLStore) CompleteUploadAndCreateProbeJob(ctx context.Context, userID, 
 	}
 	var workflowID, pipelineID string
 	var pipelineSnapshot json.RawMessage
-	err = tx.QueryRowContext(ctx, `SELECT w.id::text,p.id::text,jsonb_build_object('pipeline_id',p.id::text,'version',p.version,'schema_version',p.schema_version,'definition',p.definition,'nodes',COALESCE((SELECT jsonb_agg(jsonb_build_object('node_key',n.node_key,'node_type',n.node_type,'execution_class',n.execution_class,'config',n.config) ORDER BY n.node_key) FROM pipeline_nodes n WHERE n.pipeline_id=p.id),'[]'::jsonb)) FROM projects pr JOIN workflows w ON w.workflow_key='asset_validation' AND w.status='active' AND (w.workspace_id IS NULL OR w.workspace_id=$2) JOIN pipelines p ON p.workflow_id=w.id AND p.status='active' WHERE pr.id=$1 AND pr.workspace_id=$2 ORDER BY p.version DESC LIMIT 1`, projectID, workspaceID).Scan(&workflowID, &pipelineID, &pipelineSnapshot)
+	err = tx.QueryRowContext(ctx, `SELECT w.id::text,p.id::text,`+pipelineSnapshotExpression+` FROM projects pr JOIN workflows w ON w.workflow_key='asset_validation' AND w.status='active' AND (w.workspace_id IS NULL OR w.workspace_id=$2) JOIN pipelines p ON p.workflow_id=w.id AND p.status='active' WHERE pr.id=$1 AND pr.workspace_id=$2 ORDER BY p.version DESC LIMIT 1`, projectID, workspaceID).Scan(&workflowID, &pipelineID, &pipelineSnapshot)
 	if errors.Is(err, sql.ErrNoRows) {
 		return UploadRecord{}, JobRecord{}, ErrNotFound
 	}

@@ -1,7 +1,12 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { ProductApiClient, ProductApiError, SseEnvelope } from "@nh-media/sdk";
+import {
+  ProductApiClient, ProductApiError, SseEnvelope,
+  appendTimelineHistory, canUndoTimelineHistory, cloneTimelineClip, completeTimelineUndo,
+  reconcileTimelineHistory,
+} from "@nh-media/sdk";
+import type { TimelineHistoryEntry } from "@nh-media/sdk";
 
 const defaultEndpoint = process.env.NEXT_PUBLIC_NH_MEDIA_API_URL || "http://127.0.0.1:8080";
 
@@ -28,7 +33,7 @@ export default function HomePage() {
   const [timelineClipId, setTimelineClipId] = useState("");
   const [timelineState, setTimelineState] = useState<Record<string, unknown> | null>(null);
   const [timelineDocument, setTimelineDocument] = useState<Record<string, unknown> | null>(null);
-  const [timelineHistory, setTimelineHistory] = useState<Record<string, unknown>[]>([]);
+  const [timelineHistory, setTimelineHistory] = useState<TimelineHistoryEntry[]>([]);
   const [timelineEditKind, setTimelineEditKind] = useState("UpdateScene");
   const [timelineTargetTrack, setTimelineTargetTrack] = useState("");
   const [scenes, setScenes] = useState<Record<string, unknown>[]>([]);
@@ -94,6 +99,10 @@ export default function HomePage() {
   async function selectProject(project: Record<string, unknown>) {
     setSelectedProject(project);
     setSelectedJob(null);
+    setTimelineState(null);
+    setTimelineDocument(null);
+    setTimelineVersionId("");
+    setTimelineHistory([]);
     const result = await api.listJobs(stringValue(project.id));
     setJobs(result.items || []);
     const sceneResult = await api.listScenes(stringValue(project.id));
@@ -120,8 +129,8 @@ export default function HomePage() {
     }
   }
 
-  async function loadTimelineState() {
-    if (!selectedProject || !timelineId.trim()) return;
+  async function loadTimelineState(options: { expectedVersionId?: string; resetHistory?: boolean } = {}): Promise<{ versionId: string }> {
+    if (!selectedProject || !timelineId.trim()) return { versionId: "" };
     setError("");
     try {
       const projectId = stringValue(selectedProject.id);
@@ -130,15 +139,27 @@ export default function HomePage() {
       if (!versionId) throw new Error("Timeline has no current TimelineVersion.");
       const version = await api.getTimelineVersion(projectId, timelineId.trim(), versionId);
       const document = parseObject(version.document);
+      const history = reconcileTimelineHistory(timelineHistory, {
+        projectId,
+        timelineId: timelineId.trim(),
+        currentVersionId: versionId,
+        previousProjectId: stringValue(timelineState?.project_id),
+        previousTimelineId: stringValue(timelineState?.id),
+        previousVersionId: timelineVersionId,
+        expectedVersionId: options.expectedVersionId,
+        reset: options.resetHistory,
+      });
       setTimelineState(timeline);
       setTimelineVersionId(versionId);
       setTimelineDocument(document);
       setTimelineClipId(firstClipId(document));
       setTimelineTargetTrack(firstTrackId(document));
-      setTimelineHistory([]);
+      setTimelineHistory(history);
       setStatus("Timeline, current TimelineVersion and Scenes loaded from server state.");
+      return { versionId };
     } catch (value) {
       setError(safeMessage(value));
+      return { versionId: "" };
     }
   }
 
@@ -274,19 +295,32 @@ export default function HomePage() {
     try {
       const clip = findClip(timelineDocument, timelineClipId.trim());
       if (!clip) throw new Error("Selected clip is not present in the loaded TimelineVersion.");
-      setTimelineHistory((current) => [...current, clip]);
+      const previousVersionId = timelineVersionId.trim();
+      const previousRevision = Number(timelineState?.revision || 0);
+      const previousDocumentVersion = Number(timelineDocument.version || 0);
       const payload: Record<string, unknown> = timelineEditKind === "MoveClip"
         ? { clip_id: timelineClipId.trim(), track_id: timelineTargetTrack.trim() }
         : timelineEditKind === "ReplaceClip"
           ? { clip_id: timelineClipId.trim(), clip: { ...clip, metadata: { ...(objectValue(clip.metadata)), edited_from: "web" } } }
           : { clip_id: timelineClipId.trim(), metadata: { edited_from: "web", title: "User scene override" } };
-      await api.timelineCommand(stringValue(selectedProject.id), timelineId.trim(), timelineVersionId.trim(), {
+      const result = await api.timelineCommand(stringValue(selectedProject.id), timelineId.trim(), previousVersionId, {
         kind: timelineEditKind,
         schema_version: "1.0",
-        expected_version: Number(timelineDocument.version || 0),
+        expected_version: previousDocumentVersion,
         payload,
-      }, Number(timelineState?.revision || 0));
-      await loadTimelineState();
+      }, previousRevision);
+      const resultVersionId = stringValue(result.id || result.version_id);
+      if (!resultVersionId) throw new Error("Product API did not return the new TimelineVersion identity.");
+      const loaded = await loadTimelineState({ expectedVersionId: resultVersionId });
+      if (loaded.versionId !== resultVersionId) throw new Error("Server TimelineVersion changed before the edit could be reconciled.");
+      setTimelineHistory((current) => appendTimelineHistory(current, {
+        projectId: stringValue(selectedProject.id),
+        timelineId: timelineId.trim(),
+        previousVersionId,
+        resultVersionId,
+        clipId: timelineClipId.trim(),
+        previousClip: cloneTimelineClip(clip),
+      }));
       setStatus("Timeline command accepted as a new immutable user-origin TimelineVersion.");
     } catch (value) {
       setError(safeMessage(value));
@@ -295,16 +329,20 @@ export default function HomePage() {
 
   async function undoTimelineEdit() {
     if (!selectedProject || !timelineDocument || !timelineVersionId || !timelineClipId || !timelineState) return;
-    const previousClip = timelineHistory[timelineHistory.length - 1];
-    if (!previousClip) return;
+    const entry = timelineHistory[timelineHistory.length - 1];
+    if (!entry || !canUndoTimelineHistory(timelineHistory, stringValue(selectedProject.id), timelineId.trim(), timelineVersionId)) return;
     setError("");
     try {
-      await api.timelineCommand(stringValue(selectedProject.id), timelineId.trim(), timelineVersionId, {
-        kind: "ReplaceClip", schema_version: "1.0", expected_version: Number(timelineDocument.version || 0),
-        payload: { clip_id: timelineClipId, clip: previousClip },
-      }, Number(timelineState.revision || 0));
-      setTimelineHistory((current) => current.slice(0, -1));
-      await loadTimelineState();
+      const result = await api.restoreTimelineClip(
+        stringValue(selectedProject.id), timelineId.trim(), timelineVersionId,
+        entry.previousVersionId, entry.clipId, entry.previousClip,
+        Number(timelineDocument.version || 0), Number(timelineState.revision || 0),
+      );
+      const resultVersionId = stringValue(result.id || result.version_id);
+      if (!resultVersionId) throw new Error("Product API did not return the undo TimelineVersion identity.");
+      const loaded = await loadTimelineState({ expectedVersionId: resultVersionId });
+      if (loaded.versionId !== resultVersionId) throw new Error("Server TimelineVersion changed before undo could be reconciled.");
+      setTimelineHistory((current) => completeTimelineUndo(current, resultVersionId));
       setStatus("Undo was recorded as a new server TimelineVersion.");
     } catch (value) {
       setError(safeMessage(value));
@@ -339,6 +377,10 @@ export default function HomePage() {
     setJobs([]);
     setSelectedProject(null);
     setSelectedJob(null);
+    setTimelineState(null);
+    setTimelineDocument(null);
+    setTimelineVersionId("");
+    setTimelineHistory([]);
     setStatus("Signed out; session revoked.");
   }
 

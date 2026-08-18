@@ -70,6 +70,24 @@ func TestNativeProjectUploadTimelineAndProviderBoundaries(t *testing.T) {
 	version, _ := timelineEnvelope["version"].(map[string]any)
 	timelineID, _ := timelineEnvelope["timeline"].(map[string]any)["id"].(string)
 	versionID, _ := version["id"].(string)
+	document, _ := version["document"].(map[string]any)
+	if document["timeline_id"] != timelineID || document["timeline_version_id"] != versionID || document["version"] != float64(1) {
+		t.Fatalf("stored TimelineVersion identity drifted: timeline=%q version=%q document=%#v", timelineID, versionID, document)
+	}
+	listResponse := httptest.NewRecorder()
+	listRequest := httptest.NewRequest(http.MethodGet, "/api/v1/projects/"+projectID+"/timelines/"+timelineID+"/versions", nil)
+	header(listRequest)
+	server.Handler().ServeHTTP(listResponse, listRequest)
+	if listResponse.Code != http.StatusOK || !strings.Contains(listResponse.Body.String(), versionID) {
+		t.Fatalf("timeline version history route failed: %d %s", listResponse.Code, listResponse.Body.String())
+	}
+	wrongTimelineResponse := httptest.NewRecorder()
+	wrongTimelineRequest := httptest.NewRequest(http.MethodGet, "/api/v1/projects/"+projectID+"/timelines/not-the-owner/versions/"+versionID, nil)
+	header(wrongTimelineRequest)
+	server.Handler().ServeHTTP(wrongTimelineResponse, wrongTimelineRequest)
+	if wrongTimelineResponse.Code != http.StatusNotFound {
+		t.Fatalf("cross-timeline version path was not scoped: %d %s", wrongTimelineResponse.Code, wrongTimelineResponse.Body.String())
+	}
 	approveResponse := httptest.NewRecorder()
 	approveRequest := httptest.NewRequest(http.MethodPost, "/api/v1/projects/"+projectID+"/timelines/"+timelineID+"/versions/"+versionID+"/approve", strings.NewReader(`{}`))
 	header(approveRequest)

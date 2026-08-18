@@ -20,6 +20,9 @@ TimelineVersion là source of truth duy nhất cho placement/edit decision. Rend
 - `source_in_sec`/`source_out_sec` là range trong exact source Asset/Artifact/Scene.
 - IDs Track/Clip ổn định trong Timeline lineage; edit tạo TimelineVersion mới.
 - Document không chứa media bytes, secret, URL hết hạn hoặc filesystem path.
+- Degraded execution state belongs to Job/Step/checkpoint metadata, not the canonical
+  TimelineVersion document. The builder may return it as execution metadata, but it must not
+  persist a root `degraded` field unless the Timeline schema is explicitly versioned to include it.
 
 ## 2. JSON Schema Draft 2020-12
 
@@ -125,6 +128,8 @@ Canonical contract version `1.0`:
         "origin": {"enum": ["ai", "user", "imported", "system"]},
         "confidence": {"type": "number", "minimum": 0, "maximum": 1},
         "proposal_ref": {"type": "string"},
+        "proposal_refs": {"type": "array", "items": {"type": "string", "minLength": 1}, "maxItems": 100, "uniqueItems": true},
+        "evidence_refs": {"type": "array", "items": {"type": "string", "minLength": 1}, "maxItems": 100, "uniqueItems": true},
         "metadata": {"type": "object", "maxProperties": 100}
       }
     },
@@ -358,7 +363,8 @@ JSON Schema không đủ cho các rule sau; Timeline validator bắt buộc enfo
 - Baseline commands are `AddClip`, `RemoveClip`, `MoveClip`, `TrimClip`, `UpdateSubtitle`,
   `ReplaceNarration`, `ChangeTrackOrder` and `UpdateScene`. Command schemas are versioned and identify
   stable Track/Clip IDs rather than JSON array indexes.
-- AI proposal ghi `origin=ai`, `proposal_ref`, confidence/provenance; user edit ghi `origin=user` cho region thay đổi.
+- AI proposal ghi `origin=ai`, `proposal_ref`/`proposal_refs`, `evidence_refs`, confidence/provenance;
+  user edit ghi `origin=user` cho region thay đổi và không được làm mất các refs đó.
 - Concurrent conflict trả current version + safe diff summary; không merge array clip theo index.
 - Approved/locked version edit bằng duplicate/new version. Approval/lock là audit transition, không đổi document bytes.
 - Rollback nghĩa là một guarded domain command tạo version mới dựa trên old content hoặc updates

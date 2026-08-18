@@ -98,6 +98,12 @@ reviewable evidence is recorded.
 | T605 | Internet/VPS production release | T603 | blocked | none | explicit production approval |
 
 Gate C+D, Gate E T300–T350 and the Gate F implementation are present in the current working tree.
-T400–T434 and T550 local/LAN/physical-client functional acceptance, including current-tree T434
-signed install/update/tamper/rollback, pass. Gate F is PASS for this scope; T603 hardened and public
+T400–T434 and T550 source/runtime behavior is implemented for this scope; fresh current-tree T434
+signed artifact verification remains an owner-input release step. T603 hardened and public
 production gates remain separate.
+
+The 2026-08-18 current-tree repair audit added executable proof for the exact movie_recap graph and
+artifact-role contracts, canonical Timeline JSON Schema plus semantic/reference/safety validation,
+and server-authoritative TimelineVersion edit/reload/undo. Full source verification and local T550
+end-to-end acceptance pass. Existing signed T434 staging is stale against the current uncommitted
+web edit and must be rebuilt/re-signed with owner input before release-artifact handoff.

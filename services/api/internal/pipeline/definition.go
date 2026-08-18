@@ -35,6 +35,43 @@ var dependencyConditions = map[string]bool{
 	"success_or_declared_soft": true,
 }
 
+// artifactRoleContract is the reviewed native catalog contract.  The
+// scheduler only sees dependencies; it must not infer these meanings from
+// node keys or executor classes.  A role is a semantic Artifact boundary, not
+// a filesystem name.
+type artifactRoleContract struct {
+	required []string
+	produced []string
+}
+
+var artifactRoleContracts = map[string]artifactRoleContract{
+	"resolve_source_asset":      {required: []string{"source_original"}, produced: []string{"source_probe"}},
+	"prepare_media_assets":      {required: []string{"source_original"}, produced: []string{"prepared_video", "prepared_audio", "source_thumbnails"}},
+	"research_metadata":         {produced: []string{"research_metadata"}},
+	"generate_script":           {},
+	"review_script":             {},
+	"generate_narration":        {produced: []string{"narration_audio"}},
+	"align_audio":               {required: []string{"narration_audio"}, produced: []string{"timing_alignment"}},
+	"detect_scenes":             {required: []string{"prepared_video"}, produced: []string{"scene_index", "scene_thumbnails"}},
+	"extract_transcript":        {required: []string{"prepared_audio"}, produced: []string{"transcript"}},
+	"analyze_scenes":            {required: []string{"scene_index", "scene_thumbnails"}, produced: []string{"scene_analysis"}},
+	"detect_characters":         {required: []string{"scene_thumbnails"}, produced: []string{"character_analysis"}},
+	"embed_media":               {required: []string{"scene_analysis"}, produced: []string{"media_embeddings"}},
+	"generate_match_candidates": {required: []string{"timing_alignment", "scene_index"}, produced: []string{"match_candidates"}},
+	"evaluate_candidates":       {required: []string{"match_candidates"}, produced: []string{"candidate_evaluations"}},
+	"coverage_feedback":         {produced: []string{"coverage_report"}},
+	"translate_subtitles":       {required: []string{"timing_alignment"}, produced: []string{"translated_subtitles"}},
+	"generate_subtitle":         {required: []string{"timing_alignment"}, produced: []string{"subtitle_cues", "subtitle_srt", "subtitle_vtt", "subtitle_ass"}},
+	"review_timeline":           {},
+	"select_candidate":          {required: []string{"candidate_evaluations"}, produced: []string{"selected_match_proposal"}},
+	"build_timeline":            {required: []string{"selected_match_proposal", "narration_audio", "subtitle_cues"}},
+	"mix_audio":                 {required: []string{"narration_audio"}, produced: []string{"mixed_audio", "loudness_report"}},
+	"run_qa_gate":               {required: []string{"mixed_audio"}, produced: []string{"timeline_qa_report"}},
+	"render_timeline":           {required: []string{"mixed_audio"}, produced: []string{"render_video", "render_audio", "render_metadata"}},
+	"validate_deliverable":      {required: []string{"render_video"}, produced: []string{"deliverable_qa"}},
+	"export_clips":              {required: []string{"render_video"}, produced: []string{"clip_exports", "clip_manifest"}},
+}
+
 type Definition struct {
 	SchemaVersion string     `json:"schema_version"`
 	WorkflowKey   string     `json:"workflow_key"`
@@ -167,6 +204,9 @@ func (d Definition) Validate(capabilities CapabilitySet) error {
 		if node.InputContract == "" || node.OutputContract == "" || len(node.InputSchema) == 0 || len(node.OutputSchema) == 0 {
 			return ValidationError{"nodes." + node.Key, "input/output contracts and schemas are required"}
 		}
+		if err := validateArtifactRoles(node); err != nil {
+			return ValidationError{"nodes." + node.Key + ".artifact_roles", err.Error()}
+		}
 		if err := validateJSONSchema(node.InputSchema, "nodes."+node.Key+".input_schema"); err != nil {
 			return ValidationError{"nodes." + node.Key + ".input_schema", err.Error()}
 		}
@@ -241,6 +281,51 @@ func (d Definition) Validate(capabilities CapabilitySet) error {
 	}
 	if visited != len(nodes) {
 		return ValidationError{"nodes", "graph contains a cycle"}
+	}
+	return nil
+}
+
+func validateArtifactRoles(node Node) error {
+	validate := func(name string, roles []string) error {
+		seen := map[string]bool{}
+		for _, role := range roles {
+			if strings.TrimSpace(role) == "" || seen[role] {
+				return fmt.Errorf("%s must contain unique non-empty roles", name)
+			}
+			seen[role] = true
+		}
+		return nil
+	}
+	if err := validate("required_artifact_roles", node.RequiredArtifactRoles); err != nil {
+		return err
+	}
+	if err := validate("produced_artifact_roles", node.ProducedArtifactRoles); err != nil {
+		return err
+	}
+	contract, ok := artifactRoleContracts[node.Type]
+	if !ok {
+		return nil
+	}
+	contains := func(have []string, want string) bool {
+		for _, role := range have {
+			if role == want {
+				return true
+			}
+		}
+		return false
+	}
+	for _, role := range contract.required {
+		if !contains(node.RequiredArtifactRoles, role) {
+			return fmt.Errorf("required role %q is missing", role)
+		}
+	}
+	for _, role := range contract.produced {
+		if !contains(node.ProducedArtifactRoles, role) {
+			return fmt.Errorf("produced role %q is missing", role)
+		}
+	}
+	if len(node.RequiredArtifactRoles) != len(contract.required) || len(node.ProducedArtifactRoles) != len(contract.produced) {
+		return fmt.Errorf("artifact roles contain an undeclared native role")
 	}
 	return nil
 }

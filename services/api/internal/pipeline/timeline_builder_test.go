@@ -3,6 +3,8 @@ package pipeline
 import (
 	"encoding/json"
 	"testing"
+
+	"github.com/nhathao-nguyen/NH-Media/services/api/internal/domain"
 )
 
 func TestBuildTimelinePreservesEvidenceAndUserOverride(t *testing.T) {
@@ -44,9 +46,14 @@ func TestBuildTimelineRejectsUnknownOverrideAndProducesStableHash(t *testing.T) 
 	if _, err := BuildTimeline(input, nil); err == nil {
 		t.Fatal("arbitrary override was accepted")
 	}
+	input.Overrides = nil
+	input.Tracks[0].Clips[0].Origin = "provider"
+	if _, err := BuildTimeline(input, nil); err == nil {
+		t.Fatal("invalid proposal origin was silently normalized")
+	}
 }
 
-func TestBuildTimelineAcceptsReferencesStructurallyAndRecordsDegradedInputs(t *testing.T) {
+func TestBuildTimelineAcceptsReferencesStructurallyAndKeepsDegradedInputsOutsideDocument(t *testing.T) {
 	value, err := BuildTimeline(BuildTimelineInput{
 		TimelineID: "timeline_002", TimelineVersionID: "timeline_version_002", ProjectID: "project_002", Version: 1, DurationSec: 5,
 		Tracks:   []TimelineTrack{{ID: "video_1", Kind: "video", Name: "Video", Clips: []ClipProposal{{ID: "clip_1", TimelineIn: 0, TimelineOut: 2, Origin: "ai", Source: map[string]any{"type": "asset", "asset_id": "asset_1", "artifact_id": "artifact_1"}}}}},
@@ -59,8 +66,13 @@ func TestBuildTimelineAcceptsReferencesStructurallyAndRecordsDegradedInputs(t *t
 	if err := json.Unmarshal(value.Document, &document); err != nil {
 		t.Fatal(err)
 	}
-	degraded, ok := document["degraded"].([]any)
-	if !ok || len(degraded) != 1 || degraded[0].(map[string]any)["soft"] != true {
-		t.Fatalf("degraded input was not preserved: %#v", document["degraded"])
+	if _, exists := document["degraded"]; exists {
+		t.Fatal("execution degraded metadata leaked into canonical TimelineVersion")
+	}
+	if len(value.Degraded) != 1 || !value.Degraded[0].Soft || value.Degraded[0].NodeKey != "extract_transcript" {
+		t.Fatalf("degraded execution metadata was not preserved: %#v", value.Degraded)
+	}
+	if _, err := domain.ValidateTimeline(value.Document, domain.TimelineValidationOptions{StructuralOnly: true}); err != nil {
+		t.Fatalf("builder output did not pass production validator: %v", err)
 	}
 }

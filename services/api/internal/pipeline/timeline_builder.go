@@ -62,6 +62,9 @@ type BuiltTimeline struct {
 	ContentHash      string
 	InputFingerprint string
 	Origin           string
+	// Degraded is execution metadata.  It is deliberately not embedded in the
+	// canonical TimelineVersion document, whose schema is renderer-authoritative.
+	Degraded []DegradedInput
 }
 
 // BuildTimeline compiles selected proposals into the canonical renderer input.
@@ -78,14 +81,14 @@ func BuildTimeline(input BuildTimelineInput, resolver domain.TimelineReferenceRe
 		}
 		overrides[override.ClipID] = cloneMap(override.Fields)
 	}
-	degraded := make([]any, 0, len(input.Degraded))
+	degraded := make([]DegradedInput, 0, len(input.Degraded))
 	for _, item := range input.Degraded {
 		if item.NodeKey == "" || item.Reason == "" || item.Consequence == "" {
 			return BuiltTimeline{}, errors.New("degraded input requires node, reason and consequence")
 		}
-		degraded = append(degraded, map[string]any{
-			"node_key": item.NodeKey, "reason": item.Reason, "consequence": item.Consequence,
-			"soft": item.Soft, "evidence_refs": append([]string(nil), item.EvidenceRefs...),
+		degraded = append(degraded, DegradedInput{
+			NodeKey: item.NodeKey, Reason: item.Reason, Consequence: item.Consequence,
+			Soft: item.Soft, EvidenceRefs: append([]string(nil), item.EvidenceRefs...),
 		})
 	}
 	trackIDs := map[string]bool{}
@@ -101,10 +104,14 @@ func BuildTimeline(input BuildTimelineInput, resolver domain.TimelineReferenceRe
 			if proposal.ID == "" || clipIDs[proposal.ID] || proposal.TimelineOut <= proposal.TimelineIn {
 				return BuiltTimeline{}, fmt.Errorf("clip %q is missing, duplicated or has invalid range", proposal.ID)
 			}
+			origin, err := checkedOrigin(proposal.Origin)
+			if err != nil {
+				return BuiltTimeline{}, fmt.Errorf("clip %q: %w", proposal.ID, err)
+			}
 			clipIDs[proposal.ID] = true
 			clip := map[string]any{
 				"id": proposal.ID, "timeline_in_sec": proposal.TimelineIn, "timeline_out_sec": proposal.TimelineOut,
-				"source": cloneMap(proposal.Source), "origin": normalizedOrigin(proposal.Origin),
+				"source": cloneMap(proposal.Source), "origin": origin,
 			}
 			if len(proposal.ProposalRefs) > 0 {
 				clip["proposal_refs"] = append([]string(nil), proposal.ProposalRefs...)
@@ -138,7 +145,7 @@ func BuildTimeline(input BuildTimelineInput, resolver domain.TimelineReferenceRe
 	document := map[string]any{
 		"schema_version": "1.0", "timeline_id": input.TimelineID, "timeline_version_id": input.TimelineVersionID,
 		"project_id": input.ProjectID, "version": input.Version, "duration_sec": input.DurationSec,
-		"tracks": tracks, "degraded": degraded, "metadata": metadata,
+		"tracks": tracks, "metadata": metadata,
 	}
 	canonical, err := domain.CanonicalJSON(document)
 	if err != nil {
@@ -155,10 +162,10 @@ func BuildTimeline(input BuildTimelineInput, resolver domain.TimelineReferenceRe
 	if err != nil {
 		return BuiltTimeline{}, err
 	}
-	fingerprintPayload := map[string]any{"document": json.RawMessage(canonical), "proposal_count": len(clipIDs), "override_count": len(overrides)}
+	fingerprintPayload := map[string]any{"document": json.RawMessage(canonical), "degraded": degraded, "proposal_count": len(clipIDs), "override_count": len(overrides)}
 	fingerprintBytes, _ := json.Marshal(fingerprintPayload)
 	digest := sha256.Sum256(fingerprintBytes)
-	return BuiltTimeline{Document: canonical, ContentHash: hash, InputFingerprint: hex.EncodeToString(digest[:]), Origin: "system"}, nil
+	return BuiltTimeline{Document: canonical, ContentHash: hash, InputFingerprint: hex.EncodeToString(digest[:]), Origin: "system", Degraded: degraded}, nil
 }
 
 func applyOverride(clip map[string]any, fields map[string]any) error {
@@ -172,12 +179,12 @@ func applyOverride(clip map[string]any, fields map[string]any) error {
 	return nil
 }
 
-func normalizedOrigin(origin string) string {
+func checkedOrigin(origin string) (string, error) {
 	switch origin {
 	case "ai", "user", "imported", "system":
-		return origin
+		return origin, nil
 	default:
-		return "ai"
+		return "", fmt.Errorf("unsupported origin %q", origin)
 	}
 }
 

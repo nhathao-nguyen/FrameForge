@@ -11,10 +11,10 @@ owner: repository owner / task assignee
 | Field | Value | Evidence |
 |---|---|---|
 | Working branch | `implementation/bootstrap` | `git branch --show-current` |
-| Baseline commit | `f640524e1e91ed21c3bed66702d3b6b50e55b9fb` (`docs: sync Gate E checkpoint handoff state`) | final narrow Gate E acceptance repair started from this pushed commit |
-| Acceptance checkpoint | `564ef99` (`checkpoint: finalize Gate E acceptance`) | Gate E code, tests and evidence committed after full local/live PASS |
+| Baseline commit | `85748e69568f14487f81ed1c9890e5a711e6939e` (`checkpoint: close Gate F acceptance`) | user-requested Gate F audit baseline; implementation changes remain uncommitted |
+| Acceptance checkpoint | `85748e6` | user-requested starting checkpoint; no commit/push performed by this task |
 | Tracking branch | `origin/implementation/bootstrap` | `git status --short --branch` |
-| Push/merge action | `564ef99` pushed to `origin/implementation/bootstrap` after final PASS | `git push origin implementation/bootstrap`; remote hash verified after push |
+| Push/merge action | none | working tree changes are intentionally uncommitted and unpushed |
 
 ## Gate and phase
 
@@ -38,10 +38,11 @@ owner: repository owner / task assignee
   snapshot/replay/reconnect tests pass against the current working tree.
   T400/Gate F and desktop T550 acceptance were explicitly outside that Gate E checkpoint; their
   current status is recorded below. Hardened T603 and public/VPS T605 remain future work.
-- Gate F status: PASS for the current T400–T434 and T550 scope. Current-tree T434 signed
-  install/update/tamper/rollback passes, and the current LAN client script has now passed from the
-  controlled physical second device `DESKTOP-92ICS6C` at `192.168.1.29` against server
-  `192.168.1.18` with `external_to_server=true`.
+- Gate F implementation status: PASS for the repaired T400–T434 source behavior and current local
+  T550 runtime acceptance. The existing signed T434 staging package is stale against the current
+  uncommitted web edit; fresh N/N+1 owner re-signing is required before release-artifact handoff.
+  The controlled physical second-device evidence remains separately recorded and is not used to
+  hide this current package-freshness limitation.
 
 ## Current evidence
 
@@ -74,7 +75,9 @@ owner: repository owner / task assignee
   hashed `auth_sessions` row; direct multipart PUT to private MinIO returned an ETag, complete created a
   durable `asset_probe` Job, `asset_uploads.status=completed`, and Asset status `validating`; duplicate
   Project request replayed the same response with one database row.
-- Gate F evidence in this working tree covers the native immutable DAG catalog/runtime, durable typed
+- Current working-tree audit evidence covers the native immutable DAG catalog/runtime, durable typed
+  artifact-role contracts, canonical Timeline schema/semantic validation and server-authoritative
+  edit/reload/undo chain, in addition to the existing Gate F evidence covering the native immutable DAG catalog/runtime, durable typed
   review decisions, timeline builder, web SDK/editor, Tauri remote-only shell, artifact signed URL
   boundary, direct browser upload, local/LAN startup and the upload-to-MinIO/Go-worker/Python/FFmpeg
   acceptance harness, current-tree signed NSIS install/update/tamper/rollback, and the current
@@ -97,9 +100,9 @@ vendors are later configuration choices.
 ## Handoff
 
 ```text
-Task: Gate F — T400–T434 and T550 client/local acceptance slice
-  Status: PASS; T400–T434 implementation/evidence and T550 local/LAN/physical-client acceptance
-  are current and reviewable
+  Task: Gate F — T400–T434 and T550 client/local acceptance slice
+  Status: IMPLEMENTATION PASS; T402/T420/T432 and local T550 are current and reviewable. T434
+  signed staging must be rebuilt/re-signed for the current working tree before release handoff.
 Boundary: Canonical execution transitions/events, queue, scheduling, leases, media/AI worker contracts,
   durable graph bootstrap, controls, checkpoint/DLQ and SSE boundary
   Application code: API, persistence, media worker, Python worker, contracts, and execution adapters

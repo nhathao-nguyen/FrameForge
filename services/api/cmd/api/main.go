@@ -36,10 +36,14 @@ func main() {
 	if err != nil {
 		log.Fatalf("invalid storage configuration: %v", err)
 	}
-	var productBackend product.Backend = product.NewStoreWithStorage("ws_default", backend)
+	dsn := strings.TrimSpace(os.Getenv("NH_MEDIA_DATABASE_URL"))
+	if dsn == "" {
+		log.Fatalf("NH_MEDIA_DATABASE_URL is required; the in-memory Product backend is test-only")
+	}
+	var productBackend product.Backend
 	var runtimeQueue *queue.RedisQueue
 	var database *sql.DB
-	if dsn := os.Getenv("NH_MEDIA_DATABASE_URL"); dsn != "" {
+	if dsn != "" {
 		if backend == nil {
 			log.Fatalf("durable Product API requires NH_STORAGE_ENDPOINT or NH_STORAGE_BACKEND=local")
 		}

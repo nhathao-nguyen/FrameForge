@@ -2,6 +2,8 @@ package pipeline
 
 import (
 	"context"
+	"encoding/json"
+	"reflect"
 	"testing"
 )
 
@@ -53,8 +55,171 @@ func TestMovieRecapValidatesAndHashIsStable(t *testing.T) {
 	if _, err := VerifyImmutableActive(first, definition, AllCapabilities()); err == nil {
 		t.Fatal("active definition mutation was accepted")
 	}
-	if catalog := BuiltinCatalog(); len(catalog) != 1 || catalog["movie_recap"].Version != 3 {
+	if catalog := BuiltinCatalog(); len(catalog) != 1 || catalog["movie_recap"].Version != 4 {
 		t.Fatalf("native catalog is not registered: %#v", catalog)
+	}
+}
+
+func TestMovieRecapCriticalSemanticsAreExact(t *testing.T) {
+	definition := MovieRecap()
+	nodes := definition.NodeMap()
+	dependency := func(nodeKey, dependencyKey string) Dependency {
+		for _, value := range nodes[nodeKey].DependsOn {
+			if value.NodeKey == dependencyKey {
+				return value
+			}
+		}
+		t.Fatalf("%s is missing dependency %s", nodeKey, dependencyKey)
+		return Dependency{}
+	}
+	if value := dependency("generate_subtitle", "align_audio"); !value.Required || value.Condition != "success_or_declared_soft" {
+		t.Fatalf("generate_subtitle must require alignment: %+v", value)
+	}
+	if value := dependency("generate_subtitle", "translate_subtitles"); value.Required || value.Condition != "soft" {
+		t.Fatalf("translation must be optional/soft: %+v", value)
+	}
+	for _, value := range nodes["generate_subtitle"].DependsOn {
+		if value.NodeKey == "generate_script" {
+			t.Fatal("generate_subtitle regressed to a direct generate_script dependency")
+		}
+	}
+	if nodes["export_clips"].ExecutionClass != "render" {
+		t.Fatalf("export_clips must use render execution class, got %q", nodes["export_clips"].ExecutionClass)
+	}
+	assertRoles := func(nodeKey string, required, produced []string) {
+		node := nodes[nodeKey]
+		if len(node.RequiredArtifactRoles) != len(required) || len(node.ProducedArtifactRoles) != len(produced) {
+			t.Fatalf("%s artifact roles drifted: required=%v produced=%v", nodeKey, node.RequiredArtifactRoles, node.ProducedArtifactRoles)
+		}
+		for index, role := range required {
+			if node.RequiredArtifactRoles[index] != role {
+				t.Fatalf("%s required role %d: got %q want %q", nodeKey, index, node.RequiredArtifactRoles[index], role)
+			}
+		}
+		for index, role := range produced {
+			if node.ProducedArtifactRoles[index] != role {
+				t.Fatalf("%s produced role %d: got %q want %q", nodeKey, index, node.ProducedArtifactRoles[index], role)
+			}
+		}
+	}
+	assertRoles("align_audio", []string{"narration_audio"}, []string{"timing_alignment"})
+	assertRoles("generate_subtitle", []string{"timing_alignment"}, []string{"subtitle_cues", "subtitle_srt", "subtitle_vtt", "subtitle_ass"})
+	assertRoles("export_clips", []string{"render_video"}, []string{"clip_exports", "clip_manifest"})
+}
+
+func TestMovieRecapCatalogMatchesCanonicalNodePolicies(t *testing.T) {
+	definition := MovieRecap()
+	nodes := definition.NodeMap()
+	type expectedNode struct {
+		class, failure, review string
+		deps                   map[string]Dependency
+	}
+	required := func(keys ...string) map[string]Dependency {
+		result := map[string]Dependency{}
+		for _, key := range keys {
+			result[key] = Dependency{NodeKey: key, Required: true, Condition: "success_or_declared_soft"}
+		}
+		return result
+	}
+	optional := func(result map[string]Dependency, keys ...string) map[string]Dependency {
+		for _, key := range keys {
+			result[key] = Dependency{NodeKey: key, Required: false, Condition: "soft"}
+		}
+		return result
+	}
+	expected := map[string]expectedNode{
+		"resolve_source_asset":      {"probe", "hard", "none", required()},
+		"prepare_media_assets":      {"media", "hard", "none", required("resolve_source_asset")},
+		"research_metadata":         {"ai", "soft", "none", required("resolve_source_asset")},
+		"generate_script":           {"ai", "hard", "none", required("research_metadata")},
+		"review_script":             {"system", "hard", "approval_completes_node", required("generate_script")},
+		"generate_narration":        {"ai", "hard", "none", required("review_script")},
+		"align_audio":               {"ml", "soft", "none", required("generate_narration")},
+		"detect_scenes":             {"ml", "soft", "none", required("prepare_media_assets")},
+		"extract_transcript":        {"ml", "soft", "none", required("prepare_media_assets")},
+		"analyze_scenes":            {"ai", "soft", "none", optional(required("detect_scenes"), "extract_transcript")},
+		"detect_characters":         {"ml", "soft", "none", required("detect_scenes")},
+		"embed_media":               {"ml", "soft", "none", optional(required("analyze_scenes"), "generate_script", "detect_characters")},
+		"generate_match_candidates": {"ml", "hard", "none", optional(required("generate_script", "detect_scenes", "align_audio"), "extract_transcript", "analyze_scenes", "detect_characters", "embed_media")},
+		"evaluate_candidates":       {"system", "hard", "none", required("generate_match_candidates")},
+		"select_candidate":          {"system", "hard", "none", required("evaluate_candidates")},
+		"coverage_feedback":         {"ai", "soft", "none", required("select_candidate")},
+		"translate_subtitles":       {"ai", "soft", "none", required("align_audio")},
+		"generate_subtitle":         {"system", "hard", "none", optional(required("align_audio"), "translate_subtitles")},
+		"build_timeline":            {"system", "hard", "none", required("select_candidate", "generate_narration", "generate_subtitle")},
+		"review_timeline":           {"system", "hard", "approval_completes_node", required("build_timeline")},
+		"mix_audio":                 {"media", "hard", "none", required("build_timeline", "review_timeline")},
+		"run_qa_gate":               {"system", "hard", "none", required("build_timeline", "mix_audio")},
+		"render_timeline":           {"render", "hard", "none", required("review_timeline", "run_qa_gate")},
+		"validate_deliverable":      {"probe", "hard", "none", required("render_timeline")},
+		"export_clips":              {"render", "soft", "none", required("validate_deliverable")},
+	}
+	if len(nodes) != len(expected) {
+		t.Fatalf("canonical movie_recap node count drifted: got %d want %d", len(nodes), len(expected))
+	}
+	for key, want := range expected {
+		node, ok := nodes[key]
+		if !ok {
+			t.Fatalf("canonical movie_recap node %q is missing", key)
+		}
+		if node.ExecutionClass != want.class || node.FailureMode != want.failure || node.ReviewPolicy != want.review {
+			t.Fatalf("node %s policy drifted: class=%q failure=%q review=%q", key, node.ExecutionClass, node.FailureMode, node.ReviewPolicy)
+		}
+		gotDeps := map[string]Dependency{}
+		for _, dependency := range node.DependsOn {
+			gotDeps[dependency.NodeKey] = dependency
+		}
+		if !reflect.DeepEqual(gotDeps, want.deps) {
+			t.Fatalf("node %s dependencies drifted: got=%v want=%v", key, gotDeps, want.deps)
+		}
+		for direction, raw := range map[string]json.RawMessage{"input": node.InputSchema, "output": node.OutputSchema} {
+			if string(raw) == `{"type":"object"}` {
+				t.Fatalf("node %s has an unbounded generic %s schema", key, direction)
+			}
+			var schema map[string]any
+			if err := json.Unmarshal(raw, &schema); err != nil {
+				t.Fatalf("node %s %s schema is invalid: %v", key, direction, err)
+			}
+			if schema["additionalProperties"] != false {
+				t.Fatalf("node %s %s schema must close additional properties", key, direction)
+			}
+		}
+	}
+	var subtitleInput map[string]any
+	if err := json.Unmarshal(nodes["generate_subtitle"].InputSchema, &subtitleInput); err != nil {
+		t.Fatal(err)
+	}
+	encoded, _ := json.Marshal(subtitleInput["required"])
+	if string(encoded) != `["timing_alignment_artifact_id","script_version_id"]` {
+		t.Fatalf("subtitle input must require alignment and script version: %s", encoded)
+	}
+	if _, ok := subtitleInput["properties"].(map[string]any)["translated_subtitles_artifact_id"]; !ok {
+		t.Fatal("subtitle input lost optional translated subtitle reference")
+	}
+	if got := nodes["export_clips"].Retry.MaxAttempts; got != 2 {
+		t.Fatalf("export_clips must retain P-RENDER retry budget, got %d", got)
+	}
+	if got := nodes["export_clips"].Timeout.WallTimeSec; got != 14400 {
+		t.Fatalf("export_clips must retain P-RENDER wall timeout, got %d", got)
+	}
+	if err := definition.Validate(AllCapabilities()); err != nil {
+		t.Fatalf("canonical graph no longer validates: %v", err)
+	}
+}
+
+func TestValidatorFailsClosedWhenNativeArtifactRoleIsMissing(t *testing.T) {
+	node := testNode("align_audio", "narration/v1", "alignment/v1")
+	node.Type = "align_audio"
+	definition := testDefinition([]Node{node})
+	if err := definition.Validate(AllCapabilities()); err == nil {
+		t.Fatal("native artifact-bearing node without required roles was accepted")
+	}
+	node = testNode("review_script", "script/v1", "script/v1")
+	node.Type = "review_script"
+	node.ProducedArtifactRoles = []string{"invented_role"}
+	definition = testDefinition([]Node{node})
+	if err := definition.Validate(AllCapabilities()); err == nil {
+		t.Fatal("native node with an undeclared artifact role was accepted")
 	}
 }
 

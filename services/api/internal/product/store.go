@@ -51,8 +51,10 @@ type Backend interface {
 	CreateNarration(string, string, string, string, map[string]any, map[string]any) (*Narration, error)
 	GetNarration(string, string, string) (*Narration, error)
 	CreateTimeline(string, string, string, json.RawMessage) (*Timeline, *TimelineVersion, error)
+	ListTimelines(string, string) ([]Timeline, error)
 	GetTimeline(string, string, string) (*Timeline, error)
 	GetTimelineVersion(string, string, string) (*TimelineVersion, error)
+	ListTimelineVersions(string, string, string) ([]TimelineVersion, error)
 	AddTimelineVersion(string, string, string, string, string, json.RawMessage, int64) (*TimelineVersion, error)
 	SetTimelineVersionStatus(string, string, string, string, string) (*TimelineVersion, error)
 	ValidateTimeline(string, string, string) (string, error)
@@ -1136,16 +1138,22 @@ func (s *Store) CreateTimeline(workspaceID, projectID, origin string, document j
 	if _, err := s.GetProject(workspaceID, projectID); err != nil {
 		return nil, nil, err
 	}
-	hash, err := domain.ValidateTimeline(document, domain.TimelineValidationOptions{Resolver: s})
+	timelineID := newID("timeline")
+	versionID := newID("tlv")
+	normalized, err := domain.NormalizeTimelineIdentity(document, timelineID, versionID, 1)
 	if err != nil {
 		return nil, nil, err
 	}
-	if documentProject, err := timelineDocumentProject(document); err != nil || documentProject != projectID {
+	hash, err := domain.ValidateTimeline(normalized, domain.TimelineValidationOptions{Resolver: s})
+	if err != nil {
+		return nil, nil, err
+	}
+	if documentProject, err := timelineDocumentProject(normalized); err != nil || documentProject != projectID {
 		return nil, nil, errors.New("timeline document belongs to another project")
 	}
 	timestamp := now()
-	timeline := &Timeline{ID: newID("timeline"), ProjectID: projectID, Status: "active", Revision: 1, CreatedAt: timestamp, Versions: []string{}}
-	version := &TimelineVersion{ID: newID("tlv"), TimelineID: timeline.ID, ProjectID: projectID, Version: 1, Status: "draft", SchemaVersion: domain.TimelineSchemaVersion, Document: append(json.RawMessage(nil), document...), ContentHash: hash, Origin: origin, CreatedAt: timestamp}
+	timeline := &Timeline{ID: timelineID, ProjectID: projectID, Status: "active", Revision: 1, CreatedAt: timestamp, Versions: []string{}}
+	version := &TimelineVersion{ID: versionID, TimelineID: timeline.ID, ProjectID: projectID, Version: 1, Status: "draft", SchemaVersion: domain.TimelineSchemaVersion, Document: append(json.RawMessage(nil), normalized...), ContentHash: hash, Origin: origin, CreatedAt: timestamp}
 	timeline.CurrentVersionID = version.ID
 	timeline.Versions = append(timeline.Versions, version.ID)
 	s.mu.Lock()
@@ -1166,6 +1174,28 @@ func (s *Store) GetTimeline(workspaceID, projectID, id string) (*Timeline, error
 	}
 	return cloneTimeline(value), nil
 }
+
+func (s *Store) ListTimelines(workspaceID, projectID string) ([]Timeline, error) {
+	if _, err := s.GetProject(workspaceID, projectID); err != nil {
+		return nil, err
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	values := make([]Timeline, 0)
+	for _, timeline := range s.timelines {
+		if timeline.ProjectID == projectID && timeline.Status != "deleted" {
+			values = append(values, *cloneTimeline(timeline))
+		}
+	}
+	sort.Slice(values, func(i, j int) bool {
+		if values[i].CreatedAt.Equal(values[j].CreatedAt) {
+			return values[i].ID < values[j].ID
+		}
+		return values[i].CreatedAt.Before(values[j].CreatedAt)
+	})
+	return values, nil
+}
+
 func (s *Store) GetTimelineVersion(workspaceID, projectID, id string) (*TimelineVersion, error) {
 	if _, err := s.GetProject(workspaceID, projectID); err != nil {
 		return nil, ErrNotFound
@@ -1178,15 +1208,44 @@ func (s *Store) GetTimelineVersion(workspaceID, projectID, id string) (*Timeline
 	}
 	return cloneTimelineVersion(value), nil
 }
+
+func (s *Store) ListTimelineVersions(workspaceID, projectID, timelineID string) ([]TimelineVersion, error) {
+	timeline, err := s.GetTimeline(workspaceID, projectID, timelineID)
+	if err != nil {
+		return nil, err
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	values := make([]TimelineVersion, 0, len(timeline.Versions))
+	for _, versionID := range timeline.Versions {
+		if version := s.timelineVers[versionID]; version != nil {
+			values = append(values, *cloneTimelineVersion(version))
+		}
+	}
+	return values, nil
+}
 func (s *Store) AddTimelineVersion(workspaceID, projectID, timelineID, basedOn, origin string, document json.RawMessage, expectedRevision int64) (*TimelineVersion, error) {
 	if _, err := s.GetProject(workspaceID, projectID); err != nil {
 		return nil, err
 	}
-	hash, err := domain.ValidateTimeline(document, domain.TimelineValidationOptions{Resolver: s})
+	if strings.TrimSpace(basedOn) == "" {
+		return nil, ErrConflict
+	}
+	timelineSnapshot, err := s.GetTimeline(workspaceID, projectID, timelineID)
 	if err != nil {
 		return nil, err
 	}
-	if documentProject, err := timelineDocumentProject(document); err != nil || documentProject != projectID {
+	versionID := newID("tlv")
+	nextVersion := len(timelineSnapshot.Versions) + 1
+	normalized, err := domain.NormalizeTimelineIdentity(document, timelineID, versionID, nextVersion)
+	if err != nil {
+		return nil, err
+	}
+	hash, err := domain.ValidateTimeline(normalized, domain.TimelineValidationOptions{Resolver: s})
+	if err != nil {
+		return nil, err
+	}
+	if documentProject, err := timelineDocumentProject(normalized); err != nil || documentProject != projectID {
 		return nil, errors.New("timeline document belongs to another project")
 	}
 	s.mu.Lock()
@@ -1198,13 +1257,14 @@ func (s *Store) AddTimelineVersion(workspaceID, projectID, timelineID, basedOn, 
 	if timeline.Revision != expectedRevision {
 		return nil, ErrConflict
 	}
-	if basedOn != "" {
-		base, ok := s.timelineVers[basedOn]
-		if !ok || base.TimelineID != timelineID {
-			return nil, ErrConflict
-		}
+	base, ok := s.timelineVers[basedOn]
+	if !ok || base.TimelineID != timelineID || timeline.CurrentVersionID != basedOn {
+		return nil, ErrConflict
 	}
-	version := &TimelineVersion{ID: newID("tlv"), TimelineID: timelineID, ProjectID: projectID, Version: len(timeline.Versions) + 1, Status: "draft", SchemaVersion: domain.TimelineSchemaVersion, Document: append(json.RawMessage(nil), document...), ContentHash: hash, Origin: origin, BasedOnVersionID: basedOn, CreatedAt: now()}
+	if len(timeline.Versions)+1 != nextVersion {
+		return nil, ErrConflict
+	}
+	version := &TimelineVersion{ID: versionID, TimelineID: timelineID, ProjectID: projectID, Version: nextVersion, Status: "draft", SchemaVersion: domain.TimelineSchemaVersion, Document: append(json.RawMessage(nil), normalized...), ContentHash: hash, Origin: origin, BasedOnVersionID: basedOn, CreatedAt: now()}
 	timeline.Versions = append(timeline.Versions, version.ID)
 	timeline.CurrentVersionID = version.ID
 	timeline.Revision++

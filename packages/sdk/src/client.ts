@@ -163,6 +163,14 @@ export class ProductApiClient {
     return this.request<Record<string, unknown>>("/projects/" + encode(projectId) + "/timelines/" + encode(timelineId));
   }
 
+  async listTimelines(projectId: string, cursor?: string): Promise<Page<Record<string, unknown>>> {
+    return this.request<Page<Record<string, unknown>>>("/projects/" + encode(projectId) + "/timelines" + query({ cursor }));
+  }
+
+  async listTimelineVersions(projectId: string, timelineId: string, cursor?: string): Promise<Page<Record<string, unknown>>> {
+    return this.request<Page<Record<string, unknown>>>("/projects/" + encode(projectId) + "/timelines/" + encode(timelineId) + "/versions" + query({ cursor }));
+  }
+
   async timelineCommand(projectId: string, timelineId: string, versionId: string, command: Record<string, unknown>, expectedRevision?: number): Promise<Record<string, unknown>> {
     const revision = expectedRevision ?? (typeof command.expected_revision === "number" ? command.expected_revision : undefined);
     return this.request<Record<string, unknown>>("/projects/" + encode(projectId) + "/timelines/" + encode(timelineId) + "/commands", {
@@ -170,6 +178,15 @@ export class ProductApiClient {
       body: { ...command, based_on_version_id: versionId },
       ifMatch: typeof revision === "number" ? "\"" + revision + "\"" : undefined,
     });
+  }
+
+  async restoreTimelineClip(projectId: string, timelineId: string, versionId: string, restoreFromVersionId: string, clipId: string, clip: Record<string, unknown>, expectedVersion: number, expectedRevision: number): Promise<Record<string, unknown>> {
+    return this.timelineCommand(projectId, timelineId, versionId, {
+      kind: "RestoreClip",
+      schema_version: "1.0",
+      expected_version: expectedVersion,
+      payload: { clip_id: clipId, restore_from_version_id: restoreFromVersionId, clip },
+    }, expectedRevision);
   }
 
   async createScript(projectId: string, body: Record<string, unknown>): Promise<Record<string, unknown>> {

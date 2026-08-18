@@ -37,8 +37,10 @@ func (s *Server) registerProjectRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v1/projects/{project_id}/narrations", s.createNarration)
 	mux.HandleFunc("GET /api/v1/projects/{project_id}/narrations/{narration_id}", s.getNarration)
 	mux.HandleFunc("POST /api/v1/projects/{project_id}/timelines", s.createTimeline)
+	mux.HandleFunc("GET /api/v1/projects/{project_id}/timelines", s.listTimelines)
 	mux.HandleFunc("GET /api/v1/projects/{project_id}/timelines/{timeline_id}", s.getTimeline)
 	mux.HandleFunc("POST /api/v1/projects/{project_id}/timelines/{timeline_id}/commands", s.timelineCommand)
+	mux.HandleFunc("GET /api/v1/projects/{project_id}/timelines/{timeline_id}/versions", s.listTimelineVersions)
 	mux.HandleFunc("GET /api/v1/projects/{project_id}/timelines/{timeline_id}/versions/{version_id}", s.getTimelineVersion)
 	mux.HandleFunc("POST /api/v1/projects/{project_id}/timelines/{timeline_id}/versions/{version_id}/validate", s.validateTimeline)
 	mux.HandleFunc("POST /api/v1/projects/{project_id}/timelines/{timeline_id}/versions/{version_id}/approve", s.approveTimeline)
@@ -805,6 +807,10 @@ func (s *Server) getScriptVersion(w http.ResponseWriter, r *http.Request) {
 		s.storeError(w, r, err)
 		return
 	}
+	if value.ScriptID != r.PathValue("script_id") {
+		s.storeError(w, r, product.ErrNotFound)
+		return
+	}
 	s.writeJSON(w, r, http.StatusOK, value)
 }
 func (s *Server) approveScriptVersion(w http.ResponseWriter, r *http.Request) {
@@ -905,6 +911,20 @@ func (s *Server) getTimeline(w http.ResponseWriter, r *http.Request) {
 	}
 	s.writeRevisionJSON(w, r, http.StatusOK, value, value.Revision)
 }
+
+func (s *Server) listTimelines(w http.ResponseWriter, r *http.Request) {
+	principal, ok := requirePrincipal(s, w, r)
+	if !ok {
+		return
+	}
+	values, err := s.Product.ListTimelines(principal.WorkspaceID, r.PathValue("project_id"))
+	if err != nil {
+		s.storeError(w, r, err)
+		return
+	}
+	s.writeJSON(w, r, http.StatusOK, map[string]any{"items": values, "next_cursor": nil})
+}
+
 func (s *Server) getTimelineVersion(w http.ResponseWriter, r *http.Request) {
 	principal, ok := requirePrincipal(s, w, r)
 	if !ok {
@@ -915,8 +935,26 @@ func (s *Server) getTimelineVersion(w http.ResponseWriter, r *http.Request) {
 		s.storeError(w, r, err)
 		return
 	}
+	if value.TimelineID != r.PathValue("timeline_id") {
+		s.storeError(w, r, product.ErrNotFound)
+		return
+	}
 	s.writeJSON(w, r, http.StatusOK, value)
 }
+
+func (s *Server) listTimelineVersions(w http.ResponseWriter, r *http.Request) {
+	principal, ok := requirePrincipal(s, w, r)
+	if !ok {
+		return
+	}
+	values, err := s.Product.ListTimelineVersions(principal.WorkspaceID, r.PathValue("project_id"), r.PathValue("timeline_id"))
+	if err != nil {
+		s.storeError(w, r, err)
+		return
+	}
+	s.writeJSON(w, r, http.StatusOK, map[string]any{"items": values, "next_cursor": nil})
+}
+
 func (s *Server) validateTimeline(w http.ResponseWriter, r *http.Request) {
 	principal, ok := requirePrincipal(s, w, r)
 	if !ok {
@@ -925,6 +963,10 @@ func (s *Server) validateTimeline(w http.ResponseWriter, r *http.Request) {
 	value, err := s.Product.GetTimelineVersion(principal.WorkspaceID, r.PathValue("project_id"), r.PathValue("version_id"))
 	if err != nil {
 		s.storeError(w, r, err)
+		return
+	}
+	if value.TimelineID != r.PathValue("timeline_id") {
+		s.storeError(w, r, product.ErrNotFound)
 		return
 	}
 	hash, validationErr := s.Product.ValidateTimeline(principal.WorkspaceID, r.PathValue("project_id"), value.ID)
@@ -961,6 +1003,32 @@ func (s *Server) timelineCommand(w http.ResponseWriter, r *http.Request) {
 	if base.TimelineID != timeline.ID {
 		s.writeError(w, r, http.StatusPreconditionFailed, "VERSION_CONFLICT", "The base version does not belong to this timeline.")
 		return
+	}
+	if timeline.CurrentVersionID != base.ID {
+		s.writeError(w, r, http.StatusPreconditionFailed, "VERSION_CONFLICT", "Timeline commands must be based on the current TimelineVersion.")
+		return
+	}
+	if command.Kind == "RestoreClip" {
+		restoreVersionID, _ := command.Payload["restore_from_version_id"].(string)
+		if restoreVersionID == "" {
+			s.writeError(w, r, http.StatusUnprocessableEntity, "TIMELINE_INVALID", "RestoreClip requires a historical source version.")
+			return
+		}
+		restore, restoreErr := s.Product.GetTimelineVersion(principal.WorkspaceID, r.PathValue("project_id"), restoreVersionID)
+		if restoreErr != nil || restore.TimelineID != timeline.ID || restore.ProjectID != timeline.ProjectID || restore.ID == base.ID || restore.Version >= base.Version {
+			s.writeError(w, r, http.StatusPreconditionFailed, "VERSION_CONFLICT", "The historical TimelineVersion is not a valid rollback source.")
+			return
+		}
+		clipID, _ := command.Payload["clip_id"].(string)
+		previousClip, clipErr := domain.FindTimelineClip(restore.Document, clipID)
+		if clipErr != nil {
+			s.writeError(w, r, http.StatusUnprocessableEntity, "TIMELINE_INVALID", "The historical TimelineVersion does not contain the selected Clip.")
+			return
+		}
+		// Never trust client-supplied origin/proposal/evidence fields for undo.
+		// Restore the exact server-owned historical clip after validating its
+		// lineage and then create a new immutable version from the current base.
+		command.Payload["clip"] = previousClip
 	}
 	document, hash, err := domain.ApplyTimelineCommand(base.Document, command)
 	if err != nil {

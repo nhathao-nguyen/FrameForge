@@ -8,9 +8,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/nhathao-nguyen/NH-Media/services/api/internal/domain"
 	"github.com/nhathao-nguyen/NH-Media/services/api/internal/product"
 	"github.com/nhathao-nguyen/NH-Media/services/api/internal/queue"
@@ -18,11 +20,10 @@ import (
 )
 
 // DurableBackend is the Product API adapter for PostgreSQL-backed resources.
-// The embedded Store remains only as an explicit fallback for resource methods
-// that have not yet been moved to SQL; Project, Asset and upload lifecycles are
-// never routed through that fallback when this adapter is installed.
+// It intentionally does not embed the in-memory Store: adding a method to the
+// Product backend interface must fail compilation until the durable adapter
+// implements it explicitly.
 type DurableBackend struct {
-	*product.Store
 	SQL          *SQLStore
 	UserID       string
 	Workspace    string
@@ -42,7 +43,6 @@ func NewDurableBackend(sqlStore *SQLStore, userID, workspaceID string, backend s
 		return nil, errors.New("durable Product backend requires SQL store, user and Workspace")
 	}
 	return &DurableBackend{
-		Store:        product.NewStoreWithStorage(workspaceID, backend),
 		SQL:          sqlStore,
 		UserID:       userID,
 		Workspace:    workspaceID,
@@ -478,11 +478,17 @@ func (b *DurableBackend) GetNarration(_ string, projectID, narrationID string) (
 }
 
 func (b *DurableBackend) CreateTimeline(_ string, projectID, origin string, document json.RawMessage) (*product.Timeline, *product.TimelineVersion, error) {
-	hash, err := domain.ValidateTimeline(document, domain.TimelineValidationOptions{Resolver: b})
+	timelineID := uuid.NewString()
+	versionID := uuid.NewString()
+	normalized, err := domain.NormalizeTimelineIdentity(document, timelineID, versionID, 1)
 	if err != nil {
 		return nil, nil, err
 	}
-	if value := timelineProject(document); value != projectID {
+	hash, err := domain.ValidateTimeline(normalized, domain.TimelineValidationOptions{Resolver: b})
+	if err != nil {
+		return nil, nil, err
+	}
+	if value := timelineProject(normalized); value != projectID {
 		return nil, nil, errors.New("timeline document belongs to another project")
 	}
 	ctx := context.Background()
@@ -494,13 +500,11 @@ func (b *DurableBackend) CreateTimeline(_ string, projectID, origin string, docu
 		return nil, nil, err
 	}
 	defer func() { _ = tx.Rollback() }()
-	var timelineID string
 	var createdAt time.Time
-	if err := tx.QueryRowContext(ctx, `INSERT INTO timelines(project_id,status,created_by,updated_by) VALUES($1,'active',$2,$2) RETURNING id::text,created_at`, projectID, b.UserID).Scan(&timelineID, &createdAt); err != nil {
+	if err := tx.QueryRowContext(ctx, `INSERT INTO timelines(id,project_id,status,created_by,updated_by) VALUES($1,$2,'active',$3,$3) RETURNING created_at`, timelineID, projectID, b.UserID).Scan(&createdAt); err != nil {
 		return nil, nil, err
 	}
-	var versionID string
-	if err := tx.QueryRowContext(ctx, `INSERT INTO timeline_versions(timeline_id,version,status,schema_version,document,content_hash,origin,created_by) VALUES($1,1,'draft','1.0',$2,$3,$4,$5) RETURNING id::text`, timelineID, document, hash, origin, b.UserID).Scan(&versionID); err != nil {
+	if _, err := tx.ExecContext(ctx, `INSERT INTO timeline_versions(id,timeline_id,version,status,schema_version,document,content_hash,origin,created_by) VALUES($1,$2,1,'draft','1.0',$3,$4,$5,$6)`, versionID, timelineID, normalized, hash, origin, b.UserID); err != nil {
 		return nil, nil, err
 	}
 	if _, err := tx.ExecContext(ctx, `UPDATE timelines SET current_version_id=$2,updated_at=now() WHERE id=$1`, timelineID, versionID); err != nil {
@@ -510,7 +514,7 @@ func (b *DurableBackend) CreateTimeline(_ string, projectID, origin string, docu
 		return nil, nil, err
 	}
 	timeline := &product.Timeline{ID: timelineID, ProjectID: projectID, Status: "active", CurrentVersionID: versionID, Revision: 1, Versions: []string{versionID}, CreatedAt: createdAt}
-	version := &product.TimelineVersion{ID: versionID, TimelineID: timelineID, ProjectID: projectID, Version: 1, Status: "draft", SchemaVersion: domain.TimelineSchemaVersion, Document: append(json.RawMessage(nil), document...), ContentHash: hash, Origin: origin, CreatedAt: createdAt}
+	version := &product.TimelineVersion{ID: versionID, TimelineID: timelineID, ProjectID: projectID, Version: 1, Status: "draft", SchemaVersion: domain.TimelineSchemaVersion, Document: append(json.RawMessage(nil), normalized...), ContentHash: hash, Origin: origin, CreatedAt: createdAt}
 	return timeline, version, nil
 }
 
@@ -538,6 +542,35 @@ func (b *DurableBackend) GetTimeline(_ string, projectID, timelineID string) (*p
 	return &value, rows.Err()
 }
 
+func (b *DurableBackend) ListTimelines(_ string, projectID string) ([]product.Timeline, error) {
+	ctx := context.Background()
+	if _, err := b.SQL.GetProject(ctx, b.UserID, b.Workspace, projectID); err != nil {
+		return nil, mapPersistenceError(err)
+	}
+	rows, err := b.SQL.DB.QueryContext(ctx, `SELECT id::text,project_id::text,status,COALESCE(current_version_id::text,''),revision,created_at FROM timelines WHERE project_id=$1 AND deleted_at IS NULL ORDER BY created_at,id`, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	result := make([]product.Timeline, 0)
+	for rows.Next() {
+		var value product.Timeline
+		if err := rows.Scan(&value.ID, &value.ProjectID, &value.Status, &value.CurrentVersionID, &value.Revision, &value.CreatedAt); err != nil {
+			return nil, err
+		}
+		versions, versionErr := b.ListTimelineVersions("", projectID, value.ID)
+		if versionErr != nil {
+			return nil, versionErr
+		}
+		value.Versions = make([]string, 0, len(versions))
+		for _, version := range versions {
+			value.Versions = append(value.Versions, version.ID)
+		}
+		result = append(result, value)
+	}
+	return result, rows.Err()
+}
+
 func (b *DurableBackend) GetTimelineVersion(_ string, projectID, versionID string) (*product.TimelineVersion, error) {
 	ctx := context.Background()
 	if _, err := b.SQL.GetProject(ctx, b.UserID, b.Workspace, projectID); err != nil {
@@ -550,10 +583,31 @@ func (b *DurableBackend) GetTimelineVersion(_ string, projectID, versionID strin
 	return &value, nil
 }
 
-func (b *DurableBackend) AddTimelineVersion(_ string, projectID, timelineID, basedOn, origin string, document json.RawMessage, expectedRevision int64) (*product.TimelineVersion, error) {
-	hash, err := domain.ValidateTimeline(document, domain.TimelineValidationOptions{Resolver: b})
-	if err != nil {
+func (b *DurableBackend) ListTimelineVersions(_ string, projectID, timelineID string) ([]product.TimelineVersion, error) {
+	ctx := context.Background()
+	if _, err := b.GetTimeline("", projectID, timelineID); err != nil {
 		return nil, err
+	}
+	rows, err := b.SQL.DB.QueryContext(ctx, `SELECT v.id::text,v.timeline_id::text,t.project_id::text,v.version,v.status,v.schema_version,v.document,v.content_hash,v.origin,COALESCE(v.based_on_version_id::text,''),v.created_at FROM timeline_versions v JOIN timelines t ON t.id=v.timeline_id WHERE v.timeline_id=$1 AND t.project_id=$2 ORDER BY v.version`, timelineID, projectID)
+	if err != nil {
+		return nil, mapPersistenceError(err)
+	}
+	defer rows.Close()
+	result := make([]product.TimelineVersion, 0)
+	for rows.Next() {
+		var value product.TimelineVersion
+		if err := rows.Scan(&value.ID, &value.TimelineID, &value.ProjectID, &value.Version, &value.Status, &value.SchemaVersion, &value.Document, &value.ContentHash, &value.Origin, &value.BasedOnVersionID, &value.CreatedAt); err != nil {
+			return nil, err
+		}
+		value.Document = append(json.RawMessage(nil), value.Document...)
+		result = append(result, value)
+	}
+	return result, rows.Err()
+}
+
+func (b *DurableBackend) AddTimelineVersion(_ string, projectID, timelineID, basedOn, origin string, document json.RawMessage, expectedRevision int64) (*product.TimelineVersion, error) {
+	if strings.TrimSpace(basedOn) == "" {
+		return nil, product.ErrConflict
 	}
 	if timelineProject(document) != projectID {
 		return nil, errors.New("timeline document belongs to another project")
@@ -565,19 +619,31 @@ func (b *DurableBackend) AddTimelineVersion(_ string, projectID, timelineID, bas
 	}
 	defer func() { _ = tx.Rollback() }()
 	var revision int64
-	if err := tx.QueryRowContext(ctx, `SELECT revision FROM timelines WHERE id=$1 AND project_id=$2 AND deleted_at IS NULL FOR UPDATE`, timelineID, projectID).Scan(&revision); err != nil {
+	var currentVersionID string
+	if err := tx.QueryRowContext(ctx, `SELECT revision,COALESCE(current_version_id::text,'') FROM timelines WHERE id=$1 AND project_id=$2 AND deleted_at IS NULL FOR UPDATE`, timelineID, projectID).Scan(&revision, &currentVersionID); err != nil {
 		return nil, mapPersistenceError(err)
 	}
 	if revision != expectedRevision {
+		return nil, product.ErrConflict
+	}
+	if basedOn != "" && basedOn != currentVersionID {
 		return nil, product.ErrConflict
 	}
 	var versionNumber int
 	if err := tx.QueryRowContext(ctx, `SELECT COALESCE(MAX(version),0)+1 FROM timeline_versions WHERE timeline_id=$1`, timelineID).Scan(&versionNumber); err != nil {
 		return nil, err
 	}
-	var versionID string
+	versionID := uuid.NewString()
+	normalized, err := domain.NormalizeTimelineIdentity(document, timelineID, versionID, versionNumber)
+	if err != nil {
+		return nil, err
+	}
+	hash, err := domain.ValidateTimeline(normalized, domain.TimelineValidationOptions{Resolver: b})
+	if err != nil {
+		return nil, err
+	}
 	var createdAt time.Time
-	if err := tx.QueryRowContext(ctx, `INSERT INTO timeline_versions(timeline_id,version,status,schema_version,document,content_hash,origin,based_on_version_id,created_by) VALUES($1,$2,'draft','1.0',$3,$4,$5,NULLIF($6,'')::uuid,$7) RETURNING id::text,created_at`, timelineID, versionNumber, document, hash, origin, basedOn, b.UserID).Scan(&versionID, &createdAt); err != nil {
+	if err := tx.QueryRowContext(ctx, `INSERT INTO timeline_versions(id,timeline_id,version,status,schema_version,document,content_hash,origin,based_on_version_id,created_by) VALUES($1,$2,$3,'draft','1.0',$4,$5,$6,NULLIF($7,'')::uuid,$8) RETURNING created_at`, versionID, timelineID, versionNumber, normalized, hash, origin, basedOn, b.UserID).Scan(&createdAt); err != nil {
 		return nil, err
 	}
 	if _, err := tx.ExecContext(ctx, `UPDATE timelines SET current_version_id=$2,revision=revision+1,updated_by=$3,updated_at=now() WHERE id=$1`, timelineID, versionID, b.UserID); err != nil {
@@ -586,7 +652,7 @@ func (b *DurableBackend) AddTimelineVersion(_ string, projectID, timelineID, bas
 	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
-	return &product.TimelineVersion{ID: versionID, TimelineID: timelineID, ProjectID: projectID, Version: versionNumber, Status: "draft", SchemaVersion: domain.TimelineSchemaVersion, Document: append(json.RawMessage(nil), document...), ContentHash: hash, Origin: origin, BasedOnVersionID: basedOn, CreatedAt: createdAt}, nil
+	return &product.TimelineVersion{ID: versionID, TimelineID: timelineID, ProjectID: projectID, Version: versionNumber, Status: "draft", SchemaVersion: domain.TimelineSchemaVersion, Document: append(json.RawMessage(nil), normalized...), ContentHash: hash, Origin: origin, BasedOnVersionID: basedOn, CreatedAt: createdAt}, nil
 }
 
 func (b *DurableBackend) SetTimelineVersionStatus(_ string, projectID, timelineID, versionID, status string) (*product.TimelineVersion, error) {
