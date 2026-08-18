@@ -17,6 +17,10 @@ venv/
 node_modules/
 dist/
 .next/
+.next-desktop/
+.web-build/
+out/
+*.tsbuildinfo
 target/
 coverage/
 uv.lock.tmp

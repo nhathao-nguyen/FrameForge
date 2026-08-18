@@ -73,9 +73,9 @@ reviewable evidence is recorded.
 | T430 | Web shell/SDK | T210, T230, T340 | complete | `packages/sdk/src/client.ts`, Next web shell, in-memory auth token, REST/SSE Last-Event-ID reconnect, `pnpm typecheck` | T431 |
 | T431 | Script editor | T231, T410, T430 | complete | web ScriptVersion form with If-Match revision, immutable server submission and safe JSON validation | T432 |
 | T432 | Timeline/Scene editor | T233–T234, T410, T420, T430 | complete | web `UpdateScene` command form with based-on version and expected document version conflict path | T433 |
-| T433 | Tauri client | T223, T340, T430 | complete | thin remote-only commands/capability manifest/CSP; `cargo fmt --check`, `cargo check`, live `cargo-tauri dev` | T550/T434 |
-| T550 | Local Functional Acceptance | T323, T340, T430, T433 | complete with limitation | `tools/accept-local.ps1` local and LAN server-path PASS: auth/workspace/project/upload/MinIO/Job/Go/Python/SSE/FFmpeg; physical second device external/uncontrolled | T434/T603 |
-| T434 | Desktop packaging/security | T433 | blocked | staging boundary validation and rollback PASS; package action correctly stops without release bundle/external signing key | rerun with external Tauri signing key |
+| T433 | Tauri client | T223, T340, T430 | complete | thin remote-only commands/capability manifest; build-time exact LAN API CSP/frontend endpoint and packaged `http://tauri.localhost` CORS origin are implemented; cargo fmt/check and LAN acceptance pass | T434/T550 complete |
+| T550 | Local Functional Acceptance | T323, T340, T430, T433 | complete | `LOCAL FUNCTIONAL ACCEPTANCE: PASS`; local and LAN server-path PASS plus sanitized physical-client evidence `lan-client-a384adea-f665-4cd0-ba01-1035e8acfef2`: external Windows PowerShell 5.1 client proves reachability/auth/Workspace/Project/upload/Job completion/REST replay/SSE reconnect/cleanup with `external_to_server=true` | Gate F complete |
+| T434 | Desktop packaging/security | T433 | complete | current `t434-lan-signed` NSIS pins the exact LAN API origin in frontend/CSP; external signature, manifest/public-key fingerprint, tamper rejection and rollback-pointer verification pass | Gate F complete |
 | T500 | Provider ports/resolver | T235, T401 | blocked | none | after dependencies |
 | T510 | Research/script nodes | T402, T500 | blocked | none | after dependencies |
 | T511 | TTS/Narration | T231, T500, T510 | blocked | none | after dependencies |
@@ -97,7 +97,7 @@ reviewable evidence is recorded.
 | T604 | Upstream research refresh | T001, T003, T108 | blocked | none | research evidence only |
 | T605 | Internet/VPS production release | T603 | blocked | none | explicit production approval |
 
-Gate C+D, Gate E T300–T350 and the Gate F T400–T433/T550 implementation are present in the current
-working tree. T434 remains blocked by external release signing material; physical second-device LAN
-verification is also not controlled here. Overall Gate F is therefore NOT PASS and is not silently
-promoted.
+Gate C+D, Gate E T300–T350 and the Gate F implementation are present in the current working tree.
+The physical-client bounded SSE run and current exact-origin signed LAN desktop package both pass
+with sanitized evidence recorded above. Overall Gate F is therefore PASS; hardened/public Gate G
+work remains separate and is not claimed.

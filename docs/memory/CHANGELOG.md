@@ -6,6 +6,56 @@ owner: repository owner / task assignee
 
 # Memory changelog
 
+## 2026-08-18 — Gate F physical-client acceptance closure
+
+- Captured sanitized physical-client evidence from `DESKTOP-92ICS6C` (`192.168.1.29`) against LAN
+  server `192.168.1.18`; Windows PowerShell 5.1 run
+  `lan-client-a384adea-f665-4cd0-ba01-1035e8acfef2` reports `status=PASS` and
+  `external_to_server=true`.
+- The external client passed API/web reachability, authentication, Workspace/Project, upload
+  initiation/abort, completed Job status, REST event replay, SSE initial snapshot/reconnect replay,
+  no-local-backend and project-cleanup checks. Credentials were interactive and are not evidence.
+- With current-tree T434 exact-origin signing/signature/tamper/rollback evidence and canonical
+  regression passing, T550 reports `LOCAL FUNCTIONAL ACCEPTANCE: PASS`, and T400–T434/T550 satisfy
+  the narrow closure criteria: `GATE F: PASS`.
+- Re-ran local and exact-LAN acceptance, current signed-package verification, canonical verification,
+  uncached Go tests, focused pipeline/integration tests, recursive TypeScript checks, contracts/memory
+  validation and Rust formatting/compile checks; all pass with only documented engine/line-ending warnings.
+
+## 2026-08-18 — Current exact-origin LAN desktop and lifecycle closure
+
+- Repaired Windows process ownership so LAN restart records the API/web listener PIDs, stops child
+  processes before parents, rejects occupied fixed ports and reports success only after API live/ready,
+  web health and packaged-Tauri CORS checks pass.
+- Moved desktop frontend production compilation into a copied `.web-build` workspace outside the live
+  web tree; the temporary workspace is removed and the running LAN web remains HTTP 200 after build.
+- Built `t434-lan-signed` with exact API origin `http://192.168.1.18:8080`; external signature,
+  manifest/public-key fingerprint, tamper rejection and rollback pointer pass. T434 is complete for
+  the current tree; Gate F still awaits the final physical-client T550 JSON PASS.
+
+## 2026-08-18 — T434 signed desktop staging closure
+
+- Built the static web export and Windows NSIS staging bundle from the repository-root package flow.
+- Added external public-key Minisign verification, public-key fingerprint recording, fail-closed
+  package verification and a temporary tamper-rejection test.
+- Signed staging artifact `NH-Media_0.1.0_x64-setup.exe` and its `.sig` sidecar passed manifest,
+  signature and rollback-pointer checks. Private key/password remain external and are not recorded.
+- T434 is complete; overall Gate F remains NOT PASS only because physical second-device T550 LAN
+  evidence is still pending.
+
+## 2026-08-18 — Gate F narrow acceptance closure repair
+
+- Added exact-IP LAN startup validation and CORS/web endpoint defaults; LAN no longer silently falls
+  back to localhost when the server has multiple interfaces.
+- Added `tools/accept-lan-client.ps1` and the second-device runbook. It records client/server
+  identity, authentication, Project/Job/upload-initiation/SSE checks and rejects loopback or same-host
+  execution; no physical second-device PASS is claimed.
+- Connected the static web export to Tauri release builds, enabled the Windows NSIS bundle and made
+  desktop package manifest/checksum/signature verification and rollback fail closed without an
+  external key. The unsigned NSIS build is development evidence only.
+- Re-ran live local and LAN server-path acceptance. Gate F remains NOT PASS pending external signing
+  material and controlled second-device evidence.
+
 ## 2026-08-17 — Final Gate E acceptance repair
 
 - Added the independent Product API durable acceptance harness covering client disconnect/reconnect,
@@ -120,3 +170,23 @@ Final documentation/link/table/JSON/task/OQ/terminology/change-boundary checks a
   `BLOCK 0`; the correction is covered by the live retry harness.
 - Added stable-ID recovery for already-queued JobSteps after a PostgreSQL-to-Redis enqueue interruption;
   subsequent start/resume calls can republish the durable frontier without treating Redis as state.
+
+## 2026-08-18 — LAN web restart/port collision repair
+
+- Repaired `tools/dev.ps1` process-tree shutdown so tracked `pnpm`/Next.js children and stale
+  NH-Media web entrypoints are stopped together during restart.
+- LAN web startup now clears generated `.next` state and requests port `3000`, preventing a stale
+  development server from silently moving the client endpoint to another port.
+- Server-side checks after repair returned HTTP 200 for `127.0.0.1:3000`, `192.168.1.18:3000` and
+  `/api/v1/live`; physical second-device acceptance remains the outstanding Gate F evidence.
+- Corrected the client-only SSE probe to use fully qualified `System.Net.Http` types and explicitly
+  load that assembly for Windows PowerShell 5.1. Physical-client runs authenticated and completed
+  the Project/upload/Job/event-replay path before exposing this script-side compatibility defect;
+  no password or token was recorded.
+- Hardened the client baseline to Windows PowerShell 5.1/PowerShell 7 with explicit RFC1918 checks,
+  bounded REST/SSE waits, proxy-free LAN SSE, interactive credentials by default and OS/runtime
+  evidence. Added exact-IP LAN desktop packaging: the static frontend endpoint and Tauri CSP are
+  merged at build time, and the API LAN profile allowlists the packaged Windows Tauri origin without
+  wildcard CORS. Desktop frontend builds now use a copied and disposable `.web-build` workspace so
+  signing cannot corrupt or interrupt the running LAN web dev server. The exact-origin LAN flavor was
+  subsequently regenerated and verified above.

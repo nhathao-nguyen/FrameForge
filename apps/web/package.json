@@ -2,7 +2,7 @@
   "name": "@nh-media/web",
   "private": true,
   "version": "0.1.0-foundation",
-  "scripts": { "dev": "next dev", "typecheck": "tsc --noEmit" },
+  "scripts": { "dev": "next dev", "build": "next build", "typecheck": "tsc --noEmit" },
   "dependencies": {
     "@nh-media/sdk": "workspace:*",
     "next": "15.5.3",

@@ -3,6 +3,7 @@
   "private": true,
   "version": "0.1.0-foundation",
   "scripts": {
+    "build:web": "node scripts/build-frontend.mjs",
     "typecheck": "echo Tauri 2 Rust shell; use cargo fmt --check and cargo check in src-tauri"
   }
 }

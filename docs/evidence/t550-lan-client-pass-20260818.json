@@ -1,0 +1,45 @@
+{
+  "schema_version": "nh-media/lan-client-acceptance/v1",
+  "run_id": "lan-client-a384adea-f665-4cd0-ba01-1035e8acfef2",
+  "started_at": "2026-08-18T05:21:25.5116961Z",
+  "status": "PASS",
+  "server": {
+    "lan_ip": "192.168.1.18",
+    "api_url": "http://192.168.1.18:8080",
+    "web_url": "http://192.168.1.18:3000"
+  },
+  "client": {
+    "machine_name": "DESKTOP-92ICS6C",
+    "ipv4": [
+      "192.168.1.29"
+    ],
+    "windows_version": "Microsoft Windows NT 10.0.19045.0",
+    "powershell_version": "5.1.19041.2673",
+    "external_to_server": true,
+    "credential_source": "interactive",
+    "project_id": "ded5a6e8-6407-4d18-a773-ebd7e26ac44c"
+  },
+  "checks": {
+    "runtime_compatibility": true,
+    "api_tcp_reachable": true,
+    "web_tcp_reachable": true,
+    "web_reachable": true,
+    "api_live": true,
+    "api_ready": true,
+    "authentication": true,
+    "workspace_membership": true,
+    "project_list": true,
+    "project_path": true,
+    "upload_initiated": true,
+    "upload_aborted": true,
+    "job_created": true,
+    "job_status_visibility": true,
+    "job_terminal_status": "completed",
+    "event_replay": true,
+    "sse_initial_snapshot": true,
+    "sse_reconnect_replay": true,
+    "no_local_backend_dependency": true,
+    "project_cleanup": true
+  },
+  "finished_at": "2026-08-18T05:21:31.5899551Z"
+}

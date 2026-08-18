@@ -3,12 +3,13 @@ param(
     [ValidateSet('local', 'lan')]
     [string]$Profile = 'local',
     [string]$ApiBaseUrl = '',
-    [string]$LanBaseUrl = ''
+    [string]$LanBaseUrl = '',
+    [string]$LanWebBaseUrl = ''
 )
 
 $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent $PSScriptRoot
-if ([string]::IsNullOrWhiteSpace($ApiBaseUrl)) { $ApiBaseUrl = if ($Profile -eq 'lan') { 'http://127.0.0.1:8080' } else { 'http://127.0.0.1:8080' } }
+if ([string]::IsNullOrWhiteSpace($ApiBaseUrl)) { $ApiBaseUrl = 'http://127.0.0.1:8080' }
 $apiRoot = $ApiBaseUrl.TrimEnd('/') + '/api/v1'
 $results = [ordered]@{}
 
@@ -121,7 +122,13 @@ try {
         } else {
             $results.lan_server_path = (Invoke-WebRequest -UseBasicParsing ($LanBaseUrl.TrimEnd('/') + '/api/v1/live')).StatusCode -eq 200
         }
-        $results.physical_second_device = 'external_uncontrolled'
+        if ([string]::IsNullOrWhiteSpace($LanWebBaseUrl)) { $LanWebBaseUrl = $env:NH_ACCEPT_LAN_WEB_BASE_URL }
+        if ([string]::IsNullOrWhiteSpace($LanWebBaseUrl)) {
+            $results.lan_web_path = 'missing_explicit_lan_web_base_url'
+        } else {
+            $results.lan_web_path = (Invoke-WebRequest -UseBasicParsing $LanWebBaseUrl.TrimEnd('/')).StatusCode -eq 200
+        }
+        $results.physical_second_device = 'not_run_by_server_acceptance; use tools/accept-lan-client.ps1 on a different machine'
     }
     $results | ConvertTo-Json -Depth 8
 } catch {
