@@ -12,9 +12,9 @@ owner: repository owner / task assignee
 |---|---|---|
 | Working branch | `implementation/bootstrap` | `git branch --show-current` |
 | Baseline commit | `e72e847865a5938126487acfd583797e3e8839d0` (`docs: close Gate G push handoff`) | exact local/remote checkpoint before the worker-execution contract repair |
-| Acceptance checkpoint | pending this task commit | implementation, E2E and full acceptance evidence are complete in the working tree |
+| Acceptance checkpoint | `53e57c0add60e7ac1a1f1a042470c6a656bd0d1f` (`checkpoint: repair Gate G implementation contracts`) | implementation, E2E and full acceptance evidence checkpoint on `implementation/bootstrap` |
 | Tracking branch | `origin/implementation/bootstrap` | `git status --short --branch` |
-| Push/merge action | checkpoint push pending | explicitly authorized by the user; no branch switch or merge |
+| Push/merge action | checkpoint and handoff metadata pushed together to `origin/implementation/bootstrap` | explicitly authorized by the user; no branch switch or merge |
 
 ## Gate and phase
 
