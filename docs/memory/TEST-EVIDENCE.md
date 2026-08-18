@@ -114,3 +114,18 @@ T400–T434 and T550 local/LAN/physical-client acceptance pass, including curren
 install/update/tamper/rollback and the external client’s authentication, Job/event/SSE reconnect and
 cleanup checks. No public production, load, backup/restore, or external provider/ML quality evidence
 is claimed.
+
+| 2026-08-18 | Gate G dependency preflight | actual Windows host inspection; pinned `go`, `rustc/cargo`, Python/uv, Node/pnpm, Tauri CLI, FFmpeg/ffprobe and Docker version commands; `nvidia-smi`; Docker local Compose health | current Windows machine; no previous-machine installation assumption | pass: missing pinned uv 0.11.28, Node 24.14.1, Tauri CLI 2.11.4 and reviewed FFmpeg/ffprobe were installed/verified; Docker daemon and PostgreSQL/Redis/MinIO local profile became healthy; system Python 3.14 and unapproved external providers were not used | no approved provider credentials/model runtime; deterministic fake/local providers are the Gate G boundary |
+| 2026-08-18 | Gate G capability reconciliation | `docs/evidence/gate-g-capability-coverage.md`; `docs/IMPLEMENTATION-ORDER.md`; `docs/OPEN-QUESTIONS.md`; `docs/UPSTREAM-CAPABILITY-MATRIX.md` | current repository docs and implementation order | pass: all relevant P5/P6 rows are assigned to T500–T532 or explicit `Txxx-S1` subtasks; karaoke/OCR/object tracking/broad understanding/semantic search/inpainting/batch/scheduling/distributed rendering remain DEFER | no task renumbering or Movie Narrator dependency introduced |
+| 2026-08-18 | Gate G Python native workflow | exact pinned uv `lock --check`, frozen sync, `pytest`, Ruff, mypy and Bandit through `tools/accept-gate-g.ps1` | `services/ml-worker`; deterministic fake providers and in-memory ArtifactStore | pass: 11 tests; research/script/style, provider fallback, TTS/WAV, ASR/alignment, subtitles/translation/bilingual QA, scenes/filters/VLM/characters, embeddings, matching/coverage, candidates, reference style and audio policy all execute | no external provider/model quality claim |
+| 2026-08-18 | Gate G native render/profile/clip proof | exact reviewed FFmpeg/ffprobe paths; `go vet ./...`; `go test ./...`; focused `TestRenderRealMediaAndReuseThreeProfiles`, `TestInspectRejectsMissingVideo` and Artifact commit-after-QA test | Go `services/media-worker/internal/render`; synthetic FFmpeg source inside executor sandbox | pass: real 16:9, 9:16 and 1:1 outputs pass ffprobe QA and reuse one source fingerprint; typed `ExportClips` produces a real 9:16 selected clip with exact range/profile/codec/checksum manifest; missing deliverable and pre-QA commit fail closed | single-clip deterministic compiler baseline; multi-clip concat remains separate |
+| 2026-08-18 | Gate G repository acceptance | `tools/accept-gate-g.ps1 -FfmpegPath <reviewed> -FfprobePath <reviewed>` | current uncommitted working tree; exact pinned uv/Node/pnpm; Docker Compose config | pass: Python 11 tests/lint/type/security, Go vet/tests, real media/clip test, exact Node/pnpm typecheck, contracts, independence, secret scan, supply-chain baseline, compose config and `git diff --check` | no commit/push/branch switch; T600–T605 not started |
+
+## Gate G status
+
+**GATE G: PASS**
+
+T500–T532 and the reconciled P5/P6 subtasks are locally executable and reviewable. This is a
+provider-free deterministic acceptance plus real reviewed-FFmpeg media/clip QA; it is not a claim of
+external provider quality, approved ML-model execution, public production, or the intentionally
+deferred matrix capabilities.

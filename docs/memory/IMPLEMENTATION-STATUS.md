@@ -76,20 +76,27 @@ reviewable evidence is recorded.
 | T433 | Tauri client | T223, T340, T430 | complete | thin remote-only commands/capability manifest, exact LAN origin, direct browser upload, signed artifact-download URL, remote review/editor UI and current-tree LAN desktop bundle checks pass | T550 physical client |
 | T550 | Local Functional Acceptance | T323, T340, T430, T433 | complete | current local, exact-LAN server-path and controlled physical second-device runs pass the real Go/Redis/Python/SSE/upload flow; external run `lan-client-1353be68-e9ba-41d7-9ee1-b2f97340452e` reports `external_to_server=true` and current script hash match | T603 hardened acceptance |
 | T434 | Desktop packaging/security | T433 | complete | current-tree two-version signed NSIS packages pass external signature verification, fresh install/launch, N→N+1 update/launch, tamper rejection and rollback-pointer checks | Gate F physical client |
-| T500 | Provider ports/resolver | T235, T401 | blocked | none | after dependencies |
-| T510 | Research/script nodes | T402, T500 | blocked | none | after dependencies |
-| T511 | TTS/Narration | T231, T500, T510 | blocked | none | after dependencies |
-| T512 | ASR/alignment | T500–T511 | blocked | none | after dependencies |
-| T520 | Scene detection/features | T224, T401 | blocked | none | after dependencies |
-| T521 | VLM scene analysis | T500, T520 | blocked | none | after dependencies |
-| T522 | Character analysis | T207, T520–T521 | blocked | none | after dependencies |
-| T523 | Embedding/index Artifact | T500, T521 | blocked | none | Artifact/index baseline |
-| T524 | Match proposals/coverage | T510, T512, T520–T523 | blocked | none | after dependencies |
-| T525 | Candidate evaluation/selection | T234, T500, T524 | blocked | none | after dependencies |
-| T526 | ReferenceStyleAnalysis | T234, T512, T520–T521 | blocked | none | after dependencies |
-| T530 | Timeline compiler/media plan | T313, T420, T524 | blocked | none | after dependencies |
-| T531 | Render/deliverable QA | T222, T332, T350, T530 | blocked | none | after dependencies |
-| T532 | Multi-profile reuse | T531 | blocked | none | after T531 |
+| T500 | Provider ports/resolver | T235, T401 | complete | `services/ml-worker/nh_media/providers`; five-kind fake-provider conformance, fallback, timeout/cancel, allowlist and redaction tests | real provider credentials remain unavailable; local deterministic gate evidence complete |
+| T510 | Research/script nodes | T402, T500 | complete | `generation/research.py`, `generation/script.py`; provenance, ScriptStyle perspective/control/density and immutable ScriptVersion tests | local fake provider only |
+| T511 | TTS/Narration | T231, T500, T510 | complete | `speech/tts.py`; voice snapshot/fingerprint, WAV ProducedBlob and ArtifactStore handoff tests | external TTS quality not claimed |
+| T512 | ASR/alignment | T500–T511 | complete | `speech/asr.py`, `speech/alignment.py`; backend selection, transcript timing and drift validation tests | local deterministic transcript only |
+| T512-S1 | Subtitle generation/translation/QA | T512 | complete | `subtitles/*`; SRT/VTT/ASS, translation, bilingual composition and CPS/overlap/line-length QA tests | scoped Gate G subtask; no karaoke/OCR claim |
+| T520 | Scene detection/features | T224, T401 | complete | `video/scenes.py`; deterministic ranges/features/source revision and zero-scene policy tests | local fixture media/features |
+| T520-S1 | Scene filters/reasons | T520 | complete | quality/dark/intro filter reasons preserve source scenes and do not mutate inputs | scoped Gate G subtask |
+| T521 | VLM scene analysis | T500, T520 | complete | `vision/captioning.py`; per-scene keyframe/source/model provenance and degraded-item tests | fake VLM only |
+| T522 | Character analysis | T207, T520–T521 | complete | `vision/characters.py`; appearance clusters and confirmed-identity preservation tests | proposal only; no identity provider claim |
+| T523 | Embedding/index Artifact | T500, T521 | complete | `matching/embeddings.py`; text index model/dimension/normalization and reload boundary tests | deterministic vectors |
+| T523-S1 | Visual/multimodal embeddings | T523 | complete | `vision/embeddings.py`; shared port and model-space mismatch fail-closed tests | fake embedding provider only |
+| T524 | Match proposals/coverage | T510, T512, T520–T523 | complete | `matching/proposals.py`; score components, deterministic diversity/evidence and proposal tests | no provider-side semantic quality claim |
+| T524-S1 | Coverage feedback | T524 | complete | `evaluation/coverage.py`; explicit segment coverage/rationale without mutating approved script | scoped Gate G subtask |
+| T525 | Candidate evaluation/selection | T234, T500, T524 | complete | `evaluation/candidates.py`; immutable candidates, policy evaluation and user selection tests | deterministic local policy |
+| T526 | ReferenceStyleAnalysis | T234, T512, T520–T521 | complete | `video/reference_style.py`; consent/scope, abstract traits and no copied footage tests | style abstraction only |
+| T530 | Timeline compiler/media plan | T313, T420, T524 | complete | Go `internal/render`; exact Timeline/Profile deterministic allowlisted plan and provider/rematch-free tests | single-clip baseline; multi-clip concat remains separate |
+| T530-S1 | Audio/templates/transitions/effects | T530 | complete | typed BGM rights, loudness/duck/mix report plus allowlisted transition/effect/template validation | local policy evidence; no licensed catalog claim |
+| T531 | Render/deliverable QA | T222, T332, T350, T530 | complete | Go render + ffprobe QA, incomplete-output rejection, Artifact commit-after-QA test and real FFmpeg media proof | exact reviewed FFmpeg build |
+| T531-S1 | Clips/shorts export | T531 | complete | typed `ExportClips`; real selection/profile/codec/size/checksum manifest test | one deterministic derivative path proven |
+| T532 | Multi-profile reuse | T531 | complete | 16:9/9:16/1:1 real outputs reuse source fingerprint with zero provider calls | subject-aware reframe remains typed intermediate |
+| T532-S1 | Subject-aware auto-reframe disposition | T532 | complete | missing subject boxes fail closed; typed reframe plan/reuse fingerprint tests | no silent center crop |
 | T600 | Sandbox/secret/egress hardening | T313, T500, T531 | blocked | none | after dependencies |
 | T601 | Observability/recovery | T340, T600 | blocked | none | after dependencies |
 | T602 | Backup/restore/inventory | T222, T601 | blocked | none | after dependencies |
@@ -97,13 +104,14 @@ reviewable evidence is recorded.
 | T604 | Upstream research refresh | T001, T003, T108 | blocked | none | research evidence only |
 | T605 | Internet/VPS production release | T603 | blocked | none | explicit production approval |
 
-Gate C+D, Gate E T300–T350 and the Gate F implementation are present in the current working tree.
-T400–T434 and T550 source/runtime behavior is implemented for this scope; fresh current-tree T434
-signed artifact verification remains an owner-input release step. T603 hardened and public
-production gates remain separate.
+Gate C+D, Gate E T300–T350, Gate F and Gate G T500–T532 are present in the current working tree.
+Gate G is locally accepted with deterministic fake/local providers and real reviewed FFmpeg render,
+clip-export and ffprobe evidence. T600–T605 remain separate future gates; external provider quality,
+GPU model execution and public production are not claimed.
 
 The 2026-08-18 current-tree repair audit added executable proof for the exact movie_recap graph and
 artifact-role contracts, canonical Timeline JSON Schema plus semantic/reference/safety validation,
-and server-authoritative TimelineVersion edit/reload/undo. Full source verification and local T550
-end-to-end acceptance pass. Existing signed T434 staging is stale against the current uncommitted
-web edit and must be rebuilt/re-signed with owner input before release-artifact handoff.
+and server-authoritative TimelineVersion edit/reload/undo. Gate G dependency preflight, capability
+reconciliation, Python native workflow, Go render/clip QA and cross-language/security checks pass.
+Existing signed T434 staging remains an owner-controlled release artifact boundary and is unrelated
+to the Gate G local implementation evidence.

@@ -1,6 +1,6 @@
 ---
 last_verified: 2026-08-18
-source: git status/log/branch metadata; ../SPEC-AUDIT-REPORT.md; ../IMPLEMENTATION-ORDER.md; TEST-EVIDENCE.md
+source: git status/log/branch metadata; ../SPEC-AUDIT-REPORT.md; ../IMPLEMENTATION-ORDER.md; TEST-EVIDENCE.md; ../evidence/gate-g-dependency-preflight-20260818.md; ../evidence/gate-g-capability-coverage.md
 owner: repository owner / task assignee
 ---
 
@@ -11,8 +11,8 @@ owner: repository owner / task assignee
 | Field | Value | Evidence |
 |---|---|---|
 | Working branch | `implementation/bootstrap` | `git branch --show-current` |
-| Baseline commit | `85748e69568f14487f81ed1c9890e5a711e6939e` (`checkpoint: close Gate F acceptance`) | user-requested Gate F audit baseline; implementation changes remain uncommitted |
-| Acceptance checkpoint | `85748e6` | user-requested starting checkpoint; no commit/push performed by this task |
+| Baseline commit | `695234da6a4153033027b418d6d9132f4101a550` (`checkpoint: close Gate F implementation audit`) | user-requested Gate G starting checkpoint; implementation changes remain uncommitted |
+| Acceptance checkpoint | `695234d` | user-requested starting checkpoint; no commit/push performed by this task |
 | Tracking branch | `origin/implementation/bootstrap` | `git status --short --branch` |
 | Push/merge action | none | working tree changes are intentionally uncommitted and unpushed |
 
@@ -43,6 +43,11 @@ owner: repository owner / task assignee
   uncommitted web edit; fresh N/N+1 owner re-signing is required before release-artifact handoff.
   The controlled physical second-device evidence remains separately recorded and is not used to
   hide this current package-freshness limitation.
+- Gate G status: PASS for T500–T532 and the reconciled `Txxx-S1` P5/P6 subtasks. The current
+  machine was preflighted; missing pinned uv/Node/Tauri/FFmpeg prerequisites were installed with
+  official or project-managed methods, Docker local infrastructure was started, and the deterministic
+  Python workflow plus real reviewed-FFmpeg render/clip/profile QA passed. Fake/local providers are
+  used because no approved external provider credentials or model runtime were available.
 
 ## Current evidence
 
@@ -85,6 +90,13 @@ owner: repository owner / task assignee
   exercised upload and Job/event/SSE paths, proved no local backend dependency, and cleaned up.
 - Local Functional Acceptance is T550; Local/LAN Hardened Acceptance is T603; Internet/VPS
   production is T605.
+- Gate G evidence is in `docs/evidence/gate-g-dependency-preflight-20260818.md` and
+  `docs/evidence/gate-g-capability-coverage.md`; executable acceptance is `tools/accept-gate-g.ps1`.
+- Gate G native coverage includes provider ports, research/script/style, TTS, ASR/alignment,
+  subtitles/translation/bilingual QA, scenes/filters/VLM/characters, text and visual embeddings,
+  matching/coverage/candidates, reference style, typed audio/BGM policy, Timeline compilation,
+  real render/ffprobe QA, clip export and 16:9/9:16/1:1 profile reuse. Deferred matrix rows remain
+  deferred and are not silently promoted.
 - Gate E includes canonical transitions/events/outbox replay, Redis Streams QueuePort, DAG scheduling,
   leases/reconciliation, sandboxed media process, versioned Go/Python worker contracts, probe/thumbnail
   node, durable execution-graph bootstrap, Job/Run/Step/Review/Render commands, checkpoint/recovery,
@@ -100,13 +112,14 @@ vendors are later configuration choices.
 ## Handoff
 
 ```text
-  Task: Gate F — T400–T434 and T550 client/local acceptance slice
-  Status: IMPLEMENTATION PASS; T402/T420/T432 and local T550 are current and reviewable. T434
-  signed staging must be rebuilt/re-signed for the current working tree before release handoff.
+  Task: Gate G — T500–T532 native media/AI capability slice
+  Status: LOCAL ACCEPTANCE PASS; current-machine dependency preflight, capability reconciliation,
+  deterministic Python workflow, real FFmpeg render/clip/profile QA and repository regression checks
+  are current and reviewable. T434 signing remains a separate owner-controlled release boundary.
 Boundary: Canonical execution transitions/events, queue, scheduling, leases, media/AI worker contracts,
   durable graph bootstrap, controls, checkpoint/DLQ and SSE boundary
-  Application code: API, persistence, media worker, Python worker, contracts, and execution adapters
+Application code: API, persistence, media worker, Python worker, contracts, and execution adapters
 Upstream relationship: research/reference only; no operational dependency
-  Next: preserve the evidence and proceed only with a separately approved later gate; do not begin
-  Prompt 6 / Gate G as part of this task.
+  Next: preserve the evidence and await a separately approved T600 hardening task; do not begin T600
+  in this Gate G task.
 ```

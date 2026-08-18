@@ -612,7 +612,8 @@ and next task.
 - **Goal:** native ResearchAnalysis and ScriptVersion proposal.
 - **Files/modules:** `nh_media.generation`.
 - **Dependencies:** T402, T500.
-- **Notes:** structured schema/prompt provenance; independent authorship.
+- **Notes:** structured schema/prompt provenance; independent authorship. The narrator perspective,
+  narrator-control and style-density controls are part of the versioned ScriptStyle snapshot.
 - **Tests:** quality rubric, error/fallback/review and optional reference comparison.
 - **DoD:** exact inputs create traceable ScriptVersion.
 
@@ -630,7 +631,9 @@ and next task.
 - **Goal:** typed transcript/timing Artifacts through approved adapters.
 - **Files/modules:** `nh_media.speech`.
 - **Dependencies:** T500–T511.
-- **Notes:** backend precision/fallback explicit.
+- **Notes:** backend precision/fallback explicit. **Coverage subtask T512-S1** (same Gate G slice)
+  owns subtitle generation, translation, bilingual tracks and subtitle QA; it must preserve immutable
+  cue timing and emit SRT/VTT/ASS artifacts with glossary/provider provenance.
 - **Tests:** timing corpus, optional dependencies, degradation and model fingerprint.
 - **DoD:** alignment meets NH-Media tolerances/provenance.
 
@@ -639,7 +642,8 @@ and next task.
 - **Goal:** source-revision Scenes and thumbnails/features.
 - **Files/modules:** `nh_media.video.scenes` plus media worker support.
 - **Dependencies:** T224, T401.
-- **Notes:** zero-scene policy explicit.
+- **Notes:** zero-scene policy explicit. **Coverage subtask T520-S1** owns versioned scene filters and
+  traceable exclusion reasons; filtering may not rewrite source Scene records.
 - **Tests:** ranges/thresholds/timeout/malicious media/source revision.
 - **DoD:** scene corpus passes.
 
@@ -667,6 +671,8 @@ and next task.
 - **Files/modules:** `nh_media.matching.embeddings`.
 - **Dependencies:** T500, T521.
 - **Notes:** baseline persistence is Artifact + item-index manifest; no cross-model comparisons.
+  **Coverage subtask T523-S1** covers text plus visual/multimodal embedding items through the same
+  provider-neutral port and rejects model-space mismatch.
 - **Tests:** batch/partial/reload/model-space/benchmark.
 - **DoD:** deterministic item index through provider-neutral contract.
 
@@ -675,7 +681,9 @@ and next task.
 - **Goal:** scored MatchProposals and optional coverage-driven Script proposal.
 - **Files/modules:** `nh_media.matching`/evaluation.
 - **Dependencies:** T510, T512, T520–T523.
-- **Notes:** approved content immutable; renderer never reads proposal directly.
+- **Notes:** approved content immutable; renderer never reads proposal directly. **Coverage subtask
+  T524-S1** owns explicit CoverageAnalysis output and segment-level feedback without mutating an
+  approved ScriptVersion.
 - **Tests:** determinism/diversity/quality/degraded/override/coverage.
 - **DoD:** proposal and score components are traceable.
 
@@ -702,7 +710,9 @@ and next task.
 - **Goal:** deterministic render plan from exact TimelineVersion/Profile.
 - **Files/modules:** Go media worker compiler.
 - **Dependencies:** T313, T420, T524.
-- **Notes:** no rematching/provider call; allowlisted options.
+- **Notes:** no rematching/provider call; allowlisted options. **Coverage subtask T530-S1** owns
+  typed BGM selection/rights metadata, loudness/ducking/audio-mix policy and the allowlisted
+  transition/text-effect/template catalog used by the compiler.
 - **Tests:** ranges/transforms/transitions/audio/subtitles/injection/determinism.
 - **DoD:** same inputs produce same safe plan.
 
@@ -711,7 +721,9 @@ and next task.
 - **Goal:** execute compiled plan and commit validated Render Artifacts.
 - **Files/modules:** Go media worker render/QA.
 - **Dependencies:** T222, T332, T350, T530.
-- **Notes:** incomplete outputs never canonical.
+- **Notes:** incomplete outputs never canonical. **Coverage subtask T531-S1** covers exact clip/short
+  export selection, codec/checksum/manifest evidence and deliverable QA for missing streams,
+  duration, black/silence and cancellation/retry fixtures.
 - **Tests:** real media, missing streams, duration/black/silence, retry/cancel.
 - **DoD:** Render completes solely from NH-Media Timeline/Profile.
 
@@ -720,7 +732,9 @@ and next task.
 - **Goal:** multiple profiles from shared upstream-of-render Artifacts.
 - **Files/modules:** profiles/reframe/dedupe tests.
 - **Dependencies:** T531.
-- **Notes:** profile-specific work does not rerun script/analysis/matching.
+- **Notes:** profile-specific work does not rerun script/analysis/matching. **Coverage subtask
+  T532-S1** owns the current P6 subject-aware auto-reframe disposition: a smart profile requires a
+  typed subject-tracking intermediate; center crop alone is recorded only as degraded fallback.
 - **Tests:** dimensions/codecs/safe area/provider-call audit/cache invalidation.
 - **DoD:** three outputs reuse unchanged inputs correctly.
 

@@ -6,6 +6,19 @@ owner: repository owner / task assignee
 
 # Memory changelog
 
+## 2026-08-18 — Gate G dependency closure and native capability acceptance
+
+- Inspected the actual Windows machine before Gate G and installed only the repository-pinned,
+  missing local prerequisites: uv 0.11.28, Node 24.14.1, Tauri CLI 2.11.4 and the reviewed
+  FFmpeg/ffprobe build. Docker local PostgreSQL/Redis/MinIO was started and health-verified.
+- Added the native deterministic P5/P6 capability slice for T500–T532, including explicit provider
+  ports/fallback, research/script/style, TTS/ASR/alignment, subtitles, scenes/VLM/characters,
+  embeddings, matching/coverage/candidates, reference style and typed audio policy.
+- Added the Go Timeline compiler/deliverable QA boundary, real 16:9/9:16/1:1 profile proof and
+  typed clip/short export with selection/profile/codec/checksum manifest and commit-after-QA gate.
+- Added the mandatory P5/P6 coverage reconciliation, dependency preflight evidence, and Gate G
+  acceptance runner. External providers/models and deferred matrix capabilities remain unclaimed.
+
 ## 2026-08-18 — Current-tree Gate F implementation audit
 
 - Repaired and regression-tested the canonical movie_recap graph, native Artifact role contracts,
