@@ -3,7 +3,9 @@ name = "nh-media-ml-worker"
 version = "0.1.0"
 description = "Isolated NH-Media Python ML worker foundation"
 requires-python = ">=3.13,<3.14"
-dependencies = []
+dependencies = [
+    "redis==6.4.0",
+]
 
 [tool.uv]
 package = true

@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/nhathao-nguyen/NH-Media/services/api/internal/domain"
 	"github.com/nhathao-nguyen/NH-Media/services/api/internal/product"
@@ -42,6 +43,25 @@ func (s *Server) registerProjectRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v1/projects/{project_id}/timelines/{timeline_id}/versions/{version_id}/approve", s.approveTimeline)
 	mux.HandleFunc("POST /api/v1/projects/{project_id}/timelines/{timeline_id}/versions/{version_id}/lock", s.lockTimeline)
 	mux.HandleFunc("POST /api/v1/projects/{project_id}/renders", s.createRender)
+	mux.HandleFunc("GET /api/v1/projects/{project_id}/renders", s.listRenders)
+	mux.HandleFunc("GET /api/v1/projects/{project_id}/renders/{render_id}", s.getRender)
+	mux.HandleFunc("POST /api/v1/projects/{project_id}/renders/{render_id}/cancel", s.cancelRender)
+	mux.HandleFunc("POST /api/v1/projects/{project_id}/renders/{render_id}/retry", s.retryRender)
+	mux.HandleFunc("POST /api/v1/projects/{project_id}/jobs", s.createJob)
+	mux.HandleFunc("GET /api/v1/projects/{project_id}/jobs", s.listJobs)
+	mux.HandleFunc("GET /api/v1/projects/{project_id}/jobs/{job_id}", s.getJob)
+	mux.HandleFunc("POST /api/v1/projects/{project_id}/jobs/{job_id}/start", s.startJob)
+	mux.HandleFunc("POST /api/v1/projects/{project_id}/jobs/{job_id}/pause", s.pauseJob)
+	mux.HandleFunc("POST /api/v1/projects/{project_id}/jobs/{job_id}/resume", s.resumeJob)
+	mux.HandleFunc("POST /api/v1/projects/{project_id}/jobs/{job_id}/cancel", s.cancelJob)
+	mux.HandleFunc("POST /api/v1/projects/{project_id}/jobs/{job_id}/retry", s.retryJob)
+	mux.HandleFunc("GET /api/v1/projects/{project_id}/jobs/{job_id}/runs", s.listRuns)
+	mux.HandleFunc("GET /api/v1/projects/{project_id}/jobs/{job_id}/runs/{run_id}", s.getRun)
+	mux.HandleFunc("GET /api/v1/projects/{project_id}/jobs/{job_id}/steps", s.listSteps)
+	mux.HandleFunc("POST /api/v1/projects/{project_id}/jobs/{job_id}/reviews/{job_step_id}/approve", s.approveReview)
+	mux.HandleFunc("POST /api/v1/projects/{project_id}/jobs/{job_id}/reviews/{job_step_id}/reject", s.rejectReview)
+	mux.HandleFunc("GET /api/v1/projects/{project_id}/jobs/{job_id}/events", s.listJobEvents)
+	mux.HandleFunc("GET /api/v1/projects/{project_id}/jobs/{job_id}/events/stream", s.streamJobEvents)
 	mux.HandleFunc("POST /api/v1/projects/{project_id}/analyses", s.createAnalysis)
 	mux.HandleFunc("GET /api/v1/projects/{project_id}/analyses", s.listAnalyses)
 	mux.HandleFunc("GET /api/v1/projects/{project_id}/analyses/{analysis_id}", s.getAnalysis)
@@ -56,6 +76,370 @@ func (s *Server) registerProjectRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("PATCH /api/v1/provider-configurations/{provider_id}", s.patchProvider)
 	mux.HandleFunc("POST /api/v1/provider-configurations/{provider_id}/validate", s.validateProvider)
 	mux.HandleFunc("POST /api/v1/provider-configurations/{provider_id}/disable", s.disableProvider)
+}
+
+func (s *Server) executionSurface(w http.ResponseWriter, r *http.Request) (product.ExecutionSurface, bool) {
+	value, ok := s.Product.(product.ExecutionSurface)
+	if !ok {
+		s.writeError(w, r, http.StatusNotImplemented, "EXECUTION_SURFACE_UNAVAILABLE", "The execution command surface is unavailable.")
+		return nil, false
+	}
+	return value, true
+}
+
+func (s *Server) renderSurface(w http.ResponseWriter, r *http.Request) (product.RenderSurface, bool) {
+	value, ok := s.Product.(product.RenderSurface)
+	if !ok {
+		s.writeError(w, r, http.StatusNotImplemented, "RENDER_SURFACE_UNAVAILABLE", "The render command surface is unavailable.")
+		return nil, false
+	}
+	return value, true
+}
+
+func (s *Server) createJob(w http.ResponseWriter, r *http.Request) {
+	principal, ok := requirePrincipal(s, w, r)
+	if !ok {
+		return
+	}
+	surface, ok := s.executionSurface(w, r)
+	if !ok {
+		return
+	}
+	var input product.JobCreateInput
+	if !s.decodeResource(w, r, &input) {
+		return
+	}
+	value, err := surface.CreateExecutionJob(principal.WorkspaceID, r.PathValue("project_id"), input)
+	if err != nil {
+		s.storeError(w, r, err)
+		return
+	}
+	status := http.StatusCreated
+	if input.AutoStart {
+		status = http.StatusAccepted
+	}
+	s.writeJSON(w, r, status, value)
+}
+
+func (s *Server) listJobs(w http.ResponseWriter, r *http.Request) {
+	principal, ok := requirePrincipal(s, w, r)
+	if !ok {
+		return
+	}
+	surface, ok := s.executionSurface(w, r)
+	if !ok {
+		return
+	}
+	values, err := surface.ListJobs(principal.WorkspaceID, r.PathValue("project_id"), r.URL.Query().Get("status"), queryLimit(r))
+	if err != nil {
+		s.storeError(w, r, err)
+		return
+	}
+	s.writeJSON(w, r, http.StatusOK, map[string]any{"items": values, "next_cursor": nil})
+}
+
+func (s *Server) retryJob(w http.ResponseWriter, r *http.Request) {
+	principal, ok := requirePrincipal(s, w, r)
+	if !ok {
+		return
+	}
+	surface, ok := s.executionSurface(w, r)
+	if !ok {
+		return
+	}
+	var input struct {
+		AutoStart *bool `json:"auto_start"`
+	}
+	if r.Body != nil && r.ContentLength != 0 && !s.decodeResource(w, r, &input) {
+		return
+	}
+	autoStart := true
+	if input.AutoStart != nil {
+		autoStart = *input.AutoStart
+	}
+	value, err := surface.RetryExecutionJob(principal.WorkspaceID, r.PathValue("project_id"), r.PathValue("job_id"), autoStart)
+	if err != nil {
+		s.storeError(w, r, err)
+		return
+	}
+	s.writeJSON(w, r, http.StatusCreated, value)
+}
+
+func (s *Server) listRuns(w http.ResponseWriter, r *http.Request) {
+	principal, ok := requirePrincipal(s, w, r)
+	if !ok {
+		return
+	}
+	surface, ok := s.executionSurface(w, r)
+	if !ok {
+		return
+	}
+	values, err := surface.ListPipelineRuns(principal.WorkspaceID, r.PathValue("project_id"), r.PathValue("job_id"))
+	if err != nil {
+		s.storeError(w, r, err)
+		return
+	}
+	s.writeJSON(w, r, http.StatusOK, map[string]any{"items": values})
+}
+
+func (s *Server) getRun(w http.ResponseWriter, r *http.Request) {
+	principal, ok := requirePrincipal(s, w, r)
+	if !ok {
+		return
+	}
+	surface, ok := s.executionSurface(w, r)
+	if !ok {
+		return
+	}
+	value, err := surface.GetPipelineRun(principal.WorkspaceID, r.PathValue("project_id"), r.PathValue("job_id"), r.PathValue("run_id"))
+	if err != nil {
+		s.storeError(w, r, err)
+		return
+	}
+	s.writeJSON(w, r, http.StatusOK, value)
+}
+
+func (s *Server) listSteps(w http.ResponseWriter, r *http.Request) {
+	principal, ok := requirePrincipal(s, w, r)
+	if !ok {
+		return
+	}
+	surface, ok := s.executionSurface(w, r)
+	if !ok {
+		return
+	}
+	runID := r.URL.Query().Get("pipeline_run_id")
+	if runID == "" {
+		job, err := s.Product.GetJob(principal.WorkspaceID, r.PathValue("project_id"), r.PathValue("job_id"))
+		if err != nil {
+			s.storeError(w, r, err)
+			return
+		}
+		runID = job.PipelineRunID
+	}
+	values, err := surface.ListJobSteps(principal.WorkspaceID, r.PathValue("project_id"), r.PathValue("job_id"), runID)
+	if err != nil {
+		s.storeError(w, r, err)
+		return
+	}
+	s.writeJSON(w, r, http.StatusOK, map[string]any{"items": values})
+}
+
+func (s *Server) approveReview(w http.ResponseWriter, r *http.Request) {
+	principal, ok := requirePrincipal(s, w, r)
+	if !ok {
+		return
+	}
+	surface, ok := s.executionSurface(w, r)
+	if !ok {
+		return
+	}
+	var input struct {
+		SelectedResourceID       string `json:"selected_resource_id"`
+		SelectedResourceRevision int64  `json:"selected_resource_revision"`
+	}
+	if !s.decodeResource(w, r, &input) {
+		return
+	}
+	value, err := surface.ApproveReview(principal.WorkspaceID, r.PathValue("project_id"), r.PathValue("job_id"), r.PathValue("job_step_id"), input.SelectedResourceID, input.SelectedResourceRevision)
+	if err != nil {
+		s.storeError(w, r, err)
+		return
+	}
+	s.writeJSON(w, r, http.StatusAccepted, value)
+}
+
+func (s *Server) rejectReview(w http.ResponseWriter, r *http.Request) {
+	principal, ok := requirePrincipal(s, w, r)
+	if !ok {
+		return
+	}
+	surface, ok := s.executionSurface(w, r)
+	if !ok {
+		return
+	}
+	var input struct {
+		Action string `json:"action"`
+	}
+	if !s.decodeResource(w, r, &input) {
+		return
+	}
+	value, err := surface.RejectReview(principal.WorkspaceID, r.PathValue("project_id"), r.PathValue("job_id"), r.PathValue("job_step_id"), input.Action)
+	if err != nil {
+		s.storeError(w, r, err)
+		return
+	}
+	s.writeJSON(w, r, http.StatusAccepted, value)
+}
+
+func (s *Server) getJob(w http.ResponseWriter, r *http.Request) {
+	principal, ok := requirePrincipal(s, w, r)
+	if !ok {
+		return
+	}
+	value, err := s.Product.GetJob(principal.WorkspaceID, r.PathValue("project_id"), r.PathValue("job_id"))
+	if err != nil {
+		s.storeError(w, r, err)
+		return
+	}
+	s.writeJSON(w, r, http.StatusOK, value)
+}
+
+func (s *Server) startJob(w http.ResponseWriter, r *http.Request) {
+	principal, ok := requirePrincipal(s, w, r)
+	if !ok {
+		return
+	}
+	value, err := s.Product.StartJob(principal.WorkspaceID, r.PathValue("project_id"), r.PathValue("job_id"))
+	if err != nil {
+		s.storeError(w, r, err)
+		return
+	}
+	s.writeJSON(w, r, http.StatusAccepted, value)
+}
+
+func (s *Server) pauseJob(w http.ResponseWriter, r *http.Request) {
+	principal, ok := requirePrincipal(s, w, r)
+	if !ok {
+		return
+	}
+	value, err := s.Product.PauseJob(principal.WorkspaceID, r.PathValue("project_id"), r.PathValue("job_id"))
+	if err != nil {
+		s.storeError(w, r, err)
+		return
+	}
+	s.writeJSON(w, r, http.StatusAccepted, value)
+}
+
+func (s *Server) resumeJob(w http.ResponseWriter, r *http.Request) {
+	principal, ok := requirePrincipal(s, w, r)
+	if !ok {
+		return
+	}
+	value, err := s.Product.ResumeJob(principal.WorkspaceID, r.PathValue("project_id"), r.PathValue("job_id"))
+	if err != nil {
+		s.storeError(w, r, err)
+		return
+	}
+	s.writeJSON(w, r, http.StatusAccepted, value)
+}
+
+func (s *Server) cancelJob(w http.ResponseWriter, r *http.Request) {
+	principal, ok := requirePrincipal(s, w, r)
+	if !ok {
+		return
+	}
+	value, err := s.Product.CancelJob(principal.WorkspaceID, r.PathValue("project_id"), r.PathValue("job_id"))
+	if err != nil {
+		s.storeError(w, r, err)
+		return
+	}
+	s.writeJSON(w, r, http.StatusAccepted, value)
+}
+
+func (s *Server) listJobEvents(w http.ResponseWriter, r *http.Request) {
+	principal, ok := requirePrincipal(s, w, r)
+	if !ok {
+		return
+	}
+	after, _ := strconv.ParseInt(r.URL.Query().Get("after_sequence"), 10, 64)
+	values, err := s.Product.ListJobEvents(principal.WorkspaceID, r.PathValue("project_id"), r.PathValue("job_id"), after, queryLimit(r))
+	if err != nil {
+		s.storeError(w, r, err)
+		return
+	}
+	var next any
+	if len(values) == queryLimit(r) {
+		next = values[len(values)-1].Sequence
+	}
+	s.writeJSON(w, r, http.StatusOK, map[string]any{"items": values, "next_sequence": next})
+}
+
+func (s *Server) streamJobEvents(w http.ResponseWriter, r *http.Request) {
+	principal, ok := requirePrincipal(s, w, r)
+	if !ok {
+		return
+	}
+	jobID := r.PathValue("job_id")
+	projectID := r.PathValue("project_id")
+	job, err := s.Product.GetJob(principal.WorkspaceID, projectID, jobID)
+	if err != nil {
+		s.storeError(w, r, err)
+		return
+	}
+	after := int64(0)
+	if raw := strings.TrimSpace(r.Header.Get("Last-Event-ID")); raw != "" {
+		parsed, parseErr := strconv.ParseInt(raw, 10, 64)
+		if parseErr != nil || parsed < 0 {
+			s.writeError(w, r, http.StatusBadRequest, "INVALID_LAST_EVENT_ID", "Last-Event-ID must be a non-negative event sequence.")
+			return
+		}
+		after = parsed
+	}
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		s.writeError(w, r, http.StatusInternalServerError, "SSE_UNAVAILABLE", "The event stream is unavailable.")
+		return
+	}
+	if after == 0 {
+		snapshot := map[string]any{"job": job}
+		if surface, surfaceOK := s.Product.(product.ExecutionSurface); surfaceOK && job.PipelineRunID != "" {
+			if steps, stepsErr := surface.ListJobSteps(principal.WorkspaceID, projectID, jobID, job.PipelineRunID); stepsErr == nil {
+				snapshot["steps"] = steps
+			}
+		}
+		s.writeSSE(w, "0", "stream.snapshot", snapshot)
+		flusher.Flush()
+	}
+	deadline := time.NewTimer(30 * time.Second)
+	defer deadline.Stop()
+	keepalive := time.NewTicker(15 * time.Second)
+	defer keepalive.Stop()
+	poll := time.NewTicker(250 * time.Millisecond)
+	defer poll.Stop()
+	for {
+		select {
+		case <-r.Context().Done():
+			return
+		case <-deadline.C:
+			return
+		case <-keepalive.C:
+			_, _ = w.Write([]byte(": keepalive\n\n"))
+			flusher.Flush()
+		case <-poll.C:
+			events, eventErr := s.Product.ListJobEvents(principal.WorkspaceID, projectID, jobID, after, 100)
+			if eventErr != nil {
+				return
+			}
+			for _, event := range events {
+				s.writeSSE(w, strconv.FormatInt(event.Sequence, 10), event.EventType, event)
+				after = event.Sequence
+			}
+			if len(events) > 0 {
+				flusher.Flush()
+			}
+			current, currentErr := s.Product.GetJob(principal.WorkspaceID, projectID, jobID)
+			if currentErr == nil && isTerminalJob(current.Status) {
+				flusher.Flush()
+				return
+			}
+		}
+	}
+}
+
+func (s *Server) writeSSE(w http.ResponseWriter, id, event string, value any) {
+	payload, err := json.Marshal(value)
+	if err != nil {
+		return
+	}
+	_, _ = fmt.Fprintf(w, "id: %s\nevent: %s\ndata: %s\nretry: 3000\n\n", id, event, payload)
+}
+
+func isTerminalJob(status domain.JobStatus) bool {
+	return status == domain.JobCompleted || status == domain.JobFailed || status == domain.JobDeadLettered || status == domain.JobCancelled
 }
 
 func (s *Server) createProject(w http.ResponseWriter, r *http.Request) {
@@ -596,6 +980,91 @@ func (s *Server) createRender(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.writeJSON(w, r, http.StatusAccepted, value)
+}
+
+func (s *Server) listRenders(w http.ResponseWriter, r *http.Request) {
+	principal, ok := requirePrincipal(s, w, r)
+	if !ok {
+		return
+	}
+	surface, ok := s.renderSurface(w, r)
+	if !ok {
+		return
+	}
+	values, err := surface.ListRenders(principal.WorkspaceID, r.PathValue("project_id"), r.URL.Query().Get("status"), r.URL.Query().Get("timeline_version_id"), queryLimit(r))
+	if err != nil {
+		s.storeError(w, r, err)
+		return
+	}
+	s.writeJSON(w, r, http.StatusOK, map[string]any{"items": values, "next_cursor": nil})
+}
+
+func (s *Server) getRender(w http.ResponseWriter, r *http.Request) {
+	principal, ok := requirePrincipal(s, w, r)
+	if !ok {
+		return
+	}
+	surface, ok := s.renderSurface(w, r)
+	if !ok {
+		return
+	}
+	value, err := surface.GetRender(principal.WorkspaceID, r.PathValue("project_id"), r.PathValue("render_id"))
+	if err != nil {
+		s.storeError(w, r, err)
+		return
+	}
+	job, jobErr := s.Product.GetJob(principal.WorkspaceID, r.PathValue("project_id"), value.JobID)
+	if jobErr != nil {
+		s.storeError(w, r, jobErr)
+		return
+	}
+	s.writeJSON(w, r, http.StatusOK, map[string]any{"render": value, "job": job})
+}
+
+func (s *Server) cancelRender(w http.ResponseWriter, r *http.Request) {
+	principal, ok := requirePrincipal(s, w, r)
+	if !ok {
+		return
+	}
+	surface, ok := s.renderSurface(w, r)
+	if !ok {
+		return
+	}
+	value, err := surface.CancelRender(principal.WorkspaceID, r.PathValue("project_id"), r.PathValue("render_id"))
+	if err != nil {
+		s.storeError(w, r, err)
+		return
+	}
+	s.writeJSON(w, r, http.StatusAccepted, value)
+}
+
+func (s *Server) retryRender(w http.ResponseWriter, r *http.Request) {
+	principal, ok := requirePrincipal(s, w, r)
+	if !ok {
+		return
+	}
+	surface, ok := s.renderSurface(w, r)
+	if !ok {
+		return
+	}
+	autoStart := true
+	if r.Body != nil && r.ContentLength != 0 {
+		var input struct {
+			AutoStart *bool `json:"auto_start"`
+		}
+		if !s.decodeResource(w, r, &input) {
+			return
+		}
+		if input.AutoStart != nil {
+			autoStart = *input.AutoStart
+		}
+	}
+	value, err := surface.RetryRender(principal.WorkspaceID, r.PathValue("project_id"), r.PathValue("render_id"), autoStart)
+	if err != nil {
+		s.storeError(w, r, err)
+		return
+	}
+	s.writeJSON(w, r, http.StatusCreated, value)
 }
 
 func (s *Server) createAnalysis(w http.ResponseWriter, r *http.Request) {

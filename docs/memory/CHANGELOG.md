@@ -6,6 +6,19 @@ owner: repository owner / task assignee
 
 # Memory changelog
 
+## 2026-08-17 — Gate E T322–T350 Local/LAN execution closure
+
+- Completed the durable Job/Run/Step command surface: create/list/get/start/pause/resume/cancel/retry,
+  pipeline runs/steps, durable Review required/approve/reject-edit/resume, and Render list/get/cancel/retry
+  with immutable successor links.
+- Fixed PostgreSQL live issues found by the runtime harness: typed JSONB command extraction, review
+  bigint/UUID casts, cursor closure before same-transaction mutations, and aggregate `stop_after` pause.
+- Added deterministic checkpoint/recovery planning, fail-closed active-lease/review handling, atomic
+  graph controls, loopback-authenticated SSE snapshot/replay/reconnect tests, and live evidence for native
+  Artifact execution, Python retry/redelivery, worker restart/XAUTOCLAIM, review/replay/cancel commands.
+- Final local verification and memory/evidence validation pass. T400/Gate F, desktop T550, hardened T603,
+  backup/restore and public/VPS T605 remain outside this task.
+
 ## 2026-08-17 — Gate C+D specification repair before Gate E
 
 - Added deterministic media validation fixtures for malformed containers, invalid ffprobe output/
@@ -57,3 +70,33 @@ owner: repository owner / task assignee
 
 Final documentation/link/table/JSON/task/OQ/terminology/change-boundary checks are recorded in
 [`TEST-EVIDENCE.md`](TEST-EVIDENCE.md). T002/T003 then T004 are the next evidence gates.
+
+## 2026-08-17 — Gate E T300–T340 execution foundation
+
+- Added canonical Job/Run/Step transition validation, transactional event/outbox writes, bounded
+  outbox replay/publishing, Redis Streams QueuePort, deterministic dependency scheduling and hashed
+  lease/reconciliation boundaries.
+- Added an argv-only sandboxed FFmpeg/ffprobe process boundary, versioned Go/Python worker contracts,
+  probe/thumbnail node, deterministic Python worker and Go-to-uv cross-language integration.
+- Added durable execution-graph bootstrap, native Job controls/status/events/SSE, checkpoint/reuse and
+  retry/dead-letter adapters. Focused regression gates pass; full Redis-to-worker-to-Artifact runtime,
+  crash/resume/review/replay/reconnect acceptance remains the next evidence boundary.
+- Added the lease-aware controller/result-reconciler boundary, Python Redis worker runtime, live ephemeral
+  Redis integration harness and process-tree cleanup. The live Redis/Python slice passes; Artifact
+  staging/commit and PostgreSQL-backed end-to-end acceptance remain intentionally unclaimed.
+- Added the durable first-slice result adapter: deterministic report staging/promote through MinIO,
+  SQL Artifact producer linkage, lease-guarded Step completion and `node.completed` event. The live
+  PostgreSQL/Redis/MinIO harness passes and retains only soft-deleted fixture state plus append-only audit.
+- Added the combined Python durable harness: an isolated ML pipeline reaches the real `nh_media` Redis
+  worker, result reconciler, PostgreSQL Step state and MinIO Artifact commit. Restart/retry redelivery,
+  terminal aggregate and client/LAN acceptance remain the next gates.
+- Added bounded Python XAUTOCLAIM recovery and a live worker-restart harness; a second consumer reclaims
+  one pending delayed command without duplicate result publication. Failure-category retry remains open.
+- Added durable retry scheduling: worker safe-error categories are validated, transient retry is bounded by
+  node `max_attempts` and policy backoff, Job/Run/Step terminal aggregation is reconciled, and queued retry
+  messages remain ID-only. The live Python/PostgreSQL/Redis/MinIO harness now passes attempt-1 failure,
+  backoff, attempt-2 redelivery, Artifact commit and completed aggregate state.
+- Corrected Redis zero-duration QueuePort polls so controller dispatch loops cannot block forever on Redis
+  `BLOCK 0`; the correction is covered by the live retry harness.
+- Added stable-ID recovery for already-queued JobSteps after a PostgreSQL-to-Redis enqueue interruption;
+  subsequent start/resume calls can republish the durable frontier without treating Redis as state.

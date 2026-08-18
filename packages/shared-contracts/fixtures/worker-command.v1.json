@@ -1,0 +1,13 @@
+{
+  "schema_version": "worker-command/v1",
+  "message_id": "msg_probe_001",
+  "capability": "probe",
+  "project_id": "project_probe_001",
+  "job_id": "job_probe_001",
+  "pipeline_run_id": "run_probe_001",
+  "job_step_id": "step_probe_001",
+  "pipeline_node_id": "node_probe_001",
+  "attempt": 1,
+  "input_refs": [{"artifact_id": "artifact_source_001", "role": "source", "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}],
+  "config": {"thumbnail": false}
+}

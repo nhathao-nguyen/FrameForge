@@ -4,6 +4,7 @@ references/
 # Local development artifacts.
 .DS_Store
 __pycache__/
+*.egg-info/
 *.py[cod]
 .pytest_cache/
 .mypy_cache/

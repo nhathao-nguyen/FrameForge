@@ -13,6 +13,7 @@ import (
 
 	"github.com/nhathao-nguyen/NH-Media/services/api/internal/domain"
 	"github.com/nhathao-nguyen/NH-Media/services/api/internal/product"
+	"github.com/nhathao-nguyen/NH-Media/services/api/internal/queue"
 	"github.com/nhathao-nguyen/NH-Media/services/api/internal/storage"
 )
 
@@ -26,9 +27,15 @@ type DurableBackend struct {
 	UserID       string
 	Workspace    string
 	Storage      storage.StoragePort
+	Queue        queue.QueuePort
 	providerMu   sync.Mutex
 	providerData map[string]storage.UploadSession
 }
+
+// SetQueue attaches the optional Redis transport after durable bootstrap. The
+// database remains authoritative when it is nil or temporarily unavailable;
+// queued steps can be reconciled after a transport outage.
+func (b *DurableBackend) SetQueue(value queue.QueuePort) { b.Queue = value }
 
 func NewDurableBackend(sqlStore *SQLStore, userID, workspaceID string, backend storage.StoragePort) (*DurableBackend, error) {
 	if sqlStore == nil || userID == "" || workspaceID == "" {
@@ -1073,6 +1080,8 @@ func mapPersistenceError(err error) error {
 	case errors.Is(err, ErrNotFound), errors.Is(err, ErrScopeDenied):
 		return product.ErrNotFound
 	case errors.Is(err, ErrVersionConflict):
+		return product.ErrConflict
+	case errors.Is(err, ErrTransitionConflict):
 		return product.ErrConflict
 	default:
 		return err

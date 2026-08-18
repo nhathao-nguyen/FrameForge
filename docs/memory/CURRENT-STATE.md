@@ -11,7 +11,7 @@ owner: repository owner / task assignee
 | Field | Value | Evidence |
 |---|---|---|
 | Working branch | `implementation/bootstrap` | `git branch --show-current` |
-| Baseline commit | `4e97c9fc52f1ccc5396885d81a5bbe7f5c8783ca` | checkpoint under audit; Gate C+D repair remains uncommitted |
+| Baseline commit | `795c2de` (`fix: complete Gate C+D repair before Gate E`) | last committed Gate C+D repair; Gate E implementation is uncommitted |
 | Tracking branch | `origin/implementation/bootstrap` | `git status --short --branch` |
 | Push/merge action | none performed | task scope |
 
@@ -24,13 +24,16 @@ owner: repository owner / task assignee
 - T003 reference-behavior fixture policy: complete with a policy README and intentionally empty manifest.
 - T004 owner approval/independence certification: complete by 2026-08-17 ratification and final
   documentation consistency evidence; final pre-code certification rerun after T002/T003.
-- Application implementation: Gate B foundation T100–T108 plus the current uncommitted Gate C+D
-  domain, persistence, storage and native API boundary are present in the working tree.
-- Gate C+D status: T200–T235 implementation plus the narrow C+D repair is present in the current
-  working tree. Focused Go/unit/sqlmock and non-desktop canonical verification are green. The API
-  selects the durable PostgreSQL/Product + MinIO path when `NH_MEDIA_DATABASE_URL` is configured;
-  unit tests retain the explicit in-memory backend as a deterministic test adapter.
-- T300 and all later execution/queue work were not started.
+- Application implementation: Gate B foundation T100–T108, committed Gate C+D and the current
+  uncommitted Gate E execution foundation are present in the working tree.
+- Gate C+D status: T200–T235 implementation plus the narrow C+D repair is committed at the baseline
+  above. Focused Go/unit/sqlmock and non-desktop canonical verification remain green. The API selects
+  the durable PostgreSQL/Product + MinIO path when `NH_MEDIA_DATABASE_URL` is configured; unit tests
+  retain the explicit in-memory backend as a deterministic test adapter.
+- Gate E status: T300–T350 are complete for the Local/LAN-first execution slice. Durable PostgreSQL
+  Job/Run/Step/Review/Render commands, live native and Python worker/artifact paths, retry/redelivery,
+  cancellation, recovery planning, and authenticated SSE snapshot/replay/reconnect tests now pass.
+  T400/Gate F, desktop T550 acceptance, hardened T603, and public/VPS T605 remain explicitly out of scope.
 
 ## Current evidence
 
@@ -39,7 +42,12 @@ owner: repository owner / task assignee
 - T002 Windows toolchain evidence is in `docs/bootstrap/T002-TOOLCHAIN-MATRIX-WINDOWS.md`.
 - T003 policy and manifest are in `tests/reference-behavior/`; the manifest is empty and normal CI
   remains upstream-free.
-- First deterministic native slice is T321/T322; first Python worker slice is T323.
+- First deterministic native slice is T321; first Python worker slice is T323. T322/T323 now have
+  live Go durable queue-to-lease-to-MinIO-Artifact-to-event, Redis-to-Python-to-PostgreSQL/MinIO,
+  Python restart/XAUTOCLAIM, and transient retry/redelivery harnesses. T330–T332 have durable
+  recovery/review/cancel/replay command evidence; T340 has authenticated SSE snapshot/replay/terminal
+  reconnect and invalid-cursor coverage. The remaining client-shell/T550 and hardened/public release
+  gates are not claimed.
 - Gate B evidence covers repository boundaries, shared primitives, redaction/config boundaries, private
   PostgreSQL/Redis/MinIO Compose services, Go API shell, health/readiness, CI and independence scans.
 - Gate C+D evidence includes eight PostgreSQL migrations, the checksum/dirty migration runner, scoped SQL
@@ -58,8 +66,11 @@ owner: repository owner / task assignee
   Project request replayed the same response with one database row.
 - Local Functional Acceptance is T550; Local/LAN Hardened Acceptance is T603; Internet/VPS
   production is T605.
-- No Gate E/T300 state-transition service, QueuePort, or media/AI execution workflow was implemented;
-  the Gate C+D declarative pipeline and upload validation Job intent are intentionally non-executing.
+- Gate E includes canonical transitions/events/outbox replay, Redis Streams QueuePort, DAG scheduling,
+  leases/reconciliation, sandboxed media process, versioned Go/Python worker contracts, probe/thumbnail
+  node, durable execution-graph bootstrap, Job/Run/Step/Review/Render commands, checkpoint/recovery,
+  retry/DLQ adapters, cancellation, partial stop-after pause, and SSE. The live evidence and its
+  limitations are recorded in TEST-EVIDENCE.md; no later Gate F task is implied.
 
 ## Decision status
 
@@ -70,12 +81,11 @@ vendors are later configuration choices.
 ## Handoff
 
 ```text
-Task: Gate C+D — T200–T235
-Status: Gate C+D repair PASS; implementation remains uncommitted in working tree
-Boundary: Domain, durable persistence, storage, upload/probe boundary and native Product APIs
-  Application code: API shell, contracts, config, client/worker boundaries, Gate C+D domain/persistence/
-  storage/API boundary, and private dev infrastructure
+Task: Gate E — T300–T350 Local/LAN execution slice
+Status: complete; Local/LAN runtime evidence pass, later client/hardened/public gates pending
+Boundary: Canonical execution transitions/events, queue, scheduling, leases, media/AI worker contracts,
+  durable graph bootstrap, controls, checkpoint/DLQ and SSE boundary
+  Application code: API, persistence, media worker, Python worker, contracts, and execution adapters
 Upstream relationship: research/reference only; no operational dependency
-Next: Gate E/T300 is the next separately authorized task; it owns canonical transitions/events and
-  execution orchestration, which were intentionally not implemented here.
+Next: preserve this Gate E boundary; only start T400/Gate F after explicit owner approval and a new task.
 ```

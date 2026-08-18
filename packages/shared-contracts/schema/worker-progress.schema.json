@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nh-media.local/contracts/worker-progress/v1",
+  "title": "NH-Media worker progress v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "message_id", "job_id", "job_step_id", "percent"],
+  "properties": {
+    "schema_version": {"const": "worker-progress/v1"},
+    "message_id": {"type": "string", "pattern": "^[a-z][a-z0-9_-]{2,127}$"},
+    "job_id": {"type": "string", "pattern": "^[a-z][a-z0-9_-]{2,127}$"},
+    "job_step_id": {"type": "string", "pattern": "^[a-z][a-z0-9_-]{2,127}$"},
+    "percent": {"type": "number", "minimum": 0, "maximum": 100},
+    "units_completed": {"type": "integer", "minimum": 0},
+    "units_total": {"type": "integer", "minimum": 0},
+    "unit_name": {"type": "string", "maxLength": 64},
+    "safe_message": {"type": "string", "maxLength": 256}
+  }
+}

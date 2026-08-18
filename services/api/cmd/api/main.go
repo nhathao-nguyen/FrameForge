@@ -14,10 +14,12 @@ import (
 
 	"github.com/nhathao-nguyen/NH-Media/services/api/internal/auth"
 	"github.com/nhathao-nguyen/NH-Media/services/api/internal/config"
+	"github.com/nhathao-nguyen/NH-Media/services/api/internal/execution"
 	"github.com/nhathao-nguyen/NH-Media/services/api/internal/health"
 	"github.com/nhathao-nguyen/NH-Media/services/api/internal/httpapi"
 	"github.com/nhathao-nguyen/NH-Media/services/api/internal/persistence"
 	"github.com/nhathao-nguyen/NH-Media/services/api/internal/product"
+	"github.com/nhathao-nguyen/NH-Media/services/api/internal/queue"
 	"github.com/nhathao-nguyen/NH-Media/services/api/internal/storage"
 )
 
@@ -35,6 +37,7 @@ func main() {
 		log.Fatalf("invalid storage configuration: %v", err)
 	}
 	var productBackend product.Backend = product.NewStoreWithStorage("ws_default", backend)
+	var runtimeQueue *queue.RedisQueue
 	var database *sql.DB
 	if dsn := os.Getenv("NH_MEDIA_DATABASE_URL"); dsn != "" {
 		if backend == nil {
@@ -73,9 +76,72 @@ func main() {
 			log.Fatalf("initialize durable Product backend: %v", err)
 		}
 	}
+	if durable, ok := productBackend.(*persistence.DurableBackend); ok {
+		if endpoint := strings.TrimSpace(os.Getenv("NH_QUEUE_ENDPOINT")); endpoint != "" {
+			parsed, parseErr := url.Parse(endpoint)
+			if parseErr != nil || parsed.Host == "" || (parsed.Scheme != "redis" && parsed.Scheme != "rediss") {
+				log.Fatalf("invalid NH_QUEUE_ENDPOINT")
+			}
+			password := firstEnv(os.Getenv, "NH_QUEUE_PASSWORD", os.Getenv("REDIS_PASSWORD"))
+			transport, queueErr := queue.NewRedisQueue(queue.RedisOptions{Addr: parsed.Host, Password: password, StreamPrefix: firstEnv(os.Getenv, "NH_QUEUE_STREAM_PREFIX", "nh-media")})
+			if queueErr != nil {
+				log.Fatalf("initialize Redis QueuePort: %v", queueErr)
+			}
+			if err := transport.Ping(context.Background()); err != nil {
+				log.Fatalf("connect Redis QueuePort: %v", err)
+			}
+			defer transport.Close()
+			durable.SetQueue(transport)
+			runtimeQueue = transport
+		}
+	}
 	server, err := httpapi.NewServerWithBackend(value, provider, health.NewRegistry(nil, 2*time.Second), productBackend, backend)
 	if err != nil {
 		log.Fatalf("invalid API server: %v", err)
+	}
+	dispatchCtx, stopDispatch := context.WithCancel(context.Background())
+	defer stopDispatch()
+	if durable, ok := productBackend.(*persistence.DurableBackend); ok && runtimeQueue != nil {
+		claims := execution.NewLeaseRegistry()
+		artifactRepository, repositoryErr := persistence.NewSQLArtifactRepository(durable.SQL, durable.UserID, durable.Workspace)
+		if repositoryErr != nil {
+			log.Fatalf("initialize worker Artifact repository: %v", repositoryErr)
+		}
+		for _, capability := range []string{"probe", "thumbnail", "analysis"} {
+			workerID := "api-controller-" + capability
+			controller := execution.ClaimingDispatcher{Queue: runtimeQueue, Resolver: persistence.ScopedClaimResolver{SQL: durable.SQL, Workspace: durable.Workspace, WorkerID: workerID, Duration: 2 * time.Minute}, Publisher: runtimeQueue, Claims: claims}
+			results := execution.LeaseAwareResultReconciler{Source: runtimeQueue, Claims: claims, Applier: persistence.ScopedResultApplier{SQL: durable.SQL, Workspace: durable.Workspace, WorkerID: workerID, Artifacts: persistence.WorkerArtifactCommitter{Storage: backend, Repository: artifactRepository}}}
+			go func(capability string, controller execution.ClaimingDispatcher) {
+				for dispatchCtx.Err() == nil {
+					if err := controller.Run(dispatchCtx, capability, "api-controller-"+capability, 250*time.Millisecond); err != nil && dispatchCtx.Err() == nil {
+						log.Printf("execution dispatcher %s stopped: %v", capability, err)
+						time.Sleep(time.Second)
+					}
+				}
+			}(capability, controller)
+			go func(capability string, reconciler execution.LeaseAwareResultReconciler) {
+				for dispatchCtx.Err() == nil {
+					if err := reconciler.Run(dispatchCtx, capability, "api-result-"+capability, 250*time.Millisecond); err != nil && dispatchCtx.Err() == nil {
+						log.Printf("worker result reconciler %s stopped: %v", capability, err)
+						time.Sleep(time.Second)
+					}
+				}
+			}(capability, results)
+		}
+		go func() {
+			ticker := time.NewTicker(250 * time.Millisecond)
+			defer ticker.Stop()
+			for {
+				if _, err := durable.RequeueRetryingSteps(dispatchCtx); err != nil && dispatchCtx.Err() == nil {
+					log.Printf("retry sweeper stopped: %v", err)
+				}
+				select {
+				case <-dispatchCtx.Done():
+					return
+				case <-ticker.C:
+				}
+			}
+		}()
 	}
 	go func() {
 		log.Printf("NH-Media API shell listening on %s (profile=%s)", value.Bind, value.Profile)
@@ -86,6 +152,7 @@ func main() {
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
 	<-stop
+	stopDispatch()
 	server.Health.SetDraining(true)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()

@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/nhathao-nguyen/NH-Media/services/api/internal/domain"
+	"github.com/nhathao-nguyen/NH-Media/services/api/internal/execution"
 	"github.com/nhathao-nguyen/NH-Media/services/api/internal/storage"
 )
 
@@ -60,6 +61,12 @@ type Backend interface {
 	UpdateRenderProfile(string, string, int, map[string]any) (*RenderProfile, error)
 	SetRenderProfileStatus(string, string, int, string) (*RenderProfile, error)
 	CreateRender(string, string, string, string, int, map[string]any) (*Render, error)
+	GetJob(string, string, string) (*Job, error)
+	StartJob(string, string, string) (*Job, error)
+	PauseJob(string, string, string) (*Job, error)
+	ResumeJob(string, string, string) (*Job, error)
+	CancelJob(string, string, string) (*Job, error)
+	ListJobEvents(string, string, string, int64, int) ([]JobEvent, error)
 	CreateAnalysis(string, string, string, map[string]any, map[string]any) (*Analysis, error)
 	GetAnalysis(string, string, string) (*Analysis, error)
 	ListAnalyses(string, string) ([]Analysis, error)
@@ -92,6 +99,10 @@ type Store struct {
 	profiles     map[string]*RenderProfile
 	renders      map[string]*Render
 	jobs         map[string]*Job
+	jobEvents    map[string][]JobEvent
+	runs         map[string]*PipelineRun
+	steps        map[string][]JobStep
+	reviews      map[string]*Review
 	idempotency  map[string]IdempotencyRecord
 	storage      storage.StoragePort
 	storageMu    sync.Mutex
@@ -256,17 +267,18 @@ type ProviderConfiguration struct {
 	LastValidatedAt *time.Time     `json:"last_validated_at,omitempty"`
 }
 type Render struct {
-	ID                string         `json:"id"`
-	ProjectID         string         `json:"project_id"`
-	TimelineVersionID string         `json:"timeline_version_id"`
-	ProfileKey        string         `json:"profile_key"`
-	ProfileVersion    int            `json:"profile_version"`
-	Status            string         `json:"status"`
-	JobID             string         `json:"job_id"`
-	RequestHash       string         `json:"request_hash"`
-	ProfileID         string         `json:"profile_id,omitempty"`
-	ProfileSnapshot   map[string]any `json:"profile_snapshot,omitempty"`
-	CreatedAt         time.Time      `json:"created_at"`
+	ID                 string         `json:"id"`
+	ProjectID          string         `json:"project_id"`
+	TimelineVersionID  string         `json:"timeline_version_id"`
+	ProfileKey         string         `json:"profile_key"`
+	ProfileVersion     int            `json:"profile_version"`
+	Status             string         `json:"status"`
+	JobID              string         `json:"job_id"`
+	SupersedesRenderID string         `json:"supersedes_render_id,omitempty"`
+	RequestHash        string         `json:"request_hash"`
+	ProfileID          string         `json:"profile_id,omitempty"`
+	ProfileSnapshot    map[string]any `json:"profile_snapshot,omitempty"`
+	CreatedAt          time.Time      `json:"created_at"`
 }
 type RenderProfile struct {
 	ID            string         `json:"id"`
@@ -281,12 +293,90 @@ type RenderProfile struct {
 	UpdatedAt     time.Time      `json:"updated_at"`
 }
 type Job struct {
-	ID        string           `json:"id"`
-	ProjectID string           `json:"project_id"`
-	Kind      string           `json:"kind"`
-	Status    domain.JobStatus `json:"status"`
-	Command   map[string]any   `json:"command"`
-	CreatedAt time.Time        `json:"created_at"`
+	ID            string           `json:"id"`
+	ProjectID     string           `json:"project_id"`
+	Kind          string           `json:"kind"`
+	Status        domain.JobStatus `json:"status"`
+	PipelineRunID string           `json:"pipeline_run_id,omitempty"`
+	Command       map[string]any   `json:"command"`
+	CreatedAt     time.Time        `json:"created_at"`
+}
+
+type PipelineRun struct {
+	ID           string    `json:"id"`
+	JobID        string    `json:"job_id"`
+	RunNumber    int       `json:"run_number"`
+	Status       string    `json:"status"`
+	Contract     string    `json:"contract_version"`
+	CheckpointID string    `json:"checkpoint_id,omitempty"`
+	CreatedAt    time.Time `json:"created_at"`
+}
+
+type JobStep struct {
+	ID            string           `json:"id"`
+	PipelineRunID string           `json:"pipeline_run_id"`
+	NodeKey       string           `json:"node_key"`
+	Status        string           `json:"status"`
+	Attempt       int              `json:"current_attempt"`
+	OutputRefs    []map[string]any `json:"output_refs,omitempty"`
+	SkipReason    string           `json:"skip_reason,omitempty"`
+	Revision      int64            `json:"revision"`
+}
+
+type Review struct {
+	ID                       string `json:"id"`
+	JobID                    string `json:"job_id"`
+	JobStepID                string `json:"job_step_id"`
+	PipelineRunID            string `json:"pipeline_run_id"`
+	Status                   string `json:"status"`
+	ReviewType               string `json:"review_type"`
+	ProposedResourceType     string `json:"proposed_resource_type"`
+	ProposedResourceID       string `json:"proposed_resource_id"`
+	ProposedResourceRevision int64  `json:"proposed_resource_revision,omitempty"`
+	SelectedResourceType     string `json:"selected_resource_type,omitempty"`
+	SelectedResourceID       string `json:"selected_resource_id,omitempty"`
+	SelectedResourceRevision int64  `json:"selected_resource_revision,omitempty"`
+	Decision                 string `json:"decision,omitempty"`
+	DecisionComment          string `json:"decision_comment,omitempty"`
+}
+
+type JobCreateInput struct {
+	Kind        string         `json:"kind"`
+	WorkflowKey string         `json:"workflow_key,omitempty"`
+	Mode        string         `json:"mode,omitempty"`
+	Input       map[string]any `json:"input,omitempty"`
+	StartFrom   string         `json:"start_from,omitempty"`
+	StopAfter   string         `json:"stop_after,omitempty"`
+	Params      map[string]any `json:"params,omitempty"`
+	Priority    int            `json:"priority,omitempty"`
+	MaxRuns     int            `json:"max_runs,omitempty"`
+	EnableDLQ   bool           `json:"enable_dlq,omitempty"`
+	AutoStart   bool           `json:"auto_start,omitempty"`
+}
+
+type ExecutionSurface interface {
+	CreateExecutionJob(string, string, JobCreateInput) (*Job, error)
+	ListJobs(string, string, string, int) ([]Job, error)
+	RetryExecutionJob(string, string, string, bool) (*Job, error)
+	ListPipelineRuns(string, string, string) ([]PipelineRun, error)
+	GetPipelineRun(string, string, string, string) (*PipelineRun, error)
+	ListJobSteps(string, string, string, string) ([]JobStep, error)
+	ApproveReview(string, string, string, string, string, int64) (*Job, error)
+	RejectReview(string, string, string, string, string) (*Job, error)
+}
+
+type RenderSurface interface {
+	GetRender(string, string, string) (*Render, error)
+	ListRenders(string, string, string, string, int) ([]Render, error)
+	CancelRender(string, string, string) (*Render, error)
+	RetryRender(string, string, string, bool) (*Render, error)
+}
+type JobEvent struct {
+	ID         string         `json:"event_id"`
+	EventType  string         `json:"event_type"`
+	Sequence   int64          `json:"sequence"`
+	Payload    map[string]any `json:"payload"`
+	OccurredAt time.Time      `json:"occurred_at"`
 }
 type IdempotencyRecord struct {
 	RequestHash string
@@ -306,7 +396,7 @@ func newStore(workspaceID string, backend storage.StoragePort) *Store {
 	if workspaceID == "" {
 		workspaceID = "ws_default"
 	}
-	return &Store{workspaceID: workspaceID, projects: map[string]*Project{}, assets: map[string]*Asset{}, uploads: map[string]*UploadSession{}, scripts: map[string]*Script{}, scriptVers: map[string]*ScriptVersion{}, narrations: map[string]*Narration{}, timelines: map[string]*Timeline{}, timelineVers: map[string]*TimelineVersion{}, analyses: map[string]*Analysis{}, scenes: map[string]*Scene{}, candidates: map[string]*CandidateGroup{}, providers: map[string]*ProviderConfiguration{}, profiles: map[string]*RenderProfile{}, renders: map[string]*Render{}, jobs: map[string]*Job{}, idempotency: map[string]IdempotencyRecord{}, storage: backend, storageSlots: map[string]storage.UploadSession{}, staged: map[string]storage.StagedObject{}}
+	return &Store{workspaceID: workspaceID, projects: map[string]*Project{}, assets: map[string]*Asset{}, uploads: map[string]*UploadSession{}, scripts: map[string]*Script{}, scriptVers: map[string]*ScriptVersion{}, narrations: map[string]*Narration{}, timelines: map[string]*Timeline{}, timelineVers: map[string]*TimelineVersion{}, analyses: map[string]*Analysis{}, scenes: map[string]*Scene{}, candidates: map[string]*CandidateGroup{}, providers: map[string]*ProviderConfiguration{}, profiles: map[string]*RenderProfile{}, renders: map[string]*Render{}, jobs: map[string]*Job{}, jobEvents: map[string][]JobEvent{}, runs: map[string]*PipelineRun{}, steps: map[string][]JobStep{}, reviews: map[string]*Review{}, idempotency: map[string]IdempotencyRecord{}, storage: backend, storageSlots: map[string]storage.UploadSession{}, staged: map[string]storage.StagedObject{}}
 }
 
 func (s *Store) WorkspaceID() string { return s.workspaceID }
@@ -717,6 +807,81 @@ func (s *Store) AbortUpload(ctx context.Context, workspaceID, projectID, assetID
 	value.Status = "aborted"
 	s.mu.Unlock()
 	return nil
+}
+
+func (s *Store) GetJob(workspaceID, projectID, jobID string) (*Job, error) {
+	if err := s.CheckWorkspace(workspaceID); err != nil {
+		return nil, ErrNotFound
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	value, ok := s.jobs[jobID]
+	if !ok || value.ProjectID != projectID {
+		return nil, ErrNotFound
+	}
+	return cloneJob(value), nil
+}
+
+func (s *Store) StartJob(workspaceID, projectID, jobID string) (*Job, error) {
+	if err := s.CheckWorkspace(workspaceID); err != nil {
+		return nil, ErrNotFound
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	value, ok := s.jobs[jobID]
+	if !ok || value.ProjectID != projectID {
+		return nil, ErrNotFound
+	}
+	if value.Status == domain.JobQueued {
+		return cloneJob(value), nil
+	}
+	if err := execution.ValidateTransition(execution.EntityJob, string(value.Status), string(domain.JobQueued)); err != nil {
+		return nil, ErrConflict
+	}
+	from := value.Status
+	value.Status = domain.JobQueued
+	s.jobEvents[jobID] = append(s.jobEvents[jobID], JobEvent{ID: newID("evt"), EventType: execution.EventType(execution.EntityJob, string(from), string(value.Status)), Sequence: int64(len(s.jobEvents[jobID]) + 1), Payload: map[string]any{"from_status": from, "to_status": value.Status}, OccurredAt: now()})
+	if run := s.runs[value.PipelineRunID]; run != nil {
+		if run.Status == "created" {
+			run.Status = "queued"
+			s.appendJobEventLocked(jobID, "pipeline_run.queued", map[string]any{"from_status": "created", "to_status": "queued"})
+		}
+		for index := range s.steps[run.ID] {
+			if s.steps[run.ID][index].Status == "pending" || s.steps[run.ID][index].Status == "ready" {
+				s.steps[run.ID][index].Status = "queued"
+				s.steps[run.ID][index].Revision++
+				s.appendJobEventLocked(jobID, "node.queued", map[string]any{"node_key": s.steps[run.ID][index].NodeKey})
+			}
+		}
+	}
+	return cloneJob(value), nil
+}
+
+func (s *Store) ListJobEvents(workspaceID, projectID, jobID string, after int64, limit int) ([]JobEvent, error) {
+	if _, err := s.GetJob(workspaceID, projectID, jobID); err != nil {
+		return nil, err
+	}
+	if after < 0 {
+		after = 0
+	}
+	if limit <= 0 || limit > 500 {
+		limit = 100
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	result := make([]JobEvent, 0, limit)
+	for _, value := range s.jobEvents[jobID] {
+		if value.Sequence <= after {
+			continue
+		}
+		copyValue := value
+		copyValue.Payload = copyMap(value.Payload)
+		result = append(result, copyValue)
+		if len(result) == limit {
+			break
+		}
+	}
+	return result, nil
 }
 
 func (s *Store) CreateScript(workspaceID, projectID, language, origin string, content map[string]any) (*Script, *ScriptVersion, error) {
@@ -1137,10 +1302,17 @@ func (s *Store) CreateRender(workspaceID, projectID string, timelineVersionID, p
 	profileID := profile.ID
 	profileSnapshot := copyMap(profile.Document)
 	s.mu.RUnlock()
-	value := &Render{ID: newID("render"), ProjectID: projectID, TimelineVersionID: timelineVersionID, ProfileKey: profileKey, ProfileVersion: profileVersion, ProfileID: profileID, ProfileSnapshot: profileSnapshot, Status: "created", JobID: newID("job"), RequestHash: requestHash(request), CreatedAt: now()}
+	value := &Render{ID: newID("render"), ProjectID: projectID, TimelineVersionID: timelineVersionID, ProfileKey: profileKey, ProfileVersion: profileVersion, ProfileID: profileID, ProfileSnapshot: profileSnapshot, Status: "created", RequestHash: requestHash(request), CreatedAt: now()}
+	job, err := s.CreateExecutionJob(workspaceID, projectID, JobCreateInput{Kind: "render", Mode: "automatic", Input: copyMap(request), AutoStart: false})
+	if err != nil {
+		return nil, err
+	}
+	value.JobID = job.ID
 	s.mu.Lock()
 	s.renders[value.ID] = value
-	s.jobs[value.JobID] = &Job{ID: value.JobID, ProjectID: projectID, Kind: "render", Status: domain.JobCreated, Command: copyMap(request), CreatedAt: value.CreatedAt}
+	if stored := s.jobs[value.JobID]; stored != nil {
+		stored.Command["render_id"] = value.ID
+	}
 	s.mu.Unlock()
 	return cloneRender(value), nil
 }

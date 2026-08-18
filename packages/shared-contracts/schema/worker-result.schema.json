@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nh-media.local/contracts/worker-result/v1",
+  "title": "NH-Media worker result v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "message_id", "job_id", "job_step_id", "status", "output_refs"],
+  "properties": {
+    "schema_version": {"const": "worker-result/v1"},
+    "message_id": {"$ref": "#/$defs/id"},
+    "job_id": {"$ref": "#/$defs/id"},
+    "job_step_id": {"$ref": "#/$defs/id"},
+    "status": {"enum": ["completed", "skipped", "failed", "cancelled"]},
+    "output_refs": {"type": "array", "maxItems": 100, "items": {"$ref": "#/$defs/outputRef"}},
+    "checkpoint_ref": {"$ref": "#/$defs/id"},
+    "safe_error": {"$ref": "#/$defs/safeError"}
+  },
+  "$defs": {
+    "id": {"type": "string", "pattern": "^[a-z][a-z0-9_-]{2,127}$"},
+    "outputRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["artifact_id", "kind", "role", "sha256", "size_bytes"],
+      "properties": {
+        "artifact_id": {"$ref": "#/$defs/id"},
+        "kind": {"type": "string", "pattern": "^[a-z][a-z0-9_-]{1,63}$"},
+        "role": {"type": "string", "pattern": "^[a-z][a-z0-9_-]{1,63}$"},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "size_bytes": {"type": "integer", "minimum": 0}
+      }
+    },
+    "safeError": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "category", "retryable", "safe_message"],
+      "properties": {
+        "code": {"type": "string", "pattern": "^[a-z][a-z0-9_]{2,63}$"},
+        "category": {"enum": ["transient", "permanent", "policy", "cancelled", "internal"]},
+        "retryable": {"type": "boolean"},
+        "safe_message": {"type": "string", "minLength": 1, "maxLength": 512}
+      }
+    }
+  }
+}

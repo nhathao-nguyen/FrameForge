@@ -456,9 +456,9 @@ type UploadRecord struct {
 }
 
 type JobRecord struct {
-	ID, ProjectID, Kind, Status string
-	Command                     json.RawMessage
-	CreatedAt                   time.Time
+	ID, ProjectID, Kind, Status, PipelineRunID string
+	Command                                    json.RawMessage
+	CreatedAt                                  time.Time
 }
 
 func (s *SQLStore) GetAssetProbeJob(ctx context.Context, userID, workspaceID, projectID, assetID string) (JobRecord, error) {
@@ -466,7 +466,7 @@ func (s *SQLStore) GetAssetProbeJob(ctx context.Context, userID, workspaceID, pr
 		return JobRecord{}, err
 	}
 	var value JobRecord
-	err := s.DB.QueryRowContext(ctx, `SELECT id::text,project_id::text,kind,status,command,created_at FROM jobs WHERE project_id=$1 AND kind='asset_probe' AND command->>'asset_id'=$2 ORDER BY created_at DESC,id DESC LIMIT 1`, projectID, assetID).Scan(&value.ID, &value.ProjectID, &value.Kind, &value.Status, &value.Command, &value.CreatedAt)
+	err := s.DB.QueryRowContext(ctx, `SELECT id::text,project_id::text,kind,status,command,created_at,COALESCE(current_pipeline_run_id::text,'') FROM jobs WHERE project_id=$1 AND kind='asset_probe' AND command->>'asset_id'=$2 ORDER BY created_at DESC,id DESC LIMIT 1`, projectID, assetID).Scan(&value.ID, &value.ProjectID, &value.Kind, &value.Status, &value.Command, &value.CreatedAt, &value.PipelineRunID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return JobRecord{}, ErrNotFound
 	}
@@ -495,9 +495,24 @@ func (s *SQLStore) CreateProjectJob(ctx context.Context, userID, workspaceID, pr
 	if err != nil {
 		return JobRecord{}, err
 	}
+	tx, err := s.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return JobRecord{}, err
+	}
+	defer func() { _ = tx.Rollback() }()
 	var value JobRecord
-	err = s.DB.QueryRowContext(ctx, `INSERT INTO jobs(project_id,workflow_id,pipeline_id,kind,mode,status,requested_by,command,input_snapshot,pipeline_snapshot) VALUES($1,$2,$3,$4,'automatic','created',$5,$6,$7,$8) RETURNING id::text,project_id::text,kind,status,command,created_at`, projectID, workflowID, pipelineID, kind, userID, command, inputSnapshot, pipelineSnapshot).Scan(&value.ID, &value.ProjectID, &value.Kind, &value.Status, &value.Command, &value.CreatedAt)
-	return value, err
+	err = tx.QueryRowContext(ctx, `INSERT INTO jobs(project_id,workflow_id,pipeline_id,kind,mode,status,requested_by,command,input_snapshot,pipeline_snapshot,supersedes_job_id,start_from,stop_after,priority,max_runs) VALUES($1,$2,$3,$4,CASE WHEN $5::jsonb->>'mode' IN ('automatic','studio','preview') THEN $5::jsonb->>'mode' ELSE 'automatic' END,'created',$6,$5,$7,$8,NULLIF($5::jsonb->>'supersedes_job_id','')::uuid,NULLIF($5::jsonb->>'start_from',''),NULLIF($5::jsonb->>'stop_after',''),COALESCE(NULLIF($5::jsonb->>'priority','')::smallint,5),COALESCE(NULLIF($5::jsonb->>'max_runs','')::integer,3)) RETURNING id::text,project_id::text,kind,status,command,created_at`, projectID, workflowID, pipelineID, kind, command, userID, inputSnapshot, pipelineSnapshot).Scan(&value.ID, &value.ProjectID, &value.Kind, &value.Status, &value.Command, &value.CreatedAt)
+	if err != nil {
+		return JobRecord{}, err
+	}
+	value.PipelineRunID, err = createExecutionGraphTx(ctx, tx, value.ID, projectID, pipelineID, workspaceID, pipelineSnapshot, inputSnapshot, command)
+	if err != nil {
+		return JobRecord{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return JobRecord{}, err
+	}
+	return value, nil
 }
 
 // CompleteUploadAndCreateProbeJob makes the database side of upload
@@ -542,6 +557,10 @@ func (s *SQLStore) CompleteUploadAndCreateProbeJob(ctx context.Context, userID, 
 	}
 	var job JobRecord
 	err = tx.QueryRowContext(ctx, `INSERT INTO jobs(project_id,workflow_id,pipeline_id,kind,mode,status,requested_by,command,input_snapshot,pipeline_snapshot) VALUES($1,$2,$3,'asset_probe','automatic','created',$4,$5,$6,$7) RETURNING id::text,project_id::text,kind,status,command,created_at`, projectID, workflowID, pipelineID, userID, command, inputSnapshot, pipelineSnapshot).Scan(&job.ID, &job.ProjectID, &job.Kind, &job.Status, &job.Command, &job.CreatedAt)
+	if err != nil {
+		return UploadRecord{}, JobRecord{}, err
+	}
+	job.PipelineRunID, err = createExecutionGraphTx(ctx, tx, job.ID, projectID, pipelineID, workspaceID, pipelineSnapshot, inputSnapshot, command)
 	if err != nil {
 		return UploadRecord{}, JobRecord{}, err
 	}
@@ -650,41 +669,6 @@ func (s *SQLStore) IdempotencyStatus(ctx context.Context, workspaceID, key strin
 	var status int
 	err := s.DB.QueryRowContext(ctx, `SELECT response_status FROM idempotency_keys WHERE workspace_id=$1 AND key=$2`, workspaceID, key).Scan(&status)
 	return status, err
-}
-
-type EventInput struct {
-	SchemaVersion, EventType, CorrelationID                                          string
-	WorkspaceID, ProjectID, JobID, PipelineRunID, JobStepID, PipelineNodeID, NodeKey string
-	Payload                                                                          json.RawMessage
-}
-
-func (s *SQLStore) AppendEventAndOutbox(ctx context.Context, input EventInput) (int64, error) {
-	if len(input.Payload) == 0 {
-		input.Payload = []byte(`{}`)
-	}
-	tx, err := s.DB.BeginTx(ctx, nil)
-	if err != nil {
-		return 0, err
-	}
-	defer func() { _ = tx.Rollback() }()
-	if _, err = tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, input.JobID); err != nil {
-		return 0, err
-	}
-	var seq int64
-	if err = tx.QueryRowContext(ctx, `SELECT COALESCE(MAX(sequence),0)+1 FROM job_events WHERE job_id=$1`, input.JobID).Scan(&seq); err != nil {
-		return 0, err
-	}
-	var eventID string
-	if err = tx.QueryRowContext(ctx, `INSERT INTO job_events(schema_version,workspace_id,project_id,job_id,pipeline_run_id,job_step_id,pipeline_node_id,node_key,sequence,event_type,payload,correlation_id,occurred_at) VALUES($1,NULLIF($2,'')::uuid,NULLIF($3,'')::uuid,NULLIF($4,'')::uuid,NULLIF($5,'')::uuid,NULLIF($6,'')::uuid,NULLIF($7,'')::uuid,NULLIF($8,''),$9,$10,$11,$12,now()) RETURNING event_id::text`, input.SchemaVersion, input.WorkspaceID, input.ProjectID, input.JobID, input.PipelineRunID, input.JobStepID, input.PipelineNodeID, input.NodeKey, seq, input.EventType, input.Payload, input.CorrelationID).Scan(&eventID); err != nil {
-		return 0, err
-	}
-	if _, err = tx.ExecContext(ctx, `INSERT INTO outbox_events(id,aggregate_type,aggregate_id,event_type,payload,status) VALUES($1,'job',$2,$3,$4,'pending')`, eventID, input.EventType, input.Payload); err != nil {
-		return 0, err
-	}
-	if err = tx.Commit(); err != nil {
-		return 0, err
-	}
-	return seq, nil
 }
 
 func nullableString(value *string) any {

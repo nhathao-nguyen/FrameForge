@@ -1,0 +1,11 @@
+{
+  "schema_version": "worker-progress/v1",
+  "message_id": "msg_probe_001",
+  "job_id": "job_probe_001",
+  "job_step_id": "step_probe_001",
+  "percent": 50,
+  "units_completed": 1,
+  "units_total": 2,
+  "unit_name": "streams",
+  "safe_message": "Inspecting media streams"
+}

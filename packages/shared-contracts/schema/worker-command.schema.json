@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nh-media.local/contracts/worker-command/v1",
+  "title": "NH-Media worker command v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "message_id", "capability", "project_id", "job_id", "pipeline_run_id", "job_step_id", "attempt", "input_refs", "config"],
+  "properties": {
+    "schema_version": {"const": "worker-command/v1"},
+    "message_id": {"$ref": "#/$defs/id"},
+    "capability": {"enum": ["probe", "thumbnail", "analysis"]},
+    "project_id": {"$ref": "#/$defs/id"},
+    "job_id": {"$ref": "#/$defs/id"},
+    "pipeline_run_id": {"$ref": "#/$defs/id"},
+    "job_step_id": {"$ref": "#/$defs/id"},
+    "pipeline_node_id": {"$ref": "#/$defs/id"},
+    "attempt": {"type": "integer", "minimum": 1, "maximum": 1000},
+    "input_refs": {"type": "array", "maxItems": 100, "items": {"$ref": "#/$defs/artifactRef"}},
+    "config": {"type": "object", "additionalProperties": true}
+  },
+  "$defs": {
+    "id": {"type": "string", "pattern": "^[a-z][a-z0-9_-]{2,127}$"},
+    "artifactRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["artifact_id", "role", "sha256"],
+      "properties": {
+        "artifact_id": {"$ref": "#/$defs/id"},
+        "role": {"type": "string", "pattern": "^[a-z][a-z0-9_-]{1,63}$"},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    }
+  }
+}

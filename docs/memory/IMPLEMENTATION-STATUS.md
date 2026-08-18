@@ -27,7 +27,7 @@ reviewable evidence is recorded.
 | T106 | Go Product API shell | T101–T105 | complete | `/api/v1`, IDs/errors/CORS/bounds, LocalAuth shell, mocked-port tests | T107 |
 | T107 | Health/readiness | T106 | complete | liveness/readiness/diagnostics with dependency-down, timeout and drain tests | T108 |
 | T108 | CI/independence gates | T100-T107 | complete | local verification, CI workflow, negative independence proof, lock/SBOM/secret scans | T200 |
-| T200 | Migration framework | T103, T108 | complete | `services/api/internal/persistence/migrations.go`, eight versioned SQL migrations, runner empty/repeat/dirty tests and live PostgreSQL apply/repeat/app-role denial including migration 0008 |
+| T200 | Migration framework | T103, T108 | complete | `services/api/internal/persistence/migrations.go`, eight versioned SQL migrations, runner empty/repeat/dirty tests and live PostgreSQL apply/repeat/app-role denial including migration 0008 | T201 |
 | T201 | Identity/Workspace tables | T200 | complete | `0001_identity.sql`, transactional bootstrap, scoped role repository and PostgreSQL-backed hashed session/revoke/expiry path | later OIDC/API-key policy remains outside initial LocalAuth |
 | T202 | Workflow/Pipeline tables | T200 | complete | `0002_workflows_providers.sql`, `EnsurePipelineDefinition` and active-definition trigger | add broader graph integration corpus later |
 | T203 | SecretStore/Provider/RenderProfile tables | T200–T201 | complete | encrypted SecretStore boundary, `secret_records`, durable RenderProfile draft/edit/activate/deprecate/disable service, active immutability trigger and redacted Provider API | external KMS/Vault adapter remains deferred by the ratified Local baseline |
@@ -49,22 +49,22 @@ reviewable evidence is recorded.
 | T233 | Timeline/Render REST | T210, T232 | complete | typed commands, versioning, approval/lock and full durable validation on create/version/approve/lock/validate/render; Render requires exact eligible profile snapshot and never auto-creates profiles | Gate E only for Render execution |
 | T234 | Scene/Analysis/candidate APIs | T207–T210 | complete | scoped native routes and provenance/reference-style policy boundary | add selection immutability/pagination corpus later |
 | T235 | ProviderConfiguration API | T203, T210 | complete | redacted durable lifecycle, admin checks, plaintext-secret rejection and SQL-scoped provider repository | external secret manager remains deferred |
-| T300 | State transitions | T205, T209 | blocked | none | after dependencies |
-| T301 | Outbox/replay | T209, T300 | blocked | none | after dependencies |
-| T310 | QueuePort | T104, T301 | blocked | none | after dependencies |
-| T311 | Dependency scheduler | T202, T300, T310 | blocked | none | after dependencies |
-| T312 | Lease/reconciliation | T300, T310 | blocked | none | after dependencies |
-| T313 | Sandboxed MediaProcessPort | T224, T312 | blocked | none | after dependencies |
-| T320 | Go/Python contracts | T101, T312–T313 | blocked | none | after dependencies |
-| T321 | Probe/thumbnail node | T222, T313, T320 | blocked | none | after dependencies |
-| T322 | First native E2E slice | T230, T300-T321 | blocked | none | prove independent slice |
-| T323 | First Python worker slice | T320, T322 | blocked | none | after deterministic slice |
-| T330 | Checkpoint/crash resume | T206, T312, T322 | blocked | none | after slice |
-| T331 | Pause/partial/review | T330 | blocked | none | after dependencies |
-| T332 | Cancel/retry/DLQ | T300, T330 | blocked | none | after dependencies |
-| T340 | SSE progress | T301, T331–T332 | blocked | none | after dependencies |
+| T300 | State transitions | T205, T209 | complete | `services/api/internal/execution` canonical Job/Run/Step graph plus transactional SQL transition/event/outbox adapter; valid/invalid/terminal/concurrency sqlmock tests pass | T301 |
+| T301 | Outbox/replay | T209, T300 | complete | `execution.OutboxPublisher`, PostgreSQL SKIP LOCKED claim/mark/retry and scoped ordered `job_events` replay; stable event IDs and failure retry tests pass | T310 |
+| T310 | QueuePort | T104, T301 | complete | Redis Streams consumer-group adapter with bounded XADD/XREADGROUP, ACK, XAUTOCLAIM and ID-only message validation; module dependency locked | T311 |
+| T311 | Dependency scheduler | T202, T300, T310 | complete | generic deterministic DAG frontier with join/blocked/cycle/missing-dependency and bounded-output tests | T312 |
+| T312 | Lease/reconciliation | T300, T310 | complete | hashed lease token, attempt claim/heartbeat/expiry reconciliation SQL boundary and lease parameter tests; stale token fails closed | T313 |
+| T313 | Sandboxed MediaProcessPort | T224, T312 | complete | argv-only ffmpeg/ffprobe policy, sandbox/symlink/network/unsafe-option checks, timeout/output bounds and direct-process tests | T320 |
+| T320 | Go/Python contracts | T101, T312–T313 | complete | versioned worker command/result/progress schemas, Go/Python validators, fixtures, redaction/path rejection and cross-language tests | T321 |
+| T321 | Probe/thumbnail node | T222, T313, T320 | complete | independent Go node validates/probes and stages report or thumbnail Artifact refs; quarantine creates no output; node tests pass | T322 |
+| T322 | First native E2E slice | T230, T300-T321 | complete | live private-network PostgreSQL/Redis/MinIO Job→Run→Step→ID-only queue→lease→worker result→Artifact commit→producer link→node.completed path passes; final Go regression remains green | no desktop T550 or public/VPS claim |
+| T323 | First Python worker slice | T320, T322 | complete | deterministic `nh_media`, live Redis Streams, Go→uv→Python contract, XAUTOCLAIM after process restart, transient failure/backoff/attempt-2 redelivery and combined PostgreSQL/MinIO Artifact result path pass | broader provider/media failure matrix is later node work |
+| T330 | Checkpoint/crash resume | T206, T312, T322 | complete | exact checkpoint compatibility, deterministic `BuildResumePlan` fail-closed boundaries, lease-aware restart/reclaim harness, and durable queued-frontier recovery pass | full power-loss/restore chaos testing is not claimed |
+| T331 | Pause/partial/review | T330 | complete | durable Review required/approve/reject-edit/resume graph transitions, atomic Job/Run/Step pause/cancel controls, and `stop_after` aggregate pause implementation pass | no editor/client shell claim |
+| T332 | Cancel/retry/DLQ | T300, T330 | complete | bounded transient retry, dead-letter adapter, durable replay/new Job with immutable predecessor, live cancellation graph and Python retry/redelivery pass | exhaustive provider taxonomy remains later execution work |
+| T340 | SSE progress | T301, T331–T332 | complete | authenticated bounded snapshot/replay stream, terminal close, reconnect replay, steps in snapshot and invalid `Last-Event-ID` handling pass | no external production load claim |
 | T341 | Future bidirectional transport evaluation | T340 | blocked | none | deferred nonblocking after SSE evidence |
-| T350 | Job/Run/Step/Render commands | T230–T235, T300–T340 | blocked | none | after dependencies |
+| T350 | Job/Run/Step/Render commands | T230–T235, T300–T340 | complete | native REST and durable Store/SQL surfaces cover create/list/get/start/pause/resume/cancel/retry, runs/steps, review decisions, and Render list/get/cancel/retry; live durable command harness passes | T400/Gate F remains outside this task |
 | T400 | DAG validation | T202, T320 | blocked | none | after dependencies |
 | T401 | Node conformance | T311–T313, T330, T400 | blocked | none | after dependencies |
 | T402 | Built-in movie-recap graph | T400, T401 | blocked | none | after dependencies |
@@ -97,5 +97,6 @@ reviewable evidence is recorded.
 | T604 | Upstream research refresh | T001, T003, T108 | blocked | none | research evidence only |
 | T605 | Internet/VPS production release | T603 | blocked | none | explicit production approval |
 
-Gate C+D implementation and this repair pass are claimed in the current working tree; T300 and
-later execution work remain blocked and were not started.
+Gate C+D implementation and the Gate E T300–T350 Local/LAN execution slice are present in the current
+working tree. Their focused and live evidence is recorded below; T400/Gate F, desktop T550, hardened
+T603 and public T605 remain pending and are not silently promoted.
