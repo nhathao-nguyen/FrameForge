@@ -130,10 +130,17 @@ func main() {
 		if repositoryErr != nil {
 			log.Fatalf("initialize worker Artifact repository: %v", repositoryErr)
 		}
+		if _, err := durable.RecoverQueuedSteps(dispatchCtx); err != nil {
+			log.Printf("queued-step startup recovery failed: %v", err)
+		}
 		for _, capability := range []string{"probe", "thumbnail", "analysis", "ai", "ml", "media", "render", "system"} {
 			workerID := "api-controller-" + capability
-			controller := execution.ClaimingDispatcher{Queue: runtimeQueue, Resolver: persistence.ScopedClaimResolver{SQL: durable.SQL, Workspace: durable.Workspace, WorkerID: workerID, Duration: 2 * time.Minute}, Publisher: runtimeQueue, Claims: claims}
-			results := execution.LeaseAwareResultReconciler{Source: runtimeQueue, Claims: claims, Applier: persistence.ScopedResultApplier{SQL: durable.SQL, Workspace: durable.Workspace, WorkerID: workerID, Artifacts: persistence.WorkerArtifactCommitter{Storage: backend, Repository: artifactRepository}}}
+			// Local AI nodes can legitimately run longer than two minutes on
+			// constrained hardware. Keep the lease bounded, but above the
+			// provider/node timeout envelope so a healthy result is not mislabeled
+			// worker_lost during a controller restart.
+			controller := execution.ClaimingDispatcher{Queue: runtimeQueue, Resolver: persistence.ScopedClaimResolver{SQL: durable.SQL, Workspace: durable.Workspace, WorkerID: workerID, Duration: 5 * time.Minute}, Publisher: runtimeQueue, Claims: claims}
+			results := execution.LeaseAwareResultReconciler{Source: runtimeQueue, Claims: claims, Applier: persistence.ScopedResultApplier{SQL: durable.SQL, Workspace: durable.Workspace, WorkerID: workerID, Capability: capability, Artifacts: persistence.WorkerArtifactCommitter{Storage: backend, Repository: artifactRepository}}}
 			go func(capability string, controller execution.ClaimingDispatcher) {
 				for dispatchCtx.Err() == nil {
 					if err := controller.Run(dispatchCtx, capability, "api-controller-"+capability, 250*time.Millisecond); err != nil && dispatchCtx.Err() == nil {
@@ -155,6 +162,9 @@ func main() {
 			ticker := time.NewTicker(250 * time.Millisecond)
 			defer ticker.Stop()
 			for {
+				if _, err := durable.ReconcileExpiredLeases(dispatchCtx); err != nil && dispatchCtx.Err() == nil {
+					log.Printf("lease recovery stopped: %v", err)
+				}
 				if _, err := durable.ScheduleReadySteps(dispatchCtx); err != nil && dispatchCtx.Err() == nil {
 					log.Printf("dependency scheduler stopped: %v", err)
 				}

@@ -1,0 +1,122 @@
+{
+  "schema_version": "nh-media/real-local-resource-observation/v1",
+  "observed_at": "2026-08-19T06:10:11.4334114Z",
+  "docker_stats": "nh-media-foundation-postgres-1|4.28%|27.83MiB / 15.56GiB|0.17%|7\r\nnh-media-foundation-redis-1|0.87%|9.445MiB / 15.56GiB|0.06%|6\r\nnh-media-foundation-minio-1|0.11%|73.16MiB / 15.56GiB|0.46%|17",
+  "compose_ps": "{\"Command\":\"\\\"/usr/bin/docker-ent…\\\"\",\"CreatedAt\":\"2026-08-19 09:01:23 +0700 +07\",\"ExitCode\":0,\"Health\":\"healthy\",\"ID\":\"34ca126152de\",\"Image\":\"minio/minio:RELEASE.2025-09-07T16-13-09Z\",\"Labels\":\"com.docker.compose.config-hash=e7e2cbb19e462db46c4f3e14e8ee3e40dfc9474bf40d391ae1aa83f85e32cd27,com.docker.compose.depends_on=,com.redhat.component=ubi9-micro-container,com.redhat.license_terms=https://www.redhat.com/en/about/red-hat-end-user-license-agreements#UBI,io.buildah.version=1.40.1,io.k8s.description=Very small image which doesn't install the package manager.,release=RELEASE.2025-09-07T16-13-09Z,summary=MinIO is a High Performance Object Storage, API compatible with Amazon S3 cloud storage service.,distribution-scope=public,io.k8s.display-name=Red Hat Universal Base Image 9 Micro,vcs-ref=32d8e5209f029a1fb7235308ab32253bface1001,com.docker.compose.project=nh-media-foundation,com.docker.compose.project.config_files=D:\\\\nhathao\\\\codex\\\\NH-Media\\\\infrastructure\\\\compose\\\\docker-compose.yml,desktop.docker.io/ports/9000/tcp=127.0.0.1:9000,url=https://catalog.redhat.com/en/search?searchType=containers,vcs-type=git,version=RELEASE.2025-09-07T16-13-09Z,architecture=x86_64,com.docker.compose.image=sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e,com.docker.compose.project.working_dir=D:\\\\nhathao\\\\codex\\\\NH-Media\\\\infrastructure\\\\compose,io.openshift.expose-services=,maintainer=MinIO Inc \\u003cdev@min.io\\u003e,com.docker.compose.version=5.3.0,build-date=2025-08-06T08:12:37,com.docker.compose.container-number=1,com.docker.compose.oneoff=False,com.docker.compose.replace=minio-1,desktop.docker.io/ports.scheme=v2,name=MinIO,vendor=MinIO Inc \\u003cdev@min.io\\u003e,com.docker.compose.service=minio,description=MinIO object storage is fundamentally different. Designed for performance and the S3 API, it is 100% open-source. MinIO is ideal for large, private cloud environments with stringent security requirements and delivers mission-critical availability across a diverse range of workloads.\",\"LocalVolumes\":\"1\",\"Mounts\":\"nh_media_minio…\",\"Name\":\"nh-media-foundation-minio-1\",\"Names\":\"nh-media-foundation-minio-1\",\"Networks\":\"nh_media_private\",\"Ports\":\"127.0.0.1:9000-\\u003e9000/tcp\",\"Project\":\"nh-media-foundation\",\"Publishers\":[{\"URL\":\"127.0.0.1\",\"TargetPort\":9000,\"PublishedPort\":9000,\"Protocol\":\"tcp\"}],\"RunningFor\":\"4 hours ago\",\"Service\":\"minio\",\"Size\":\"0B\",\"State\":\"running\",\"Status\":\"Up About a minute (healthy)\"}\r\n{\"Command\":\"\\\"docker-entrypoint.s…\\\"\",\"CreatedAt\":\"2026-08-19 09:01:24 +0700 +07\",\"ExitCode\":0,\"Health\":\"healthy\",\"ID\":\"9c72f7ea2710\",\"Image\":\"postgres:16.10-alpine\",\"Labels\":\"com.docker.compose.version=5.3.0,desktop.docker.io/binds/1/Source=D:\\\\nhathao\\\\codex\\\\NH-Media\\\\infrastructure\\\\postgres\\\\init,desktop.docker.io/binds/1/SourceKind=hostFile,com.docker.compose.project.working_dir=D:\\\\nhathao\\\\codex\\\\NH-Media\\\\infrastructure\\\\compose,com.docker.compose.service=postgres,desktop.docker.io/ports.scheme=v2,com.docker.compose.container-number=1,com.docker.compose.oneoff=False,com.docker.compose.project=nh-media-foundation,com.docker.compose.project.config_files=D:\\\\nhathao\\\\codex\\\\NH-Media\\\\infrastructure\\\\compose\\\\docker-compose.yml,desktop.docker.io/binds/1/Target=/docker-entrypoint-initdb.d,desktop.docker.io/ports/5432/tcp=127.0.0.1:5432,com.docker.compose.config-hash=a91c4b65096e31556cafa155ebd213d6f2be5eb061dae04d00174fcfa81ee0b9,com.docker.compose.depends_on=,com.docker.compose.image=sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297,com.docker.compose.replace=postgres-1\",\"LocalVolumes\":\"1\",\"Mounts\":\"/run/desktop/m…,nh_media_postg…\",\"Name\":\"nh-media-foundation-postgres-1\",\"Names\":\"nh-media-foundation-postgres-1\",\"Networks\":\"nh_media_private\",\"Ports\":\"127.0.0.1:5432-\\u003e5432/tcp\",\"Project\":\"nh-media-foundation\",\"Publishers\":[{\"URL\":\"127.0.0.1\",\"TargetPort\":5432,\"PublishedPort\":5432,\"Protocol\":\"tcp\"}],\"RunningFor\":\"4 hours ago\",\"Service\":\"postgres\",\"Size\":\"0B\",\"State\":\"running\",\"Status\":\"Up About a minute (healthy)\"}\r\n{\"Command\":\"\\\"docker-entrypoint.s…\\\"\",\"CreatedAt\":\"2026-08-19 09:01:23 +0700 +07\",\"ExitCode\":0,\"Health\":\"healthy\",\"ID\":\"cd9df87d80ff\",\"Image\":\"redis:7.4.5-alpine\",\"Labels\":\"com.docker.compose.depends_on=,com.docker.compose.project=nh-media-foundation,com.docker.compose.project.config_files=D:\\\\nhathao\\\\codex\\\\NH-Media\\\\infrastructure\\\\compose\\\\docker-compose.yml,com.docker.compose.project.working_dir=D:\\\\nhathao\\\\codex\\\\NH-Media\\\\infrastructure\\\\compose,com.docker.compose.replace=redis-1,com.docker.compose.service=redis,desktop.docker.io/ports/6379/tcp=127.0.0.1:6379,com.docker.compose.config-hash=a4cc39a573870f18288a90a08273283d8ad78b7db14aa5878c6a4fbc435fc4c6,com.docker.compose.image=sha256:bb186d083732f669da90be8b0f975a37812b15e913465bb14d845db72a4e3e08,com.docker.compose.oneoff=False,com.docker.compose.version=5.3.0,desktop.docker.io/ports.scheme=v2,com.docker.compose.container-number=1\",\"LocalVolumes\":\"1\",\"Mounts\":\"nh_media_redis…\",\"Name\":\"nh-media-foundation-redis-1\",\"Names\":\"nh-media-foundation-redis-1\",\"Networks\":\"nh_media_private\",\"Ports\":\"127.0.0.1:6379-\\u003e6379/tcp\",\"Project\":\"nh-media-foundation\",\"Publishers\":[{\"URL\":\"127.0.0.1\",\"TargetPort\":6379,\"PublishedPort\":6379,\"Protocol\":\"tcp\"}],\"RunningFor\":\"4 hours ago\",\"Service\":\"redis\",\"Size\":\"0B\",\"State\":\"running\",\"Status\":\"Up About a minute (healthy)\"}",
+  "ollama_ps": "NAME    ID    SIZE    PROCESSOR    CONTEXT    UNTIL",
+  "nvidia_smi": "NVIDIA GeForce GTX 1660 SUPER, 1916, 6144, 18",
+  "relevant_processes": [
+    {
+      "name": "nh-media-api",
+      "pid": 28316,
+      "cpu_sec": 4.78125,
+      "working_set_mb": 24.4,
+      "responding": true
+    },
+    {
+      "name": "nh-media-worker",
+      "pid": 12464,
+      "cpu_sec": 0.046875,
+      "working_set_mb": 9.6,
+      "responding": true
+    },
+    {
+      "name": "ollama",
+      "pid": 21604,
+      "cpu_sec": 111.65625,
+      "working_set_mb": 47.9,
+      "responding": true
+    },
+    {
+      "name": "ollama app",
+      "pid": 24992,
+      "cpu_sec": 0.53125,
+      "working_set_mb": 74.6,
+      "responding": true
+    }
+  ],
+  "python_workers": [
+    {
+      "name": "python.exe",
+      "pid": 25212,
+      "command": "\"D:\\nhathao\\codex\\NH-Media\\services\\ml-worker\\.venv\\Scripts\\python.exe\" -m nh_media.worker",
+      "working_set_mb": 4.0,
+      "cpu_sec": 0.0
+    },
+    {
+      "name": "python.exe",
+      "pid": 23148,
+      "command": "\"D:\\nhathao\\codex\\NH-Media\\services\\ml-worker\\.venv\\Scripts\\python.exe\" -m nh_media.worker",
+      "working_set_mb": 32.4,
+      "cpu_sec": 0.609375
+    }
+  ],
+  "listeners": [
+    {
+      "address": "::",
+      "port": 8080,
+      "pid": 28316
+    },
+    {
+      "address": "0.0.0.0",
+      "port": 3000,
+      "pid": 28788
+    }
+  ],
+  "disk": [
+    {
+      "drive": "C",
+      "free_gb": 47.44,
+      "used_gb": 175.5
+    },
+    {
+      "drive": "D",
+      "free_gb": 423.04,
+      "used_gb": 42.72
+    }
+  ],
+  "redis_pending": [
+    {
+      "stream": "nh-media:ml:worker",
+      "pending": "0"
+    },
+    {
+      "stream": "nh-media:render:worker",
+      "pending": "0"
+    },
+    {
+      "stream": "nh-media:probe:worker",
+      "pending": "0"
+    },
+    {
+      "stream": "nh-media:analysis:worker",
+      "pending": "0"
+    },
+    {
+      "stream": "nh-media:thumbnail:worker",
+      "pending": "0"
+    },
+    {
+      "stream": "nh-media:ai:worker",
+      "pending": "0"
+    },
+    {
+      "stream": "nh-media:media:worker",
+      "pending": "0"
+    },
+    {
+      "stream": "nh-media:system:worker",
+      "pending": "0"
+    }
+  ],
+  "postgres_active_sessions": "2",
+  "minio_data_usage": "667M\t/data",
+  "checks": {
+    "infrastructure_running": true,
+    "api_listener": true,
+    "web_listener": true,
+    "python_worker_observed": true,
+    "runaway_process_observed": false
+  },
+  "status": "PASS"
+}

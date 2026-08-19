@@ -15,8 +15,9 @@ import (
 )
 
 const (
-	defaultGroup = "nh-media-workers"
-	maxBatch     = 100
+	defaultGroup      = "nh-media-workers"
+	maxBatch          = 100
+	resultReclaimIdle = 30 * time.Second
 )
 
 type Message struct {
@@ -235,37 +236,46 @@ func (q *RedisQueue) ConsumeWorkerResults(ctx context.Context, capability, consu
 	if block > 30*time.Second {
 		block = 30 * time.Second
 	}
-	entries, err := q.client.XReadGroup(ctx, &redis.XReadGroupArgs{Group: q.group, Consumer: consumer, Streams: []string{stream, ">"}, Count: int64(count), Block: block}).Result()
+	// Results are acknowledged only after the guarded database apply. Reclaim
+	// abandoned pending entries so a controller restart can finish a result
+	// that arrived just before the old reconciler died. The idle threshold is
+	// long enough to avoid stealing a result during normal bounded apply work.
+	claimed, _, err := q.client.XAutoClaim(ctx, &redis.XAutoClaimArgs{Stream: stream, Group: q.group, Consumer: consumer, MinIdle: resultReclaimIdle, Start: "0-0", Count: int64(count)}).Result()
 	if err != nil {
-		if errors.Is(err, redis.Nil) {
-			return []ResultDelivery{}, nil
-		}
 		return nil, err
 	}
-	result := make([]ResultDelivery, 0)
-	for _, group := range entries {
-		for _, entry := range group.Messages {
-			read := func(key string) string {
-				value, _ := entry.Values[key]
-				switch typed := value.(type) {
-				case string:
-					return typed
-				case []byte:
-					return string(typed)
-				default:
-					return fmt.Sprint(typed)
-				}
-			}
-			attempt, err := strconv.Atoi(read("attempt"))
-			if err != nil || attempt < 1 {
-				return nil, errors.New("worker result attempt is invalid")
-			}
-			decoded, err := worker.DecodeResult([]byte(read("result")))
-			if err != nil {
-				return nil, fmt.Errorf("decode worker result: %w", err)
-			}
-			result = append(result, ResultDelivery{Stream: stream, EntryID: entry.ID, Attempt: attempt, JobID: read("job_id"), StepID: read("job_step_id"), Result: decoded})
+	messages := append([]redis.XMessage(nil), claimed...)
+	if len(messages) < count {
+		entries, readErr := q.client.XReadGroup(ctx, &redis.XReadGroupArgs{Group: q.group, Consumer: consumer, Streams: []string{stream, ">"}, Count: int64(count - len(messages)), Block: block}).Result()
+		if readErr != nil && !errors.Is(readErr, redis.Nil) {
+			return nil, readErr
 		}
+		for _, group := range entries {
+			messages = append(messages, group.Messages...)
+		}
+	}
+	result := make([]ResultDelivery, 0, len(messages))
+	for _, entry := range messages {
+		read := func(key string) string {
+			value, _ := entry.Values[key]
+			switch typed := value.(type) {
+			case string:
+				return typed
+			case []byte:
+				return string(typed)
+			default:
+				return fmt.Sprint(typed)
+			}
+		}
+		attempt, err := strconv.Atoi(read("attempt"))
+		if err != nil || attempt < 1 {
+			return nil, errors.New("worker result attempt is invalid")
+		}
+		decoded, err := worker.DecodeResult([]byte(read("result")))
+		if err != nil {
+			return nil, fmt.Errorf("decode worker result: %w", err)
+		}
+		result = append(result, ResultDelivery{Stream: stream, EntryID: entry.ID, Attempt: attempt, JobID: read("job_id"), StepID: read("job_step_id"), Result: decoded})
 	}
 	return result, nil
 }

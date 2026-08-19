@@ -819,6 +819,19 @@ func (b *DurableBackend) CreateRender(_ string, projectID, timelineVersionID, pr
 	requestJSON := jsonBytes(request)
 	var value product.Render
 	requestHash := jsonHash(requestJSON)
+	// The database uniqueness guard applies when a render reaches completed,
+	// but rejecting an already-completed identical request here prevents a
+	// second job from becoming permanently stuck at reconciliation.  A caller
+	// can still render another profile or use the explicit retry path for a
+	// failed/cancelled render.
+	var completedRenderID string
+	err = b.SQL.DB.QueryRowContext(ctx, `SELECT id::text FROM renders WHERE timeline_version_id=$1::uuid AND render_profile_id=$2::uuid AND request_hash=$3 AND status='completed' LIMIT 1`, timelineVersionID, profileID, requestHash).Scan(&completedRenderID)
+	if err == nil {
+		return nil, product.ErrConflict
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		return nil, err
+	}
 	if err := b.SQL.DB.QueryRowContext(ctx, `INSERT INTO renders(project_id,timeline_version_id,render_profile_id,profile_snapshot,status,request_hash,request,created_by) VALUES($1,$2,$3,$4,'created',$5,$6,$7) RETURNING id::text,project_id::text,timeline_version_id::text,status,created_at`, projectID, timelineVersionID, profileID, profileDocument, requestHash, requestJSON, b.UserID).Scan(&value.ID, &value.ProjectID, &value.TimelineVersionID, &value.Status, &value.CreatedAt); err != nil {
 		return nil, err
 	}
@@ -828,6 +841,11 @@ func (b *DurableBackend) CreateRender(_ string, projectID, timelineVersionID, pr
 	value.ProfileSnapshot = mapFromJSON(profileDocument)
 	jobCommand := cloneMap(request)
 	jobCommand["kind"] = "render"
+	// Keep the resolved profile key in the immutable worker config snapshot as
+	// well as the public request envelope.  The worker boundary consumes only
+	// this allowlisted scalar, so a rerender cannot silently fall back to the
+	// default profile when the request envelope is transformed.
+	jobCommand["config"] = map[string]any{"render_profile": profileKey}
 	jobCommand["render_id"] = value.ID
 	jobCommand["artifacts"] = b.renderInputArtifacts(ctx, projectID, timelineVersion, timelineArtifact)
 	jobRequest := jsonBytes(jobCommand)

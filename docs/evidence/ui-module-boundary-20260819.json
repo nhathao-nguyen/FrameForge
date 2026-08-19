@@ -1,0 +1,63 @@
+{
+  "schema_version": "nh-media/ui-module-boundary/v1",
+  "date": "2026-08-19",
+  "status": "PASS",
+  "scope": "Shared web frontend used by the web and Tauri desktop clients",
+  "composition_root": "apps/web/src/app/page.tsx",
+  "structure": {
+    "components": [
+      "apps/web/src/components/layout/WorkspaceHeader.tsx",
+      "apps/web/src/components/feedback/RequestFeedback.tsx"
+    ],
+    "features": [
+      "auth",
+      "projects",
+      "jobs",
+      "script",
+      "timeline",
+      "review",
+      "scenes",
+      "workspace"
+    ],
+    "hooks": [
+      "apps/web/src/hooks/use-workspace-controller.ts",
+      "apps/web/src/hooks/use-job-events.ts"
+    ],
+    "services": [
+      "apps/web/src/services/api-client.ts",
+      "apps/web/src/services/auth-service.ts",
+      "apps/web/src/services/project-service.ts",
+      "apps/web/src/services/job-service.ts",
+      "apps/web/src/services/asset-service.ts",
+      "apps/web/src/services/script-service.ts",
+      "apps/web/src/services/timeline-service.ts",
+      "apps/web/src/services/review-service.ts",
+      "apps/web/src/services/value-utils.ts",
+      "apps/web/src/services/error-message.ts"
+    ],
+    "types": [
+      "apps/web/src/types/workspace.ts"
+    ]
+  },
+  "behavior_preserved": [
+    "login and session revoke",
+    "project load and creation",
+    "asset upload and artifact download",
+    "job creation, refresh and SSE updates",
+    "script version save/status update",
+    "timeline load, command apply and undo",
+    "job-step review resolution",
+    "scene listing"
+  ],
+  "validation": [
+    "pnpm.cmd --filter @nh-media/web typecheck: PASS",
+    "pnpm.cmd --filter @nh-media/web build: PASS",
+    "pnpm.cmd --filter @nh-media/sdk test: PASS (4 tests)",
+    "pnpm.cmd --filter @nh-media/desktop build:web: PASS",
+    "git diff --check: PASS (only existing Windows LF/CRLF warnings)"
+  ],
+  "limitations": [
+    "This is a structural refactor; it does not add new product workflows or redesign the UI.",
+    "The Tauri desktop client continues to embed the shared web frontend."
+  ]
+}

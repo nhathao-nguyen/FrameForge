@@ -57,14 +57,31 @@ func (d ClaimingDispatcher) DispatchOnce(ctx context.Context, capability, consum
 	if d.Queue == nil || d.Resolver == nil || d.Publisher == nil || d.Claims == nil {
 		return 0, errors.New("claiming dispatcher dependencies are required")
 	}
-	deliveries, err := d.Queue.Consume(ctx, capability, consumer, count, 0)
+	reclaimed, err := d.Queue.Reclaim(ctx, capability, consumer, 2*time.Minute, count)
 	if err != nil {
 		return 0, err
+	}
+	deliveries := reclaimed
+	if len(deliveries) < count {
+		fresh, err := d.Queue.Consume(ctx, capability, consumer, count-len(deliveries), 0)
+		if err != nil {
+			return 0, err
+		}
+		deliveries = append(deliveries, fresh...)
 	}
 	processed := 0
 	for _, delivery := range deliveries {
 		command, lease, err := d.Resolver.ClaimCommand(ctx, delivery.Message)
 		if err != nil {
+			if errors.Is(err, ErrLeaseConflict) {
+				// A duplicate or stale ID-only delivery is no longer authorized
+				// by PostgreSQL. Acknowledge only this queue entry and continue;
+				// one stale entry must not stop the capability dispatcher.
+				if ackErr := d.Queue.Ack(ctx, delivery.Stream, delivery.EntryID); ackErr != nil {
+					return processed, ackErr
+				}
+				continue
+			}
 			return processed, err
 		}
 		// Register the lease before publishing. A fast worker can finish the
@@ -113,6 +130,13 @@ type ClaimedResultApplier interface {
 	ApplyClaimedResult(context.Context, ClaimedResult) error
 }
 
+// RecoveredResultApplier is the durable restart path. The raw lease token is
+// intentionally memory-only, so a restarted controller uses the non-secret
+// attempt fencing ID carried by a newer worker result instead.
+type RecoveredResultApplier interface {
+	ApplyRecoveredResult(context.Context, queue.ResultDelivery) error
+}
+
 type LeaseAwareResultReconciler struct {
 	Source  queueResultSource
 	Claims  *LeaseRegistry
@@ -136,8 +160,20 @@ func (r LeaseAwareResultReconciler) ReconcileOnce(ctx context.Context, capabilit
 	for _, delivery := range deliveries {
 		claim, ok := r.Claims.Take(delivery.Result.MessageID)
 		if !ok {
+			if recovered, recoverable := r.Applier.(RecoveredResultApplier); recoverable {
+				if err := recovered.ApplyRecoveredResult(ctx, delivery); err == nil {
+					if err := r.Source.AckWorkerResult(ctx, delivery.Stream, delivery.EntryID); err != nil {
+						return processed, err
+					}
+					processed++
+					continue
+				} else if !errors.Is(err, ErrLeaseConflict) {
+					return processed, err
+				}
+			}
 			// Do not ACK a result whose controller lease is gone. A later
-			// reconciliation pass can inspect the durable attempt/expiry.
+			// reconciliation pass can inspect the durable attempt/expiry. Newer
+			// results with an AttemptID may have already been applied above.
 			return processed, ErrLeaseConflict
 		}
 		if err := r.Applier.ApplyClaimedResult(ctx, ClaimedResult{Delivery: delivery, Claim: claim}); err != nil {
@@ -160,6 +196,19 @@ func (r LeaseAwareResultReconciler) Run(ctx context.Context, capability, consume
 		if _, err := r.ReconcileOnce(ctx, capability, consumer, 10, interval); err != nil {
 			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 				return nil
+			}
+			if errors.Is(err, ErrLeaseConflict) {
+				// A controller restart intentionally loses its in-memory lease
+				// registry. Do not terminate the result loop when a late result
+				// from that controller is encountered; its durable attempt will
+				// be reconciled by the lease sweeper and the stream remains live
+				// for newer claims.
+				select {
+				case <-ctx.Done():
+					return nil
+				case <-time.After(interval):
+				}
+				continue
 			}
 			return err
 		}

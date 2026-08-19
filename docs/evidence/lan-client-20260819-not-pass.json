@@ -1,0 +1,19 @@
+﻿{
+    "schema_version":  "nh-media/lan-client-acceptance/v1",
+    "run_id":  "lan-client-0e975b7b-953c-4421-a727-d4daefdb817e",
+    "started_at":  "2026-08-19T03:40:42.5229095Z",
+    "status":  "NOT_PASS",
+    "server":  {
+
+               },
+    "client":  {
+
+               },
+    "checks":  {
+                   "runtime_compatibility":  true
+               },
+    "error":  "acceptance_failed",
+    "details":  "This process appears to run on the server machine because 192.168.1.19 is a local client address. Run this script on a different physical device.",
+    "failure_stage":  "client_identity",
+    "finished_at":  "2026-08-19T03:40:43.0171358Z"
+}

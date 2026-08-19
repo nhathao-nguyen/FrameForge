@@ -1,0 +1,54 @@
+﻿{
+    "schema_version":  "nh-media/real-local-active-restart-probe/v1",
+    "evidence_input":  "D:\\nhathao\\codex\\NH-Media\\docs\\evidence\\real-local-gate-h-live-20260819-r38.json",
+    "project_id":  "2affb4b6-ad5e-4915-9ca1-ae86b537160f",
+    "job_id":  "f8524c9b-4c6e-4c7d-ba9e-75d8e8d83ed7",
+    "services":  [
+                     {
+                         "service":  "postgres",
+                         "restart_command":  "docker compose restart postgres",
+                         "job_status_before":  "queued",
+                         "active_before_restart":  true,
+                         "container_state":  "running|healthy",
+                         "api_ready":  true,
+                         "job_status_after":  "running"
+                     },
+                     {
+                         "service":  "redis",
+                         "restart_command":  "docker compose restart redis",
+                         "job_status_before":  "running",
+                         "active_before_restart":  true,
+                         "container_state":  "running|healthy",
+                         "api_ready":  true,
+                         "job_status_after":  "running"
+                     },
+                     {
+                         "service":  "minio",
+                         "restart_command":  "docker compose restart minio",
+                         "job_status_before":  "running",
+                         "active_before_restart":  true,
+                         "container_state":  "running|healthy",
+                         "api_ready":  true,
+                         "job_status_after":  "running"
+                     },
+                     {
+                         "service":  "api-go-worker-python-worker-web",
+                         "restart_command":  "tools/dev.ps1 -Action restart",
+                         "restart_process_exit_code":  0,
+                         "job_status_before":  "running",
+                         "active_before_restart":  true,
+                         "container_state":  "",
+                         "api_ready":  true,
+                         "job_status_after":  "running"
+                     }
+                 ],
+    "active_restart_count":  4,
+    "terminal_status":  "completed",
+    "all_restarts_observed_active":  true,
+    "status":  "PASS",
+    "limitations":  [
+                        "The application process entry is restarted as one tracked API/Go/Python/web set; individual process isolation is not claimed.",
+                        "This probe does not simulate power loss or a worker crash after staged output before commit."
+                    ],
+    "finished_at":  "2026-08-19T08:10:49.6609855Z"
+}

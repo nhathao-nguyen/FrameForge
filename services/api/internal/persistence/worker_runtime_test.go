@@ -24,3 +24,16 @@ func TestCapabilityForStepHonorsExecutionClass(t *testing.T) {
 		t.Fatalf("ml capability=%q err=%v", value, err)
 	}
 }
+
+func TestRetryJobQueueTransitionIsDeduplicatedPerJob(t *testing.T) {
+	queuedJobs := map[string]struct{}{}
+	if !retryJobNeedsQueueTransition("job-1", queuedJobs) {
+		t.Fatal("first retrying step should transition its Job")
+	}
+	if retryJobNeedsQueueTransition("job-1", queuedJobs) {
+		t.Fatal("second retrying step from the same Job must not transition the Job again")
+	}
+	if !retryJobNeedsQueueTransition("job-2", queuedJobs) {
+		t.Fatal("a different Job still needs its own transition")
+	}
+}

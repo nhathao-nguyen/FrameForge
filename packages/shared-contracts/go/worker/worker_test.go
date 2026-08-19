@@ -31,6 +31,13 @@ func TestWorkerContractsRejectPathsAndUnknownStatus(t *testing.T) {
 	}
 }
 
+func TestWorkerContractsAllowBoundedLLMOutputTokens(t *testing.T) {
+	command := Command{SchemaVersion: CommandSchemaVersion, MessageID: "msg_ai_001", Capability: "ai", WorkspaceID: "workspace_ai_001", ProjectID: "project_ai_001", JobID: "job_ai_001", PipelineRunID: "run_ai_001", JobStepID: "step_ai_001", NodeKey: "generate_script", Attempt: 1, InputRefs: []ArtifactRef{}, Config: map[string]any{"max_output_tokens": 256}}
+	if err := ValidateCommand(command); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestWorkerContractsEnforceArtifactRefBounds(t *testing.T) {
 	command := Command{SchemaVersion: CommandSchemaVersion, MessageID: "msg_probe_001", Capability: "probe", WorkspaceID: "workspace_probe_001", ProjectID: "project_probe_001", JobID: "job_probe_001", PipelineRunID: "run_probe_001", JobStepID: "step_probe_001", NodeKey: "asset_probe", Attempt: 1, InputRefs: make([]ArtifactRef, 101), Config: map[string]any{}}
 	if err := ValidateCommand(command); err == nil {

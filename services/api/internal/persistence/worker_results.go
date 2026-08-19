@@ -32,10 +32,11 @@ func (r ScopedClaimResolver) ClaimCommand(ctx context.Context, message queue.Mes
 }
 
 type ScopedResultApplier struct {
-	SQL       *SQLStore
-	Workspace string
-	WorkerID  string
-	Artifacts WorkerArtifactCommitter
+	SQL        *SQLStore
+	Workspace  string
+	WorkerID   string
+	Capability string
+	Artifacts  WorkerArtifactCommitter
 }
 
 func (r ScopedResultApplier) ApplyClaimedResult(ctx context.Context, value execution.ClaimedResult) error {
@@ -76,9 +77,49 @@ func (r ScopedResultApplier) ApplyClaimedResult(ctx context.Context, value execu
 		NodeKey:        value.Claim.Message.NodeKey,
 		WorkerID:       r.WorkerID,
 		LeaseToken:     value.Claim.Lease.Token,
+		AttemptID:      value.Claim.Lease.AttemptID,
 		Attempt:        value.Claim.Lease.Attempt,
 		Result:         result,
 	})
+}
+
+// ApplyRecoveredResult reconstructs the durable scope of a newer result
+// after a controller restart. AttemptID is a non-secret fencing handle stored
+// in the existing attempt row; the old raw lease token remains memory-only.
+func (r ScopedResultApplier) ApplyRecoveredResult(ctx context.Context, delivery queue.ResultDelivery) error {
+	if r.SQL == nil || r.SQL.DB == nil || r.Workspace == "" || r.WorkerID == "" || r.Capability == "" || delivery.Attempt < 1 || delivery.Result.AttemptID == "" {
+		return execution.ErrLeaseConflict
+	}
+	attemptID, attemptOK := contractUUID("attempt", delivery.Result.AttemptID)
+	if !attemptOK {
+		return execution.ErrLeaseConflict
+	}
+	jobID, ok := contractUUID("job", delivery.JobID)
+	if !ok {
+		jobID, ok = contractUUID("job", delivery.Result.JobID)
+	}
+	stepID, stepOK := contractUUID("step", delivery.StepID)
+	if !stepOK {
+		stepID, stepOK = contractUUID("step", delivery.Result.JobStepID)
+	}
+	if !ok || !stepOK {
+		return execution.ErrLeaseConflict
+	}
+	var projectID, runID, nodeID, nodeKey string
+	if err := r.SQL.DB.QueryRowContext(ctx, `SELECT j.project_id::text,r.id::text,s.pipeline_node_id::text,s.node_key FROM job_steps s JOIN pipeline_runs r ON r.id=s.pipeline_run_id JOIN jobs j ON j.id=r.job_id JOIN projects p ON p.id=j.project_id JOIN job_step_attempts a ON a.job_step_id=s.id WHERE p.workspace_id=$1::uuid AND j.id=$2::uuid AND s.id=$3::uuid AND s.current_attempt=$4 AND a.attempt=$4 AND a.id=$5::uuid`, r.Workspace, jobID, stepID, delivery.Attempt, attemptID).Scan(&projectID, &runID, &nodeID, &nodeKey); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return execution.ErrLeaseConflict
+		}
+		return err
+	}
+	if nodeKey == "asset_probe" {
+		// Upload finalization needs the immutable command input snapshot. A
+		// restarted controller must retry this node through the normal claim
+		// path rather than silently marking the Asset ready without it.
+		return execution.ErrLeaseConflict
+	}
+	message := queue.Message{MessageID: delivery.Result.MessageID, Capability: r.Capability, JobID: jobID, PipelineRunID: runID, JobStepID: stepID, PipelineNodeID: nodeID, NodeKey: nodeKey, Attempt: delivery.Attempt}
+	return r.ApplyClaimedResult(ctx, execution.ClaimedResult{Delivery: delivery, Claim: execution.ClaimedCommand{Message: message, Command: worker.Command{NodeKey: nodeKey}, Lease: execution.Lease{AttemptID: attemptID, Attempt: delivery.Attempt}}})
 }
 
 func (r ScopedResultApplier) linkRenderArtifact(ctx context.Context, jobID string, ref worker.OutputRef) error {
@@ -124,6 +165,7 @@ func (s *SQLStore) ClaimWorkerCommand(ctx context.Context, workspaceID string, m
 	if err != nil {
 		return ClaimedWorkerCommand{}, err
 	}
+	command.AttemptID = contractID("attempt", lease.Lease.AttemptID)
 	return ClaimedWorkerCommand{Command: command, Lease: lease.Lease}, nil
 }
 
@@ -137,6 +179,7 @@ type WorkerResultInput struct {
 	NodeKey        string
 	WorkerID       string
 	LeaseToken     string
+	AttemptID      string
 	Attempt        int
 	Result         worker.Result
 }
@@ -149,7 +192,7 @@ func (s *SQLStore) ApplyWorkerResult(ctx context.Context, input WorkerResultInpu
 	if s == nil || s.DB == nil {
 		return errors.New("database is required")
 	}
-	if input.WorkspaceID == "" || input.JobID == "" || input.PipelineRunID == "" || input.JobStepID == "" || input.WorkerID == "" || input.LeaseToken == "" || input.Attempt < 1 {
+	if input.WorkspaceID == "" || input.JobID == "" || input.PipelineRunID == "" || input.JobStepID == "" || input.WorkerID == "" || (input.LeaseToken == "" && input.AttemptID == "") || input.Attempt < 1 {
 		return errors.New("worker result scope is incomplete")
 	}
 	if err := worker.ValidateResult(input.Result); err != nil {
@@ -212,7 +255,10 @@ func (s *SQLStore) ApplyWorkerResult(ctx context.Context, input WorkerResultInpu
 	if err := execution.ValidateTransition(execution.EntityStep, "running", targetStatus); err != nil {
 		return err
 	}
-	result, err := tx.ExecContext(ctx, `UPDATE job_step_attempts a SET status=$7,output_refs=$8,failure_category=NULLIF($9,''),error_code=NULLIF($10,''),error_message=NULLIF($11,''),retryable=$12,completed_at=now(),updated_at=now() FROM job_steps s JOIN pipeline_runs r ON r.id=s.pipeline_run_id JOIN jobs j ON j.id=r.job_id JOIN projects p ON p.id=j.project_id WHERE a.job_step_id=s.id AND a.attempt=$1 AND a.status='running' AND a.worker_id=$2 AND a.lease_token_hash=$3 AND a.lease_expires_at > now() AND s.id=$4::uuid AND s.pipeline_run_id=$5::uuid AND r.job_id=$6::uuid AND j.project_id=$13::uuid AND p.workspace_id=$14::uuid`, input.Attempt, input.WorkerID, execution.HashLeaseToken(input.LeaseToken), input.JobStepID, input.PipelineRunID, input.JobID, attemptStatus, outputRefs, failureCategory, errorCode, errorMessage, retryable, input.ProjectID, input.WorkspaceID)
+	// Normal results fence with the raw lease hash held by the live
+	// controller. Recovered results fence with the durable attempt UUID; both
+	// branches still require the current running attempt and unexpired lease.
+	result, err := tx.ExecContext(ctx, `UPDATE job_step_attempts a SET status=$7,output_refs=$8,failure_category=NULLIF($9,''),error_code=NULLIF($10,''),error_message=NULLIF($11,''),retryable=$12,completed_at=now(),updated_at=now() FROM job_steps s JOIN pipeline_runs r ON r.id=s.pipeline_run_id JOIN jobs j ON j.id=r.job_id JOIN projects p ON p.id=j.project_id WHERE a.job_step_id=s.id AND a.attempt=$1 AND a.status='running' AND a.worker_id=$2 AND (($15 <> '' AND a.id=$15::uuid) OR ($15 = '' AND a.lease_token_hash=$3)) AND a.lease_expires_at > now() AND s.id=$4::uuid AND s.pipeline_run_id=$5::uuid AND r.job_id=$6::uuid AND j.project_id=$13::uuid AND p.workspace_id=$14::uuid`, input.Attempt, input.WorkerID, execution.HashLeaseToken(input.LeaseToken), input.JobStepID, input.PipelineRunID, input.JobID, attemptStatus, outputRefs, failureCategory, errorCode, errorMessage, retryable, input.ProjectID, input.WorkspaceID, input.AttemptID)
 	if err != nil {
 		return err
 	}

@@ -1,0 +1,14 @@
+{
+  "schema_version": "nh-media/render-idempotency/v1",
+  "project_id": "637e8d8a-210d-4ab5-962d-3de288568293",
+  "timeline_version_id": "e0d119f6-4d95-403a-9f4d-5f236befa2b9",
+  "render_profile_key": "youtube_16_9",
+  "http_status": 412,
+  "response": {
+    "error": "HTTP 412 returned by render request"
+  },
+  "no_job_created": true,
+  "safe_error": true,
+  "status": "PASS",
+  "finished_at": "2026-08-19T05:12:12.7365217Z"
+}

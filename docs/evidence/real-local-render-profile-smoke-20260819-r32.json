@@ -1,0 +1,60 @@
+{
+  "schema_version": "nh-media/render-profile-smoke/v1",
+  "project_id": "637e8d8a-210d-4ab5-962d-3de288568293",
+  "timeline_version_id": "e0d119f6-4d95-403a-9f4d-5f236befa2b9",
+  "render_id": "6e384857-1d32-48c4-b238-8803c3023851",
+  "job_id": "d6360a5a-e62b-4f43-a905-e1d3c2d54d60",
+  "requested_profile_key": "shorts_9_16",
+  "worker_profile_key": "shorts_9_16",
+  "expected_size": "360x640",
+  "actual_size": "360x640",
+  "duration_sec": 3.0,
+  "has_video": true,
+  "has_audio": true,
+  "render_metadata": {
+    "duration_sec": 3,
+    "has_audio": true,
+    "has_video": true,
+    "height": 640,
+    "profile_key": "shorts_9_16",
+    "qa": {
+      "passed": true,
+      "errors": null,
+      "duration_sec": 3,
+      "width": 360,
+      "height": 640,
+      "has_video": true,
+      "has_audio": true,
+      "video_codec": "h264",
+      "audio_codec": "aac",
+      "black_detected": false,
+      "black_duration_sec": 0,
+      "black_ratio": 0,
+      "black_segments": [],
+      "black_policy": {
+        "minimum_segment_sec": 0.15,
+        "pixel_threshold": 0.1,
+        "maximum_ratio": 0.35,
+        "maximum_continuous_sec": 1.25
+      },
+      "silence_detected": false,
+      "silence_duration_sec": 0,
+      "silence_ratio": 0,
+      "silence_segments": [],
+      "silence_policy": {
+        "noise_threshold_db": -50,
+        "minimum_segment_sec": 0.15,
+        "maximum_ratio": 0.75,
+        "maximum_continuous_sec": 0.75
+      }
+    },
+    "requested_profile_key": "shorts_9_16",
+    "schema_version": "1.0",
+    "sha256": "79a8d238349ad569a7270a79103df25cfd8d79a8b2d3e64934e9f6a9b93813ca",
+    "size_bytes": 34569,
+    "width": 360
+  },
+  "profile_dimensions_pass": true,
+  "status": "PASS",
+  "finished_at": "2026-08-19T05:02:32.9816495Z"
+}

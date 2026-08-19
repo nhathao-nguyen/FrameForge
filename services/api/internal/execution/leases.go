@@ -27,6 +27,7 @@ type LeaseClaim struct {
 type Lease struct {
 	Token     string
 	TokenHash string
+	AttemptID string
 	Attempt   int
 	ExpiresAt time.Time
 }

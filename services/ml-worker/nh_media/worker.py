@@ -9,6 +9,7 @@ from typing import Any
 from .artifact_io import ArtifactIO, HTTPArtifactIO
 from .contracts import validate_worker_command, validate_worker_result
 from .pipeline_executor import execute_gate_g_node
+from .providers.contracts import ProviderError
 
 
 def health() -> dict[str, str]:
@@ -21,8 +22,9 @@ def process_command(command: dict[str, Any], artifact_io: ArtifactIO | None = No
     """Dispatch a versioned command to its typed Gate G node executor."""
 
     validate_worker_command(command)
+    attempt_id = str(command.get("attempt_id", ""))
     if command["capability"] not in {"analysis", "ai", "ml", "system"}:
-        return {
+        result = {
             "schema_version": "worker-result/v1",
             "message_id": command["message_id"],
             "job_id": command["job_id"],
@@ -31,6 +33,10 @@ def process_command(command: dict[str, Any], artifact_io: ArtifactIO | None = No
             "output_refs": [],
             "safe_error": {"code": "capability_not_enabled", "category": "permanent", "retryable": False, "safe_message": "This worker slice does not enable the requested capability."},
         }
+        if attempt_id:
+            result["attempt_id"] = attempt_id
+        validate_worker_result(result)
+        return result
     fail_attempt = command.get("config", {}).get("test_fail_attempt")
     if isinstance(fail_attempt, int) and fail_attempt == command["attempt"]:
         result = {
@@ -42,6 +48,8 @@ def process_command(command: dict[str, Any], artifact_io: ArtifactIO | None = No
             "output_refs": [],
             "safe_error": {"code": "transient_test_failure", "category": "transient", "retryable": True, "safe_message": "The deterministic test failure is retryable."},
         }
+        if attempt_id:
+            result["attempt_id"] = attempt_id
         validate_worker_result(result)
         return result
     if command["capability"] != "analysis":
@@ -77,6 +85,16 @@ def process_command(command: dict[str, Any], artifact_io: ArtifactIO | None = No
                 "output_refs": [],
                 "safe_error": {"code": "node_input_invalid", "category": "permanent", "retryable": False, "safe_message": "The Gate G node input or policy is invalid."},
             }
+        except ProviderError as error:
+            result = {
+                "schema_version": "worker-result/v1",
+                "message_id": command["message_id"],
+                "job_id": command["job_id"],
+                "job_step_id": command["job_step_id"],
+                "status": "failed",
+                "output_refs": [],
+                "safe_error": error.as_dict(),
+            }
         except Exception:
             # The worker boundary must always return a contract-safe result;
             # implementation details and tracebacks never cross Redis.
@@ -89,6 +107,8 @@ def process_command(command: dict[str, Any], artifact_io: ArtifactIO | None = No
                 "output_refs": [],
                 "safe_error": {"code": "worker_internal_failure", "category": "internal", "retryable": True, "safe_message": "The worker encountered an internal failure."},
             }
+        if attempt_id:
+            result["attempt_id"] = attempt_id
         validate_worker_result(result)
         return result
     # The legacy acceptance-analysis workflow remains as a compatibility
@@ -102,6 +122,8 @@ def process_command(command: dict[str, Any], artifact_io: ArtifactIO | None = No
         "status": "completed",
         "output_refs": [{"artifact_id": f"artifact_{command['message_id']}", "kind": "deterministic_analysis", "role": "analysis_report", "sha256": empty_sha256, "size_bytes": 0}],
     }
+    if attempt_id:
+        result["attempt_id"] = attempt_id
     validate_worker_result(result)
     return result
 

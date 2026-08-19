@@ -173,7 +173,7 @@ func (s *SQLStore) QueueRetryingSteps(ctx context.Context, workspaceID string) (
 		return nil, err
 	}
 	defer func() { _ = tx.Rollback() }()
-	rows, err := tx.QueryContext(ctx, `SELECT j.project_id::text,j.id::text,r.id::text,s.id::text,s.pipeline_node_id::text,s.node_key,n.execution_class,j.status,r.status,s.current_attempt,n.max_attempts,n.retry_policy,s.updated_at
+	rows, err := tx.QueryContext(ctx, `SELECT j.project_id::text,j.id::text,r.id::text,s.id::text,s.pipeline_node_id::text,s.node_key,n.execution_class,j.status,r.status,s.current_attempt,n.max_attempts,n.retry_policy,n.failure_mode,s.updated_at
 		FROM job_steps s
 		JOIN pipeline_runs r ON r.id=s.pipeline_run_id
 		JOIN jobs j ON j.id=r.job_id
@@ -187,6 +187,7 @@ func (s *SQLStore) QueueRetryingSteps(ctx context.Context, workspaceID string) (
 	}
 	type candidate struct {
 		projectID, jobID, runID, stepID, nodeID, nodeKey, executionClass, jobStatus, runStatus string
+		failureMode                                                                            string
 		attempt, maxAttempts                                                                   int
 		policy                                                                                 []byte
 		updatedAt                                                                              time.Time
@@ -194,7 +195,7 @@ func (s *SQLStore) QueueRetryingSteps(ctx context.Context, workspaceID string) (
 	candidates := make([]candidate, 0)
 	for rows.Next() {
 		var value candidate
-		if err := rows.Scan(&value.projectID, &value.jobID, &value.runID, &value.stepID, &value.nodeID, &value.nodeKey, &value.executionClass, &value.jobStatus, &value.runStatus, &value.attempt, &value.maxAttempts, &value.policy, &value.updatedAt); err != nil {
+		if err := rows.Scan(&value.projectID, &value.jobID, &value.runID, &value.stepID, &value.nodeID, &value.nodeKey, &value.executionClass, &value.jobStatus, &value.runStatus, &value.attempt, &value.maxAttempts, &value.policy, &value.failureMode, &value.updatedAt); err != nil {
 			_ = rows.Close()
 			return nil, err
 		}
@@ -207,8 +208,17 @@ func (s *SQLStore) QueueRetryingSteps(ctx context.Context, workspaceID string) (
 	_ = rows.Close()
 	now := time.Now().UTC()
 	messages := make([]queue.Message, 0, len(candidates))
+	queuedJobs := make(map[string]struct{}, len(candidates))
+	jobStates := make(map[string]string, len(candidates))
 	for _, value := range candidates {
 		if value.jobStatus == "cancelling" || value.jobStatus == "cancelled" || value.jobStatus == "dead_lettered" || value.runStatus == "cancelled" {
+			continue
+		}
+		jobStatus := value.jobStatus
+		if state, ok := jobStates[value.jobID]; ok {
+			jobStatus = state
+		}
+		if jobStatus == "failed" || jobStatus == "dead_lettered" || jobStatus == "cancelled" {
 			continue
 		}
 		if value.attempt >= value.maxAttempts {
@@ -218,9 +228,15 @@ func (s *SQLStore) QueueRetryingSteps(ctx context.Context, workspaceID string) (
 			if _, err := appendEventAndOutboxTx(ctx, tx, EventInput{SchemaVersion: "1.0", EventType: "node.failed", CorrelationID: value.jobID, WorkspaceID: workspaceID, ProjectID: value.projectID, JobID: value.jobID, PipelineRunID: value.runID, JobStepID: value.stepID, PipelineNodeID: value.nodeID, NodeKey: value.nodeKey, Payload: json.RawMessage(`{"code":"retry_exhausted","safe_message":"Retry budget was exhausted."}`)}); err != nil {
 				return nil, err
 			}
-			if err := failAggregateTx(ctx, tx, workspaceID, value.projectID, value.jobID, value.runID, false); err != nil {
+			if value.failureMode != "soft" {
+				if err := terminateRemainingStepsTx(ctx, tx, WorkerResultInput{WorkspaceID: workspaceID, ProjectID: value.projectID, JobID: value.jobID, PipelineRunID: value.runID}, "hard_dependency_failed"); err != nil {
+					return nil, err
+				}
+			}
+			if err := failAggregateTx(ctx, tx, workspaceID, value.projectID, value.jobID, value.runID, true); err != nil {
 				return nil, err
 			}
+			jobStates[value.jobID] = "failed"
 			continue
 		}
 		policy := execution.ParseRetryPolicy(value.policy)
@@ -231,25 +247,32 @@ func (s *SQLStore) QueueRetryingSteps(ctx context.Context, workspaceID string) (
 		if now.Sub(value.updatedAt) < delay {
 			continue
 		}
-		if value.jobStatus == "running" {
+		if jobStatus == "running" {
 			if _, _, err := transitionJob(ctx, tx, TransitionInput{Entity: execution.EntityJob, WorkspaceID: workspaceID, ProjectID: value.projectID, JobID: value.jobID, PipelineRunID: value.runID, FromStatus: "running", ToStatus: "retrying", CorrelationID: value.jobID, Payload: json.RawMessage(`{"reason":"step_retry"}`)}); err != nil {
 				return nil, err
 			}
 			if _, err := appendEventAndOutboxTx(ctx, tx, EventInput{SchemaVersion: "1.0", EventType: "job.retry_scheduled", CorrelationID: value.jobID, WorkspaceID: workspaceID, ProjectID: value.projectID, JobID: value.jobID, PipelineRunID: value.runID, Payload: json.RawMessage(`{"reason":"step_retry"}`)}); err != nil {
 				return nil, err
 			}
-			value.jobStatus = "retrying"
+			jobStatus = "retrying"
 		}
-		if value.jobStatus == "retrying" {
+		if jobStatus == "retrying" && retryJobNeedsQueueTransition(value.jobID, queuedJobs) {
 			if _, _, err := transitionJob(ctx, tx, TransitionInput{Entity: execution.EntityJob, WorkspaceID: workspaceID, ProjectID: value.projectID, JobID: value.jobID, PipelineRunID: value.runID, FromStatus: "retrying", ToStatus: "queued", CorrelationID: value.jobID, Payload: json.RawMessage(`{"reason":"retry_ready"}`)}); err != nil {
 				return nil, err
 			}
 			if _, err := appendEventAndOutboxTx(ctx, tx, EventInput{SchemaVersion: "1.0", EventType: "job.queued", CorrelationID: value.jobID, WorkspaceID: workspaceID, ProjectID: value.projectID, JobID: value.jobID, PipelineRunID: value.runID, Payload: json.RawMessage(`{"reason":"retry_ready"}`)}); err != nil {
 				return nil, err
 			}
-			value.jobStatus = "queued"
+			jobStatus = "queued"
 		}
-		if value.jobStatus != "queued" {
+		if jobStatus == "retrying" {
+			// Another retrying step from the same Job may have already moved the
+			// aggregate to queued in this transaction. Keep the step transition
+			// idempotent without attempting the aggregate transition twice.
+			jobStatus = "queued"
+		}
+		jobStates[value.jobID] = jobStatus
+		if jobStatus != "queued" {
 			continue
 		}
 		if _, _, err := transitionStep(ctx, tx, TransitionInput{Entity: execution.EntityStep, WorkspaceID: workspaceID, ProjectID: value.projectID, JobID: value.jobID, PipelineRunID: value.runID, JobStepID: value.stepID, PipelineNodeID: value.nodeID, NodeKey: value.nodeKey, FromStatus: "retrying", ToStatus: "queued", CorrelationID: value.jobID, Payload: json.RawMessage(`{"reason":"retry_ready"}`)}); err != nil {
@@ -270,6 +293,14 @@ func (s *SQLStore) QueueRetryingSteps(ctx context.Context, workspaceID string) (
 	return messages, nil
 }
 
+func retryJobNeedsQueueTransition(jobID string, queuedJobs map[string]struct{}) bool {
+	if _, exists := queuedJobs[jobID]; exists {
+		return false
+	}
+	queuedJobs[jobID] = struct{}{}
+	return true
+}
+
 // ResolveWorkerCommand turns a durable ID-only queue delivery into the
 // versioned command consumed by a worker. It accepts only a still-queued
 // current attempt, preventing a stale delivery from launching work.
@@ -278,16 +309,16 @@ func (s *SQLStore) ResolveWorkerCommand(ctx context.Context, workspaceID string,
 		return worker.Command{}, errors.New("database is required")
 	}
 	var workspaceRef, projectID, runID, stepID, nodeID, nodeKey, executionClass, status string
-	var configJSON, inputRefsJSON []byte
+	var configJSON, inputRefsJSON, jobCommandJSON []byte
 	var currentAttempt int
-	err := s.DB.QueryRowContext(ctx, `SELECT p.workspace_id::text,j.project_id::text,r.id::text,s.id::text,n.id::text,s.node_key,n.execution_class,n.config,s.input_refs,s.status,s.current_attempt
+	err := s.DB.QueryRowContext(ctx, `SELECT p.workspace_id::text,j.project_id::text,r.id::text,s.id::text,n.id::text,s.node_key,n.execution_class,n.config,s.input_refs,s.status,s.current_attempt,j.command
 		FROM job_steps s
 		JOIN pipeline_runs r ON r.id=s.pipeline_run_id
 		JOIN jobs j ON j.id=r.job_id
 		JOIN projects p ON p.id=j.project_id
 		JOIN pipeline_nodes n ON n.id=s.pipeline_node_id
 		WHERE p.workspace_id=$1::uuid AND j.id=$2::uuid AND r.id=$3::uuid AND s.id=$4::uuid
-		  AND s.status='queued' AND s.current_attempt=$5`, workspaceID, message.JobID, message.PipelineRunID, message.JobStepID, message.Attempt-1).Scan(&workspaceRef, &projectID, &runID, &stepID, &nodeID, &nodeKey, &executionClass, &configJSON, &inputRefsJSON, &status, &currentAttempt)
+		  AND s.status='queued' AND s.current_attempt=$5`, workspaceID, message.JobID, message.PipelineRunID, message.JobStepID, message.Attempt-1).Scan(&workspaceRef, &projectID, &runID, &stepID, &nodeID, &nodeKey, &executionClass, &configJSON, &inputRefsJSON, &status, &currentAttempt, &jobCommandJSON)
 	if errors.Is(err, sql.ErrNoRows) {
 		return worker.Command{}, execution.ErrLeaseConflict
 	}
@@ -328,8 +359,16 @@ func (s *SQLStore) ResolveWorkerCommand(ctx context.Context, workspaceID string,
 		return worker.Command{}, errors.New("worker input Artifact ref limit exceeded")
 	}
 	config := mapFromJSON(configJSON)
-	var jobSnapshot map[string]any
-	if json.Unmarshal(inputRefsJSON, &jobSnapshot) == nil {
+	applySnapshot := func(snapshotJSON []byte) {
+		var jobSnapshot map[string]any
+		if json.Unmarshal(snapshotJSON, &jobSnapshot) != nil {
+			return
+		}
+		if explicitConfig, ok := jobSnapshot["config"].(map[string]any); ok {
+			if profileKey, ok := explicitConfig["render_profile"].(string); ok && strings.TrimSpace(profileKey) != "" {
+				config["render_profile"] = strings.TrimSpace(profileKey)
+			}
+		}
 		if params, ok := jobSnapshot["params"].(map[string]any); ok {
 			// Provider bindings are an immutable job snapshot. Secrets are not
 			// accepted here; adapters resolve only opaque environment/SecretStore
@@ -340,10 +379,12 @@ func (s *SQLStore) ResolveWorkerCommand(ctx context.Context, workspaceID string,
 		}
 		if profile, ok := jobSnapshot["render_profile"].(map[string]any); ok {
 			if key, ok := profile["profile_key"].(string); ok && strings.TrimSpace(key) != "" {
-				config["render_profile"] = key
+				config["render_profile"] = strings.TrimSpace(key)
 			}
 		}
 	}
+	applySnapshot(inputRefsJSON)
+	applySnapshot(jobCommandJSON)
 	command := worker.Command{SchemaVersion: worker.CommandSchemaVersion, MessageID: message.MessageID, Capability: capability, WorkspaceID: contractID("workspace", workspaceRef), ProjectID: contractID("project", projectID), JobID: contractID("job", message.JobID), PipelineRunID: contractID("run", runID), JobStepID: contractID("step", stepID), PipelineNodeID: contractID("node", nodeID), NodeKey: nodeKey, Attempt: message.Attempt, InputRefs: refs, Config: config}
 	if err := worker.ValidateCommand(command); err != nil {
 		return worker.Command{}, err

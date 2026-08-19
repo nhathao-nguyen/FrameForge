@@ -2,8 +2,11 @@ package artifact
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
 	"regexp"
 	"time"
 
@@ -77,7 +80,17 @@ func (s CommitService) Commit(ctx context.Context, request CommitRequest) (Artif
 	}
 	metadata, err := s.Storage.Promote(ctx, request.Staged.object, request.FinalKey, storage.Preconditions{IfNoneMatch: true})
 	if err != nil {
-		return Artifact{}, fmt.Errorf("promote artifact: %w", err)
+		if !errors.Is(err, storage.ErrDestinationExists) {
+			return Artifact{}, fmt.Errorf("promote artifact: %w", err)
+		}
+		// A controller may have promoted the immutable object and then
+		// restarted before publishing its database row. Verify the object
+		// bytes before treating the replay as an idempotent commit; an
+		// unrelated object at the same key must never be adopted.
+		metadata, err = verifyExistingObject(ctx, s.Storage, request.FinalKey, request.Staged.object, request.ContentType)
+		if err != nil {
+			return Artifact{}, fmt.Errorf("verify existing artifact: %w", err)
+		}
 	}
 	value := Artifact{ProjectID: request.ProjectID, Kind: request.Kind, Role: request.Role, Status: "committed", Locator: metadata.Locator, SizeBytes: metadata.SizeBytes, SHA256: request.Staged.object.SHA256, ContentType: request.ContentType, Metadata: request.Metadata}
 	now := time.Now().UTC()
@@ -88,4 +101,38 @@ func (s CommitService) Commit(ctx context.Context, request CommitRequest) (Artif
 		return Artifact{}, fmt.Errorf("publish artifact: %w", err)
 	}
 	return committed, nil
+}
+
+func verifyExistingObject(ctx context.Context, store storage.StoragePort, finalKey string, staged storage.StagedObject, contentType string) (storage.ObjectMetadata, error) {
+	metadata, err := store.Stat(ctx, storage.StorageLocator{Backend: staged.Locator.Backend, ObjectKey: finalKey})
+	if err != nil {
+		return storage.ObjectMetadata{}, err
+	}
+	if metadata.SizeBytes != staged.SizeBytes {
+		return storage.ObjectMetadata{}, fmt.Errorf("existing artifact size %d does not match staged size %d", metadata.SizeBytes, staged.SizeBytes)
+	}
+	reader, err := store.OpenRead(ctx, metadata.Locator, nil)
+	if err != nil {
+		return storage.ObjectMetadata{}, err
+	}
+	hash := sha256.New()
+	readSize, copyErr := io.Copy(hash, reader)
+	closeErr := reader.Close()
+	if copyErr != nil {
+		return storage.ObjectMetadata{}, copyErr
+	}
+	if closeErr != nil {
+		return storage.ObjectMetadata{}, closeErr
+	}
+	if readSize != staged.SizeBytes {
+		return storage.ObjectMetadata{}, fmt.Errorf("existing artifact read size %d does not match staged size %d", readSize, staged.SizeBytes)
+	}
+	if actual := hex.EncodeToString(hash.Sum(nil)); actual != staged.SHA256 {
+		return storage.ObjectMetadata{}, errors.New("existing artifact checksum does not match staged checksum")
+	}
+	metadata.SHA256 = staged.SHA256
+	if metadata.ContentType == "" {
+		metadata.ContentType = contentType
+	}
+	return metadata, nil
 }

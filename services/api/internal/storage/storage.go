@@ -85,6 +85,12 @@ type Preconditions struct {
 	IfMatchETag string
 }
 
+// ErrDestinationExists is returned when an immutable promotion would
+// overwrite an object that is already present. Callers may safely verify the
+// existing object and publish its metadata instead of treating a replay as a
+// fatal worker-result error.
+var ErrDestinationExists = errors.New("destination already exists")
+
 type LocalHandle struct {
 	path string
 }
@@ -383,12 +389,12 @@ func (s *LocalStorage) Promote(_ context.Context, staged StagedObject, finalKey 
 	}
 	if _, statErr := os.Stat(destination); statErr == nil {
 		if preconditions.IfNoneMatch {
-			return ObjectMetadata{}, errors.New("destination already exists")
+			return ObjectMetadata{}, ErrDestinationExists
 		}
 		if preconditions.IfMatchETag != "" {
 			return ObjectMetadata{}, errors.New("etag precondition cannot be checked without checksum")
 		}
-		return ObjectMetadata{}, errors.New("destination already exists")
+		return ObjectMetadata{}, ErrDestinationExists
 	} else if !os.IsNotExist(statErr) {
 		return ObjectMetadata{}, statErr
 	}
@@ -690,7 +696,7 @@ func (s *S3Storage) Promote(ctx context.Context, staged StagedObject, finalKey s
 	}
 	if preconditions.IfNoneMatch {
 		if _, err := s.client.StatObject(ctx, s.bucket, finalKey, minio.StatObjectOptions{}); err == nil {
-			return ObjectMetadata{}, errors.New("destination already exists")
+			return ObjectMetadata{}, ErrDestinationExists
 		}
 	}
 	_, err := s.client.CopyObject(ctx, s.bucket, staged.Locator.ObjectKey, s.bucket, finalKey, nil, minio.CopySrcOptions{}, minio.PutObjectOptions{})

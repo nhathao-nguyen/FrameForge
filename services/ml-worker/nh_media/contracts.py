@@ -42,6 +42,8 @@ def validate_worker_command(value: dict[str, Any]) -> None:
             raise ValueError(f"invalid worker command ID: {key}")
     if value.get("pipeline_node_id") is not None and not _OPAQUE_ID.fullmatch(value["pipeline_node_id"]):
         raise ValueError("invalid worker pipeline node ID")
+    if value.get("attempt_id") is not None and not _OPAQUE_ID.fullmatch(value["attempt_id"]):
+        raise ValueError("invalid worker attempt ID")
     if not isinstance(value.get("node_key"), str) or not re.fullmatch(r"^[a-z][a-z0-9_-]{1,63}$", value["node_key"]):
         raise ValueError("invalid worker node key")
     if value.get("capability") not in _CAPABILITIES or not isinstance(value.get("attempt"), int) or not 1 <= value["attempt"] <= 1000:
@@ -60,6 +62,8 @@ def validate_worker_result(value: dict[str, Any]) -> None:
     for key in ("message_id", "job_id", "job_step_id"):
         if not isinstance(value.get(key), str) or not _OPAQUE_ID.fullmatch(value[key]):
             raise ValueError(f"invalid worker result ID: {key}")
+    if value.get("attempt_id") is not None and not _OPAQUE_ID.fullmatch(value["attempt_id"]):
+        raise ValueError("invalid worker result attempt ID")
     if value.get("status") not in {"completed", "skipped", "failed", "cancelled"}:
         raise ValueError("invalid worker result status")
     if not isinstance(value.get("output_refs"), list) or len(value["output_refs"]) > 100:
@@ -94,7 +98,7 @@ def _validate_safe_mapping(value: dict[str, Any]) -> None:
     if not isinstance(value, dict):
         raise ValueError("worker config must be an object")
     for key, child in value.items():
-        if any(forbidden in key.lower() for forbidden in _WORKER_FORBIDDEN_FIELDS):
+        if key.lower() != "max_output_tokens" and any(forbidden in key.lower() for forbidden in _WORKER_FORBIDDEN_FIELDS):
             raise ValueError(f"forbidden worker field: {key}")
         if isinstance(child, dict):
             _validate_safe_mapping(child)

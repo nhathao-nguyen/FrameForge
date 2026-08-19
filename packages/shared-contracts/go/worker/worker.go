@@ -24,19 +24,22 @@ type ArtifactRef struct {
 }
 
 type Command struct {
-	SchemaVersion  string         `json:"schema_version"`
-	MessageID      string         `json:"message_id"`
-	Capability     string         `json:"capability"`
-	WorkspaceID    string         `json:"workspace_id"`
-	ProjectID      string         `json:"project_id"`
-	JobID          string         `json:"job_id"`
-	PipelineRunID  string         `json:"pipeline_run_id"`
-	JobStepID      string         `json:"job_step_id"`
-	PipelineNodeID string         `json:"pipeline_node_id,omitempty"`
-	NodeKey        string         `json:"node_key"`
-	Attempt        int            `json:"attempt"`
-	InputRefs      []ArtifactRef  `json:"input_refs"`
-	Config         map[string]any `json:"config"`
+	SchemaVersion  string `json:"schema_version"`
+	MessageID      string `json:"message_id"`
+	Capability     string `json:"capability"`
+	WorkspaceID    string `json:"workspace_id"`
+	ProjectID      string `json:"project_id"`
+	JobID          string `json:"job_id"`
+	PipelineRunID  string `json:"pipeline_run_id"`
+	JobStepID      string `json:"job_step_id"`
+	PipelineNodeID string `json:"pipeline_node_id,omitempty"`
+	NodeKey        string `json:"node_key"`
+	// AttemptID is a non-secret durable fencing handle. It lets a restarted
+	// controller reconcile a result without recovering the old raw lease token.
+	AttemptID string         `json:"attempt_id,omitempty"`
+	Attempt   int            `json:"attempt"`
+	InputRefs []ArtifactRef  `json:"input_refs"`
+	Config    map[string]any `json:"config"`
 }
 
 type OutputRef struct {
@@ -60,6 +63,7 @@ type Result struct {
 	MessageID     string      `json:"message_id"`
 	JobID         string      `json:"job_id"`
 	JobStepID     string      `json:"job_step_id"`
+	AttemptID     string      `json:"attempt_id,omitempty"`
 	Status        string      `json:"status"`
 	OutputRefs    []OutputRef `json:"output_refs"`
 	CheckpointRef string      `json:"checkpoint_ref,omitempty"`
@@ -96,6 +100,9 @@ func ValidateCommand(value Command) error {
 	if value.PipelineNodeID != "" && !validID(value.PipelineNodeID) {
 		return errors.New("invalid worker pipeline node ID")
 	}
+	if value.AttemptID != "" && !validID(value.AttemptID) {
+		return errors.New("invalid worker attempt ID")
+	}
 	if value.Capability != "probe" && value.Capability != "thumbnail" && value.Capability != "analysis" && value.Capability != "ai" && value.Capability != "ml" && value.Capability != "media" && value.Capability != "render" && value.Capability != "system" {
 		return errors.New("unsupported worker capability")
 	}
@@ -124,6 +131,9 @@ func DecodeResult(value []byte) (Result, error) {
 func ValidateResult(value Result) error {
 	if value.SchemaVersion != ResultSchemaVersion || !validID(value.MessageID) || !validID(value.JobID) || !validID(value.JobStepID) {
 		return errors.New("invalid worker result identity/version")
+	}
+	if value.AttemptID != "" && !validID(value.AttemptID) {
+		return errors.New("invalid worker result attempt ID")
 	}
 	switch value.Status {
 	case "completed", "skipped", "failed", "cancelled":
@@ -169,9 +179,11 @@ func validField(value string) bool {
 func validateSafeValue(value map[string]any) error {
 	for key, child := range value {
 		lower := strings.ToLower(key)
-		for _, forbidden := range []string{"path", "secret", "token", "password", "traceback", "presigned", "authorization"} {
-			if strings.Contains(lower, forbidden) {
-				return fmt.Errorf("worker contract contains forbidden field %q", key)
+		if lower != "max_output_tokens" {
+			for _, forbidden := range []string{"path", "secret", "token", "password", "traceback", "presigned", "authorization"} {
+				if strings.Contains(lower, forbidden) {
+					return fmt.Errorf("worker contract contains forbidden field %q", key)
+				}
 			}
 		}
 		switch typed := child.(type) {

@@ -82,7 +82,8 @@ func (s *SQLStore) ClaimStep(ctx context.Context, input execution.LeaseClaim) (L
 		}
 		return LeaseClaimResult{}, err
 	}
-	if _, err := tx.ExecContext(ctx, `INSERT INTO job_step_attempts(job_step_id,attempt,status,worker_id,lease_token_hash,lease_expires_at,input_fingerprint,started_at,heartbeat_at) VALUES($1::uuid,$2,'running',$3,$4,$5,NULLIF($6,''),now(),now())`, input.JobStepID, attempt, input.WorkerID, lease.TokenHash, lease.ExpiresAt, input.InputFingerprint); err != nil {
+	var attemptID string
+	if err := tx.QueryRowContext(ctx, `INSERT INTO job_step_attempts(job_step_id,attempt,status,worker_id,lease_token_hash,lease_expires_at,input_fingerprint,started_at,heartbeat_at) VALUES($1::uuid,$2,'running',$3,$4,$5,NULLIF($6,''),now(),now()) RETURNING id::text`, input.JobStepID, attempt, input.WorkerID, lease.TokenHash, lease.ExpiresAt, input.InputFingerprint).Scan(&attemptID); err != nil {
 		return LeaseClaimResult{}, err
 	}
 	if _, err := appendEventAndOutboxTx(ctx, tx, EventInput{
@@ -97,6 +98,7 @@ func (s *SQLStore) ClaimStep(ctx context.Context, input execution.LeaseClaim) (L
 		return LeaseClaimResult{}, err
 	}
 	lease.Attempt = attempt
+	lease.AttemptID = attemptID
 	return LeaseClaimResult{Lease: lease}, nil
 }
 
@@ -160,6 +162,66 @@ func (s *SQLStore) ReconcileExpiredStep(ctx context.Context, input execution.Lea
 		return err
 	}
 	return tx.Commit()
+}
+
+// ReconcileExpiredSteps finds active attempts abandoned by a worker or
+// controller restart and moves each still-running step into the durable retry
+// state. The per-step update remains guarded by the lease expiry predicate, so
+// a late heartbeat or result can only win before the lease actually expires.
+func (s *SQLStore) ReconcileExpiredSteps(ctx context.Context, workspaceID string) (int, error) {
+	if s == nil || s.DB == nil {
+		return 0, errors.New("database is required")
+	}
+	if workspaceID == "" {
+		return 0, errors.New("lease reconciliation workspace is required")
+	}
+	rows, err := s.DB.QueryContext(ctx, `SELECT j.project_id::text,j.id::text,r.id::text,s.id::text,s.pipeline_node_id::text,s.node_key
+		FROM job_step_attempts a
+		JOIN job_steps s ON s.id=a.job_step_id
+		JOIN pipeline_runs r ON r.id=s.pipeline_run_id
+		JOIN jobs j ON j.id=r.job_id
+		JOIN projects p ON p.id=j.project_id
+		WHERE p.workspace_id=$1::uuid AND a.status='running' AND a.lease_expires_at <= now()
+		  AND s.status='running' AND a.attempt=s.current_attempt
+		ORDER BY a.lease_expires_at,s.id`, workspaceID)
+	if err != nil {
+		return 0, err
+	}
+	type expiredLease struct {
+		projectID, jobID, runID, stepID, nodeID, nodeKey string
+	}
+	values := make([]expiredLease, 0)
+	for rows.Next() {
+		var value expiredLease
+		if err := rows.Scan(&value.projectID, &value.jobID, &value.runID, &value.stepID, &value.nodeID, &value.nodeKey); err != nil {
+			_ = rows.Close()
+			return 0, err
+		}
+		values = append(values, value)
+	}
+	if err := rows.Err(); err != nil {
+		_ = rows.Close()
+		return 0, err
+	}
+	if err := rows.Close(); err != nil {
+		return 0, err
+	}
+	reconciled := 0
+	for _, value := range values {
+		err := s.ReconcileExpiredStep(ctx, execution.LeaseClaim{
+			WorkspaceID: workspaceID, ProjectID: value.projectID, JobID: value.jobID,
+			PipelineRunID: value.runID, JobStepID: value.stepID, PipelineNodeID: value.nodeID,
+			NodeKey: value.nodeKey,
+		})
+		if errors.Is(err, execution.ErrLeaseConflict) {
+			continue
+		}
+		if err != nil {
+			return reconciled, err
+		}
+		reconciled++
+	}
+	return reconciled, nil
 }
 
 func leasePayload(attempt int) json.RawMessage {

@@ -1,0 +1,633 @@
+{
+  "schema_version": "nh-media/gate-h-live/v1",
+  "started_at": "2026-08-19T06:06:11.3271302Z",
+  "api_base_url": "http://127.0.0.1:8080",
+  "ffmpeg_sha256": "af9e7af850346ae908745f6191cdcf9581889e915f8fe2dd6ab8cabef21161d9",
+  "ffprobe_sha256": "6d2b7ac8cd07da82f066994be8bcf0c74ab1aba7f248bb75025fcc543711181a",
+  "provider_policy_path": "",
+  "corpus_path": "C:\\Users\\PC\\AppData\\Local\\NH-Media\\evidence\\real-local-corpus-20260819-acceptance\\corpus-landscape.mp4",
+  "render_profile_key": "youtube_16_9",
+  "project_id": "4f091d22-f1ba-4c4b-b9d8-c6fd81e7e52a",
+  "validation_job_id": "c8b7762b-cdd6-4073-bae9-c7de2cdc8476",
+  "validation_status": "completed",
+  "source_artifact_id": "db9d6fef-e42b-4c32-9a91-f55687c73b3b",
+  "source_sha256": "39a047b207d97384363e43db87c6a30a6d0b56a20994a1065cffb9ab9ee80814",
+  "movie_job_id": "7af2d7e6-4750-4fed-aaac-05cf9dc5f43c",
+  "movie_job_status": "completed",
+  "timeline_id": "752cdc48-b729-40b0-81e7-58d2c062b40b",
+  "timeline_version_id": "6372e9f7-3fcc-4dcb-882c-373d9cfff103",
+  "timeline_validation_valid": true,
+  "timeline_approval_status": "approved",
+  "render_id": "a86e1709-6049-48b6-b528-2170671577fa",
+  "render_job_id": "11e9ef7d-d305-42b1-b09a-1c3637de35fc",
+  "render_job_status": "completed",
+  "run_count": 1,
+  "step_count": 25,
+  "completed_step_count": 25,
+  "job_pipeline_run_id": "f6dc336a-bcea-4fc2-9d9f-b7805a6aaf40",
+  "timeline": {
+    "id": "752cdc48-b729-40b0-81e7-58d2c062b40b",
+    "version_id": "6372e9f7-3fcc-4dcb-882c-373d9cfff103",
+    "status": "approved",
+    "content_hash": "4e80ffcf7a29e8acec227afb2ac33beb440d9f13ca1f24df57796dd30ac9af6c",
+    "validation_valid": true
+  },
+  "render": {
+    "id": "a86e1709-6049-48b6-b528-2170671577fa",
+    "timeline_version_id": "6372e9f7-3fcc-4dcb-882c-373d9cfff103",
+    "status": "completed",
+    "job_status": "completed"
+  },
+  "artifact_refs": [
+    {
+      "artifact_id": "db9d6fef-e42b-4c32-9a91-f55687c73b3b",
+      "role": "source_original",
+      "sha256": "39a047b207d97384363e43db87c6a30a6d0b56a20994a1065cffb9ab9ee80814"
+    },
+    {
+      "artifact_id": "artifact_3bf9759b_69f0_4769_88ca_d45f81d00b8a",
+      "role": "timing_alignment",
+      "sha256": "31d047518bd9fc9bc86aee5f8ecf638c86dde7cdca816fe75d45c6dde3c1fabb"
+    },
+    {
+      "artifact_id": "artifact_fc638f99_60bd_400b_8a72_f434be2b47e0",
+      "role": "scene_analysis",
+      "sha256": "4f57310590c0b13ece3d7fc5bbcc5e010d90bb96eedd99bd79c0e7656c498d0f"
+    },
+    {
+      "artifact_id": "artifact_c50b41c2_0a72_4e88_85fd_0c156b91b1df",
+      "role": "timeline_version",
+      "sha256": "1407147ef72300abe20c94a146da90632a65b6cd9eb3c1a29f81fce15fe294ad"
+    },
+    {
+      "artifact_id": "artifact_d59aa492_a41f_46b1_ac53_d31de7414bb2",
+      "role": "coverage_report",
+      "sha256": "0c614d321430b710f189f057e6904a42a4532f76151c415762be134faa585203"
+    },
+    {
+      "artifact_id": "artifact_6043f2ad_6da7_4bbe_a703_de048a454f35",
+      "role": "character_analysis",
+      "sha256": "07b3bd554b012062537cb5b933b1d5cf7e5a1bd9101bd9d4924d1cc13f78c53d"
+    },
+    {
+      "artifact_id": "artifact_59a8cc5b_65d2_436c_b515_15c5f1f30f7a",
+      "role": "scene_index",
+      "sha256": "41eb6d2c04bd7de5f61972687a5532c6508489fd98c96160ff09d5bd9f636199"
+    },
+    {
+      "artifact_id": "artifact_c3026823_f8a6_4e10_9d53_4ff216ca91f3",
+      "role": "scene_thumbnails",
+      "sha256": "0d0299a7c20dc9101c562c7f7ced4f434a0f79792476ff34f010bdfdce89af33"
+    },
+    {
+      "artifact_id": "artifact_530acb6a_e9de_4f8d_8062_c3f88de9152d",
+      "role": "media_embeddings",
+      "sha256": "dabcb83d468b9a89c61bb66f648582aeb2e4d73601937e7d3c6a99cccccdae8e"
+    },
+    {
+      "artifact_id": "artifact_38a860d0_7988_4f41_88d5_f5ab807cb6bd",
+      "role": "candidate_evaluations",
+      "sha256": "164325e0c3d04f307d8c88410d9e4612fb2e35df4646468c6394009ea36cad93"
+    },
+    {
+      "artifact_id": "artifact_96e42a15_e574_45ca_840b_504d202daaa0",
+      "role": "clip_exports",
+      "sha256": "ee6e10a9cb2a00ab611fcced5a8e926c53d89dbaf70d6e8e8c9314ce961ec1df"
+    },
+    {
+      "artifact_id": "artifact_41796d5c_cade_4620_baf6_682e314216cb",
+      "role": "clip_manifest",
+      "sha256": "0ad2232276bb85c7e39821d754d864cacfdba2230f4da8c1213c448570e29266"
+    },
+    {
+      "artifact_id": "artifact_889576d0_0883_4660_a95b_e39b170bc482",
+      "role": "transcript",
+      "sha256": "354694e06b0adfe8fa057bbfec034c582196abb7cd649ba80e2013448db4ae5c"
+    },
+    {
+      "artifact_id": "artifact_94dcdbf0_5fb4_493c_a16d_fa71024852d6",
+      "role": "match_candidates",
+      "sha256": "05501900cfab9bd21bea6d5ed90945aff5b63e1c066fadfa45f1c92232163d84"
+    },
+    {
+      "artifact_id": "artifact_b10a8e64_afbc_49fc_9bc5_55c76c8b7aea",
+      "role": "narration_audio",
+      "sha256": "2cd0b25473d928752b2045e293393a63e5558d07a8b503a8cc49d2e0ff275237"
+    },
+    {
+      "artifact_id": "artifact_2dd83f31_c8b4_43cb_b8ff_a4f60a918900",
+      "role": "narration_manifest",
+      "sha256": "99f4dc2b4200539801be360000e5c1acf1eedd8175180a91f7287d4fa5bfb30c"
+    },
+    {
+      "artifact_id": "artifact_83a138a5_8aef_4ac4_b8e7_0f1facee8f9b",
+      "role": "script_version",
+      "sha256": "5040527f42844b7453f4b72dc535888d7f519c29013c46973bc3d8be92f8579a"
+    },
+    {
+      "artifact_id": "artifact_3148075b_1640_4e44_bcce_1374160eaa89",
+      "role": "subtitle_cues",
+      "sha256": "e6dd7d6b8f24f4e8ab9ce3a9daf8a2b69cb145a4c6f2ed1c4ec993951e318ff9"
+    },
+    {
+      "artifact_id": "artifact_eef2413e_e476_407d_8387_d960f3f1f397",
+      "role": "subtitle_srt",
+      "sha256": "07edb9cd306f3779498db4a7f4342e9894cc10d12336b4f638a5907bc99cb4d5"
+    },
+    {
+      "artifact_id": "artifact_563ac8bd_a882_401b_9452_b21f54aa77e3",
+      "role": "subtitle_vtt",
+      "sha256": "e5ffef2bf3ac942d66ad9a9237e356ba259ef76db3a3fd55a9c7f7d034545edc"
+    },
+    {
+      "artifact_id": "artifact_e802cdb2_42c7_4b8e_a7b1_43eb097f982e",
+      "role": "subtitle_ass",
+      "sha256": "6d220d5d1340c49bd76b8dafde3a3459cd958576a5987207fbc55899f0d09314"
+    },
+    {
+      "artifact_id": "artifact_e314b281_985b_4f37_81eb_3c5499000401",
+      "role": "mixed_audio",
+      "sha256": "246915972e312194e5e6bdbd82a2c51cba5a1f761d024953bf10ebbb0d8ee7c9"
+    },
+    {
+      "artifact_id": "artifact_118ab86d_29bd_4cae_beec_a680714e381f",
+      "role": "loudness_report",
+      "sha256": "468d68de66c02b18d537db0640528fa4d596dda2195c899ebbb9b9df59a94b15"
+    },
+    {
+      "artifact_id": "artifact_76181fa6_b864_48be_8c29_8b715afcf0af",
+      "role": "prepared_video",
+      "sha256": "3e07a10d1d4ad66f2673fa60166ec24429dc22bf3af9770550278e393d8e7214"
+    },
+    {
+      "artifact_id": "artifact_1f31be1b_a338_4140_a4b9_e246489f51d3",
+      "role": "prepared_audio",
+      "sha256": "b2793df7ae9fe7379a629b7b3b4147884af5cbca23dc1634ab8f695d56eb6f3b"
+    },
+    {
+      "artifact_id": "artifact_e3a20776_36e3_436c_a12d_f06638718954",
+      "role": "source_thumbnails",
+      "sha256": "25a86c67fb6ec53f758091c548df190f83f8ae6933ee815b43932520ac66b8d4"
+    },
+    {
+      "artifact_id": "artifact_1c0b7e35_03df_49a8_90ac_854ba8bb970d",
+      "role": "render_video",
+      "sha256": "429b3cf73383f18b9369a739220f91702abe6e32c2d0f073799ded1cd105856d"
+    },
+    {
+      "artifact_id": "artifact_07550af6_fe44_473b_aab4_76b6d90db2b4",
+      "role": "render_audio",
+      "sha256": "246915972e312194e5e6bdbd82a2c51cba5a1f761d024953bf10ebbb0d8ee7c9"
+    },
+    {
+      "artifact_id": "artifact_29dbb0c3_749d_436f_90ca_3635aa7fb185",
+      "role": "render_metadata",
+      "sha256": "d3b1081f3243918246b30f0fade3e9cb2cda32c6dc8663ad27bf23bab1862d62"
+    },
+    {
+      "artifact_id": "artifact_78ec715d_7648_4d6b_a98f_ec88c6bac417",
+      "role": "research_metadata",
+      "sha256": "a85acd99c45fb07982dd9ade25db00a4b211f00f3ece768121a27dccf1dd92d9"
+    },
+    {
+      "artifact_id": "artifact_4ba2c81a_b3c2_49fb_b9e1_acc98cd0f933",
+      "role": "source_probe",
+      "sha256": "9c4b60b33d358d68145c7628aef08e1534541878a942c3c6eecdbe7042af4666"
+    },
+    {
+      "artifact_id": "artifact_9daf7b01_d955_40a2_8724_999860f1bce5",
+      "role": "timeline_qa_report",
+      "sha256": "10754309a09b3e941b17f8a600d8a1ad367c9908b012e991e81c7af72dfc273b"
+    },
+    {
+      "artifact_id": "artifact_41e5e30d_8b44_41ad_acea_0e71457c20a1",
+      "role": "selected_match_proposal",
+      "sha256": "f9e120f7b3205a362335c98af1d1741df490a0621ab1ff6504b76479c98179b0"
+    },
+    {
+      "artifact_id": "artifact_36d89d93_e829_4331_9d39_2a3c5fb19d2f",
+      "role": "translated_subtitles",
+      "sha256": "2d2e5a8c95bc8653a6124e8c3e9323d0f4af614c7abe50f28d921af7aec44315"
+    },
+    {
+      "artifact_id": "artifact_2f1d0a1f_d55d_4fc2_bf58_72dcb2594486",
+      "role": "deliverable_qa",
+      "sha256": "c6f5b07d0619d2093c3c67eafb0de06f514d5b058af2710295e92c84994585c7"
+    },
+    {
+      "artifact_id": "artifact_a2329bfc_18ad_444c_8f86_b98c5d1f1c53",
+      "role": "render_video",
+      "sha256": "d99109d2493bb26d14c2e03f4b7a6b80dab10564245526c5bebcd4518fa7dc91"
+    },
+    {
+      "artifact_id": "artifact_10e853ec_b38e_436d_af4b_7a4295147340",
+      "role": "render_audio",
+      "sha256": "b2793df7ae9fe7379a629b7b3b4147884af5cbca23dc1634ab8f695d56eb6f3b"
+    },
+    {
+      "artifact_id": "artifact_db7b7309_9a7e_4f4c_a622_cbc8587cfe2d",
+      "role": "render_metadata",
+      "sha256": "a86c4e1532a53fad9d560838f738df647dd5dc25bba2f707327f5b03752dc682"
+    },
+    {
+      "artifact_id": "artifact_b45bc0bc_6482_4490_afb9_6e6d99106a75",
+      "role": "deliverable_qa",
+      "sha256": "c6f5b07d0619d2093c3c67eafb0de06f514d5b058af2710295e92c84994585c7"
+    }
+  ],
+  "downloads": [
+    {
+      "artifact_id": "db9d6fef-e42b-4c32-9a91-f55687c73b3b",
+      "api_artifact_id": "db9d6fef-e42b-4c32-9a91-f55687c73b3b",
+      "role": "source_original",
+      "download_url_issued": true,
+      "downloaded": true,
+      "downloaded_size_bytes": 148007,
+      "downloaded_sha256": "39a047b207d97384363e43db87c6a30a6d0b56a20994a1065cffb9ab9ee80814",
+      "sha256_match": true
+    },
+    {
+      "artifact_id": "artifact_3bf9759b_69f0_4769_88ca_d45f81d00b8a",
+      "api_artifact_id": "3bf9759b-69f0-4769-88ca-d45f81d00b8a",
+      "role": "timing_alignment",
+      "download_url_issued": true,
+      "downloaded": true,
+      "downloaded_size_bytes": 1559,
+      "downloaded_sha256": "31d047518bd9fc9bc86aee5f8ecf638c86dde7cdca816fe75d45c6dde3c1fabb",
+      "sha256_match": true
+    },
+    {
+      "artifact_id": "artifact_fc638f99_60bd_400b_8a72_f434be2b47e0",
+      "api_artifact_id": "fc638f99-60bd-400b-8a72-f434be2b47e0",
+      "role": "scene_analysis",
+      "download_url_issued": true,
+      "downloaded": true,
+      "downloaded_size_bytes": 4159,
+      "downloaded_sha256": "4f57310590c0b13ece3d7fc5bbcc5e010d90bb96eedd99bd79c0e7656c498d0f",
+      "sha256_match": true
+    },
+    {
+      "artifact_id": "artifact_c50b41c2_0a72_4e88_85fd_0c156b91b1df",
+      "api_artifact_id": "c50b41c2-0a72-4e88-85fd-0c156b91b1df",
+      "role": "timeline_version",
+      "download_url_issued": true,
+      "downloaded": true,
+      "downloaded_size_bytes": 1967,
+      "downloaded_sha256": "1407147ef72300abe20c94a146da90632a65b6cd9eb3c1a29f81fce15fe294ad",
+      "sha256_match": true
+    },
+    {
+      "artifact_id": "artifact_d59aa492_a41f_46b1_ac53_d31de7414bb2",
+      "api_artifact_id": "d59aa492-a41f-46b1-ac53-d31de7414bb2",
+      "role": "coverage_report",
+      "download_url_issued": true,
+      "downloaded": true,
+      "downloaded_size_bytes": 261,
+      "downloaded_sha256": "0c614d321430b710f189f057e6904a42a4532f76151c415762be134faa585203",
+      "sha256_match": true
+    },
+    {
+      "artifact_id": "artifact_6043f2ad_6da7_4bbe_a703_de048a454f35",
+      "api_artifact_id": "6043f2ad-6da7-4bbe-a703-de048a454f35",
+      "role": "character_analysis",
+      "download_url_issued": true,
+      "downloaded": true,
+      "downloaded_size_bytes": 498,
+      "downloaded_sha256": "07b3bd554b012062537cb5b933b1d5cf7e5a1bd9101bd9d4924d1cc13f78c53d",
+      "sha256_match": true
+    },
+    {
+      "artifact_id": "artifact_59a8cc5b_65d2_436c_b515_15c5f1f30f7a",
+      "api_artifact_id": "59a8cc5b-65d2-436c-b515-15c5f1f30f7a",
+      "role": "scene_index",
+      "download_url_issued": true,
+      "downloaded": true,
+      "downloaded_size_bytes": 1484,
+      "downloaded_sha256": "41eb6d2c04bd7de5f61972687a5532c6508489fd98c96160ff09d5bd9f636199",
+      "sha256_match": true
+    },
+    {
+      "artifact_id": "artifact_c3026823_f8a6_4e10_9d53_4ff216ca91f3",
+      "api_artifact_id": "c3026823-f8a6-4e10-9d53-4ff216ca91f3",
+      "role": "scene_thumbnails",
+      "download_url_issued": true,
+      "downloaded": true,
+      "downloaded_size_bytes": 240,
+      "downloaded_sha256": "0d0299a7c20dc9101c562c7f7ced4f434a0f79792476ff34f010bdfdce89af33",
+      "sha256_match": true
+    },
+    {
+      "artifact_id": "artifact_530acb6a_e9de_4f8d_8062_c3f88de9152d",
+      "api_artifact_id": "530acb6a-e9de-4f8d-8062-c3f88de9152d",
+      "role": "media_embeddings",
+      "download_url_issued": true,
+      "downloaded": true,
+      "downloaded_size_bytes": 2472,
+      "downloaded_sha256": "dabcb83d468b9a89c61bb66f648582aeb2e4d73601937e7d3c6a99cccccdae8e",
+      "sha256_match": true
+    },
+    {
+      "artifact_id": "artifact_38a860d0_7988_4f41_88d5_f5ab807cb6bd",
+      "api_artifact_id": "38a860d0-7988-4f41-88d5-f5ab807cb6bd",
+      "role": "candidate_evaluations",
+      "download_url_issued": true,
+      "downloaded": true,
+      "downloaded_size_bytes": 364,
+      "downloaded_sha256": "164325e0c3d04f307d8c88410d9e4612fb2e35df4646468c6394009ea36cad93",
+      "sha256_match": true
+    },
+    {
+      "artifact_id": "artifact_96e42a15_e574_45ca_840b_504d202daaa0",
+      "api_artifact_id": "96e42a15-e574-45ca-840b-504d202daaa0",
+      "role": "clip_exports",
+      "download_url_issued": true,
+      "downloaded": true,
+      "downloaded_size_bytes": 13877,
+      "downloaded_sha256": "ee6e10a9cb2a00ab611fcced5a8e926c53d89dbaf70d6e8e8c9314ce961ec1df",
+      "sha256_match": true
+    },
+    {
+      "artifact_id": "artifact_41796d5c_cade_4620_baf6_682e314216cb",
+      "api_artifact_id": "41796d5c-cade-4620-baf6-682e314216cb",
+      "role": "clip_manifest",
+      "download_url_issued": true,
+      "downloaded": true,
+      "downloaded_size_bytes": 1117,
+      "downloaded_sha256": "0ad2232276bb85c7e39821d754d864cacfdba2230f4da8c1213c448570e29266",
+      "sha256_match": true
+    },
+    {
+      "artifact_id": "artifact_889576d0_0883_4660_a95b_e39b170bc482",
+      "api_artifact_id": "889576d0-0883-4660-a95b-e39b170bc482",
+      "role": "transcript",
+      "download_url_issued": true,
+      "downloaded": true,
+      "downloaded_size_bytes": 734,
+      "downloaded_sha256": "354694e06b0adfe8fa057bbfec034c582196abb7cd649ba80e2013448db4ae5c",
+      "sha256_match": true
+    },
+    {
+      "artifact_id": "artifact_94dcdbf0_5fb4_493c_a16d_fa71024852d6",
+      "api_artifact_id": "94dcdbf0-5fb4-493c-a16d-fa71024852d6",
+      "role": "match_candidates",
+      "download_url_issued": true,
+      "downloaded": true,
+      "downloaded_size_bytes": 1307,
+      "downloaded_sha256": "05501900cfab9bd21bea6d5ed90945aff5b63e1c066fadfa45f1c92232163d84",
+      "sha256_match": true
+    },
+    {
+      "artifact_id": "artifact_b10a8e64_afbc_49fc_9bc5_55c76c8b7aea",
+      "api_artifact_id": "b10a8e64-afbc-49fc-9bc5-55c76c8b7aea",
+      "role": "narration_audio",
+      "download_url_issued": true,
+      "downloaded": true,
+      "downloaded_size_bytes": 96044,
+      "downloaded_sha256": "2cd0b25473d928752b2045e293393a63e5558d07a8b503a8cc49d2e0ff275237",
+      "sha256_match": true
+    },
+    {
+      "artifact_id": "artifact_2dd83f31_c8b4_43cb_b8ff_a4f60a918900",
+      "api_artifact_id": "2dd83f31-c8b4-43cb-b8ff-a4f60a918900",
+      "role": "narration_manifest",
+      "download_url_issued": true,
+      "downloaded": true,
+      "downloaded_size_bytes": 1530,
+      "downloaded_sha256": "99f4dc2b4200539801be360000e5c1acf1eedd8175180a91f7287d4fa5bfb30c",
+      "sha256_match": true
+    },
+    {
+      "artifact_id": "artifact_83a138a5_8aef_4ac4_b8e7_0f1facee8f9b",
+      "api_artifact_id": "83a138a5-8aef-4ac4-b8e7-0f1facee8f9b",
+      "role": "script_version",
+      "download_url_issued": true,
+      "downloaded": true,
+      "downloaded_size_bytes": 1330,
+      "downloaded_sha256": "5040527f42844b7453f4b72dc535888d7f519c29013c46973bc3d8be92f8579a",
+      "sha256_match": true
+    },
+    {
+      "artifact_id": "artifact_3148075b_1640_4e44_bcce_1374160eaa89",
+      "api_artifact_id": "3148075b-1640-4e44-bcce-1374160eaa89",
+      "role": "subtitle_cues",
+      "download_url_issued": true,
+      "downloaded": true,
+      "downloaded_size_bytes": 220,
+      "downloaded_sha256": "e6dd7d6b8f24f4e8ab9ce3a9daf8a2b69cb145a4c6f2ed1c4ec993951e318ff9",
+      "sha256_match": true
+    },
+    {
+      "artifact_id": "artifact_eef2413e_e476_407d_8387_d960f3f1f397",
+      "api_artifact_id": "eef2413e-e476-407d-8387-d960f3f1f397",
+      "role": "subtitle_srt",
+      "download_url_issued": true,
+      "downloaded": true,
+      "downloaded_size_bytes": 56,
+      "downloaded_sha256": "07edb9cd306f3779498db4a7f4342e9894cc10d12336b4f638a5907bc99cb4d5",
+      "sha256_match": true
+    },
+    {
+      "artifact_id": "artifact_563ac8bd_a882_401b_9452_b21f54aa77e3",
+      "api_artifact_id": "563ac8bd-a882-401b-9452-b21f54aa77e3",
+      "role": "subtitle_vtt",
+      "download_url_issued": true,
+      "downloaded": true,
+      "downloaded_size_bytes": 62,
+      "downloaded_sha256": "e5ffef2bf3ac942d66ad9a9237e356ba259ef76db3a3fd55a9c7f7d034545edc",
+      "sha256_match": true
+    },
+    {
+      "artifact_id": "artifact_e802cdb2_42c7_4b8e_a7b1_43eb097f982e",
+      "api_artifact_id": "e802cdb2-42c7-4b8e-a7b1-43eb097f982e",
+      "role": "subtitle_ass",
+      "download_url_issued": true,
+      "downloaded": true,
+      "downloaded_size_bytes": 586,
+      "downloaded_sha256": "6d220d5d1340c49bd76b8dafde3a3459cd958576a5987207fbc55899f0d09314",
+      "sha256_match": true
+    },
+    {
+      "artifact_id": "artifact_e314b281_985b_4f37_81eb_3c5499000401",
+      "api_artifact_id": "e314b281-985b-4f37-81eb-3c5499000401",
+      "role": "mixed_audio",
+      "download_url_issued": true,
+      "downloaded": true,
+      "downloaded_size_bytes": 576078,
+      "downloaded_sha256": "246915972e312194e5e6bdbd82a2c51cba5a1f761d024953bf10ebbb0d8ee7c9",
+      "sha256_match": true
+    },
+    {
+      "artifact_id": "artifact_118ab86d_29bd_4cae_beec_a680714e381f",
+      "api_artifact_id": "118ab86d-29bd-4cae-beec-a680714e381f",
+      "role": "loudness_report",
+      "download_url_issued": true,
+      "downloaded": true,
+      "downloaded_size_bytes": 74,
+      "downloaded_sha256": "468d68de66c02b18d537db0640528fa4d596dda2195c899ebbb9b9df59a94b15",
+      "sha256_match": true
+    },
+    {
+      "artifact_id": "artifact_76181fa6_b864_48be_8c29_8b715afcf0af",
+      "api_artifact_id": "76181fa6-b864-48be-8c29-8b715afcf0af",
+      "role": "prepared_video",
+      "download_url_issued": true,
+      "downloaded": true,
+      "downloaded_size_bytes": 127116,
+      "downloaded_sha256": "3e07a10d1d4ad66f2673fa60166ec24429dc22bf3af9770550278e393d8e7214",
+      "sha256_match": true
+    },
+    {
+      "artifact_id": "artifact_1f31be1b_a338_4140_a4b9_e246489f51d3",
+      "api_artifact_id": "1f31be1b-a338-4140-a4b9-e246489f51d3",
+      "role": "prepared_audio",
+      "download_url_issued": true,
+      "downloaded": true,
+      "downloaded_size_bytes": 2309488,
+      "downloaded_sha256": "b2793df7ae9fe7379a629b7b3b4147884af5cbca23dc1634ab8f695d56eb6f3b",
+      "sha256_match": true
+    },
+    {
+      "artifact_id": "artifact_e3a20776_36e3_436c_a12d_f06638718954",
+      "api_artifact_id": "e3a20776-36e3-436c-a12d-f06638718954",
+      "role": "source_thumbnails",
+      "download_url_issued": true,
+      "downloaded": true,
+      "downloaded_size_bytes": 5624,
+      "downloaded_sha256": "25a86c67fb6ec53f758091c548df190f83f8ae6933ee815b43932520ac66b8d4",
+      "sha256_match": true
+    },
+    {
+      "artifact_id": "artifact_1c0b7e35_03df_49a8_90ac_854ba8bb970d",
+      "api_artifact_id": "1c0b7e35-03df-49a8-90ac-854ba8bb970d",
+      "role": "render_video",
+      "download_url_issued": true,
+      "downloaded": true,
+      "downloaded_size_bytes": 37257,
+      "downloaded_sha256": "429b3cf73383f18b9369a739220f91702abe6e32c2d0f073799ded1cd105856d",
+      "sha256_match": true
+    },
+    {
+      "artifact_id": "artifact_07550af6_fe44_473b_aab4_76b6d90db2b4",
+      "api_artifact_id": "07550af6-fe44-473b-aab4-76b6d90db2b4",
+      "role": "render_audio",
+      "download_url_issued": true,
+      "downloaded": true,
+      "downloaded_size_bytes": 576078,
+      "downloaded_sha256": "246915972e312194e5e6bdbd82a2c51cba5a1f761d024953bf10ebbb0d8ee7c9",
+      "sha256_match": true
+    },
+    {
+      "artifact_id": "artifact_29dbb0c3_749d_436f_90ca_3635aa7fb185",
+      "api_artifact_id": "29dbb0c3-749d-436f-90ca-3635aa7fb185",
+      "role": "render_metadata",
+      "download_url_issued": true,
+      "downloaded": true,
+      "downloaded_size_bytes": 814,
+      "downloaded_sha256": "d3b1081f3243918246b30f0fade3e9cb2cda32c6dc8663ad27bf23bab1862d62",
+      "sha256_match": true
+    },
+    {
+      "artifact_id": "artifact_78ec715d_7648_4d6b_a98f_ec88c6bac417",
+      "api_artifact_id": "78ec715d-7648-4d6b-a98f-ec88c6bac417",
+      "role": "research_metadata",
+      "download_url_issued": true,
+      "downloaded": true,
+      "downloaded_size_bytes": 1048,
+      "downloaded_sha256": "a85acd99c45fb07982dd9ade25db00a4b211f00f3ece768121a27dccf1dd92d9",
+      "sha256_match": true
+    },
+    {
+      "artifact_id": "artifact_4ba2c81a_b3c2_49fb_b9e1_acc98cd0f933",
+      "api_artifact_id": "4ba2c81a-b3c2-49fb-b9e1-acc98cd0f933",
+      "role": "source_probe",
+      "download_url_issued": true,
+      "downloaded": true,
+      "downloaded_size_bytes": 200,
+      "downloaded_sha256": "9c4b60b33d358d68145c7628aef08e1534541878a942c3c6eecdbe7042af4666",
+      "sha256_match": true
+    },
+    {
+      "artifact_id": "artifact_9daf7b01_d955_40a2_8724_999860f1bce5",
+      "api_artifact_id": "9daf7b01-d955-40a2-8724-999860f1bce5",
+      "role": "timeline_qa_report",
+      "download_url_issued": true,
+      "downloaded": true,
+      "downloaded_size_bytes": 127,
+      "downloaded_sha256": "10754309a09b3e941b17f8a600d8a1ad367c9908b012e991e81c7af72dfc273b",
+      "sha256_match": true
+    },
+    {
+      "artifact_id": "artifact_41e5e30d_8b44_41ad_acea_0e71457c20a1",
+      "api_artifact_id": "41e5e30d-8b44-41ad-acea-0e71457c20a1",
+      "role": "selected_match_proposal",
+      "download_url_issued": true,
+      "downloaded": true,
+      "downloaded_size_bytes": 247,
+      "downloaded_sha256": "f9e120f7b3205a362335c98af1d1741df490a0621ab1ff6504b76479c98179b0",
+      "sha256_match": true
+    },
+    {
+      "artifact_id": "artifact_36d89d93_e829_4331_9d39_2a3c5fb19d2f",
+      "api_artifact_id": "36d89d93-e829-4331-9d39-2a3c5fb19d2f",
+      "role": "translated_subtitles",
+      "download_url_issued": true,
+      "downloaded": true,
+      "downloaded_size_bytes": 608,
+      "downloaded_sha256": "2d2e5a8c95bc8653a6124e8c3e9323d0f4af614c7abe50f28d921af7aec44315",
+      "sha256_match": true
+    },
+    {
+      "artifact_id": "artifact_2f1d0a1f_d55d_4fc2_bf58_72dcb2594486",
+      "api_artifact_id": "2f1d0a1f-d55d-4fc2-bf58-72dcb2594486",
+      "role": "deliverable_qa",
+      "download_url_issued": true,
+      "downloaded": true,
+      "downloaded_size_bytes": 557,
+      "downloaded_sha256": "c6f5b07d0619d2093c3c67eafb0de06f514d5b058af2710295e92c84994585c7",
+      "sha256_match": true
+    },
+    {
+      "artifact_id": "artifact_a2329bfc_18ad_444c_8f86_b98c5d1f1c53",
+      "api_artifact_id": "a2329bfc-18ad-444c-8f86-b98c5d1f1c53",
+      "role": "render_video",
+      "download_url_issued": true,
+      "downloaded": true,
+      "downloaded_size_bytes": 34509,
+      "downloaded_sha256": "d99109d2493bb26d14c2e03f4b7a6b80dab10564245526c5bebcd4518fa7dc91",
+      "sha256_match": true
+    },
+    {
+      "artifact_id": "artifact_10e853ec_b38e_436d_af4b_7a4295147340",
+      "api_artifact_id": "10e853ec-b38e-436d-af4b-7a4295147340",
+      "role": "render_audio",
+      "download_url_issued": true,
+      "downloaded": true,
+      "downloaded_size_bytes": 2309488,
+      "downloaded_sha256": "b2793df7ae9fe7379a629b7b3b4147884af5cbca23dc1634ab8f695d56eb6f3b",
+      "sha256_match": true
+    },
+    {
+      "artifact_id": "artifact_db7b7309_9a7e_4f4c_a622_cbc8587cfe2d",
+      "api_artifact_id": "db7b7309-9a7e-4f4c-a622-cbc8587cfe2d",
+      "role": "render_metadata",
+      "download_url_issued": true,
+      "downloaded": true,
+      "downloaded_size_bytes": 826,
+      "downloaded_sha256": "a86c4e1532a53fad9d560838f738df647dd5dc25bba2f707327f5b03752dc682",
+      "sha256_match": true
+    },
+    {
+      "artifact_id": "artifact_b45bc0bc_6482_4490_afb9_6e6d99106a75",
+      "api_artifact_id": "b45bc0bc-6482-4490-afb9-6e6d99106a75",
+      "role": "deliverable_qa",
+      "download_url_issued": true,
+      "downloaded": true,
+      "downloaded_size_bytes": 557,
+      "downloaded_sha256": "c6f5b07d0619d2093c3c67eafb0de06f514d5b058af2710295e92c84994585c7",
+      "sha256_match": true
+    }
+  ],
+  "trace_complete": true,
+  "status": "PASS",
+  "finished_at": "2026-08-19T06:06:26.7277165Z"
+}

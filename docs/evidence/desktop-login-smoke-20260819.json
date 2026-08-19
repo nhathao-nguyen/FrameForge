@@ -1,0 +1,21 @@
+{
+  "schema_version": "nh-media/desktop-login-smoke/v1",
+  "status": "PASS",
+  "desktop": "Tauri 2 packaged static shell (unsigned development build)",
+  "executable": "apps/desktop/src-tauri/target/release/nh-media-desktop.exe",
+  "build_command": "cargo tauri build --config apps/desktop/src-tauri/tauri.conf.json --no-bundle --ci",
+  "window_title": "NH-Media",
+  "api_endpoint": "http://127.0.0.1:8080",
+  "username": "admin",
+  "password_recorded": false,
+  "authenticated": true,
+  "authenticated_surface": "Workspace dashboard",
+  "projects_loaded": true,
+  "sign_out_visible": true,
+  "ui_surface": "same shared web shell embedded in Tauri; no separate native workflow UI",
+  "dev_shell_observation": "Tauri devUrl http://localhost:3000 was rejected by the LAN API CORS allowlist; the packaged tauri.localhost shell authenticated successfully.",
+  "limitations": [
+    "This is an unsigned development executable, not signed-release/update evidence.",
+    "No project, upload or job mutation was performed after desktop login."
+  ]
+}

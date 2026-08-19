@@ -1,0 +1,109 @@
+{
+  "schema_version": "nh-media/real-local-service-restart-matrix/v1",
+  "evidence_input": "D:\\nhathao\\codex\\NH-Media\\docs\\evidence\\real-local-gate-h-live-20260819-r38.json",
+  "project_id": "2affb4b6-ad5e-4915-9ca1-ae86b537160f",
+  "services": [
+    {
+      "service": "postgres",
+      "restart_command": "docker compose restart postgres",
+      "container_state": "running|healthy",
+      "api_ready": true,
+      "durable_jobs": [
+        {
+          "job_id": "1248eaf9-68a2-46fc-a913-05c4ede13e52",
+          "status": "completed",
+          "completed": true
+        },
+        {
+          "job_id": "55ac4f00-893e-4f0d-9bdf-c61476f40b92",
+          "status": "completed",
+          "completed": true
+        },
+        {
+          "job_id": "0a0bfa50-74c3-484f-a4ea-f79f7b337951",
+          "status": "completed",
+          "completed": true
+        }
+      ],
+      "all_jobs_completed": true
+    },
+    {
+      "service": "redis",
+      "restart_command": "docker compose restart redis",
+      "container_state": "running|healthy",
+      "api_ready": true,
+      "durable_jobs": [
+        {
+          "job_id": "1248eaf9-68a2-46fc-a913-05c4ede13e52",
+          "status": "completed",
+          "completed": true
+        },
+        {
+          "job_id": "55ac4f00-893e-4f0d-9bdf-c61476f40b92",
+          "status": "completed",
+          "completed": true
+        },
+        {
+          "job_id": "0a0bfa50-74c3-484f-a4ea-f79f7b337951",
+          "status": "completed",
+          "completed": true
+        }
+      ],
+      "all_jobs_completed": true
+    },
+    {
+      "service": "minio",
+      "restart_command": "docker compose restart minio",
+      "container_state": "running|healthy",
+      "api_ready": true,
+      "durable_jobs": [
+        {
+          "job_id": "1248eaf9-68a2-46fc-a913-05c4ede13e52",
+          "status": "completed",
+          "completed": true
+        },
+        {
+          "job_id": "55ac4f00-893e-4f0d-9bdf-c61476f40b92",
+          "status": "completed",
+          "completed": true
+        },
+        {
+          "job_id": "0a0bfa50-74c3-484f-a4ea-f79f7b337951",
+          "status": "completed",
+          "completed": true
+        }
+      ],
+      "all_jobs_completed": true
+    },
+    {
+      "service": "api-go-worker-python-worker-web",
+      "restart_command": "tools/dev.ps1 -Action restart",
+      "container_state": "",
+      "api_ready": true,
+      "durable_jobs": [
+        {
+          "job_id": "1248eaf9-68a2-46fc-a913-05c4ede13e52",
+          "status": "completed",
+          "completed": true
+        },
+        {
+          "job_id": "55ac4f00-893e-4f0d-9bdf-c61476f40b92",
+          "status": "completed",
+          "completed": true
+        },
+        {
+          "job_id": "0a0bfa50-74c3-484f-a4ea-f79f7b337951",
+          "status": "completed",
+          "completed": true
+        }
+      ],
+      "all_jobs_completed": true
+    }
+  ],
+  "status": "PASS",
+  "limitations": [
+    "Runs restarts between completed durable jobs; it proves readiness and state preservation, not power-loss chaos or in-flight full-AI interruption.",
+    "Physical second-device LAN workflow is separate evidence."
+  ],
+  "finished_at": "2026-08-19T06:25:03.0861311Z"
+}

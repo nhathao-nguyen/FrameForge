@@ -1,0 +1,318 @@
+﻿{
+    "schema_version":  "nh-media/real-local-artifact-validation/v1",
+    "evidence_input":  "D:\\nhathao\\codex\\NH-Media\\docs\\evidence\\real-local-gate-h-live-20260819-r30.json",
+    "project_id":  "7758cd03-d4a0-43fc-96dd-466f9e64f3dc",
+    "render_profile_key":  "youtube_16_9",
+    "artifact_downloads":  [
+                               {
+                                   "role":  "narration_audio",
+                                   "artifact_id":  "artifact_407117c0_99a1_4bb7_b6dc_3e7806860909",
+                                   "size_bytes":  1324726,
+                                   "sha256_match":  true
+                               },
+                               {
+                                   "role":  "source_probe",
+                                   "artifact_id":  "artifact_b9c6b886_3b7b_4de1_9a5e_64efe4494a2b",
+                                   "size_bytes":  200,
+                                   "sha256_match":  true
+                               },
+                               {
+                                   "role":  "candidate_evaluations",
+                                   "artifact_id":  "artifact_88d37e5a_0e86_4b86_a8f1_d665e71fa458",
+                                   "size_bytes":  364,
+                                   "sha256_match":  true
+                               },
+                               {
+                                   "role":  "timeline_qa_report",
+                                   "artifact_id":  "artifact_69664136_11eb_48cc_a0e5_0be93cbfba5e",
+                                   "size_bytes":  127,
+                                   "sha256_match":  true
+                               },
+                               {
+                                   "role":  "selected_match_proposal",
+                                   "artifact_id":  "artifact_401908bb_e95c_402c_b475_7709a8259786",
+                                   "size_bytes":  247,
+                                   "sha256_match":  true
+                               },
+                               {
+                                   "role":  "subtitle_vtt",
+                                   "artifact_id":  "artifact_41d179c0_6eb1_43e7_83d1_60ab06cee660",
+                                   "size_bytes":  723,
+                                   "sha256_match":  true
+                               },
+                               {
+                                   "role":  "script_version",
+                                   "artifact_id":  "artifact_c753a610_77d3_4cf3_8d0f_7b3fa27a088d",
+                                   "size_bytes":  2678,
+                                   "sha256_match":  true
+                               },
+                               {
+                                   "role":  "subtitle_cues",
+                                   "artifact_id":  "artifact_81bed7b1_b4cd_47e4_8947_6a3b5607b268",
+                                   "size_bytes":  1385,
+                                   "sha256_match":  true
+                               },
+                               {
+                                   "role":  "transcript",
+                                   "artifact_id":  "artifact_b1282530_5fa5_427d_b9ac_40f8b74b4df1",
+                                   "size_bytes":  4136,
+                                   "sha256_match":  true
+                               },
+                               {
+                                   "role":  "timing_alignment",
+                                   "artifact_id":  "artifact_c8c1e65a_63a0_482e_b598_43cc0d91cac6",
+                                   "size_bytes":  15166,
+                                   "sha256_match":  true
+                               },
+                               {
+                                   "role":  "subtitle_ass",
+                                   "artifact_id":  "artifact_f3c4c266_f9d3_4e78_bee2_4e3fc1088f4e",
+                                   "size_bytes":  1401,
+                                   "sha256_match":  true
+                               },
+                               {
+                                   "role":  "narration_manifest",
+                                   "artifact_id":  "artifact_cf3ef7e4_0514_4065_85a3_537c451ea1ad",
+                                   "size_bytes":  1580,
+                                   "sha256_match":  true
+                               },
+                               {
+                                   "role":  "prepared_video",
+                                   "artifact_id":  "artifact_5af93e9c_2e7c_405b_b99e_6f22a7fd4ae7",
+                                   "size_bytes":  127116,
+                                   "sha256_match":  true
+                               },
+                               {
+                                   "role":  "research_metadata",
+                                   "artifact_id":  "artifact_96f58c72_1a50_4798_8157_2a12baeaf1fc",
+                                   "size_bytes":  1926,
+                                   "sha256_match":  true
+                               },
+                               {
+                                   "role":  "translated_subtitles",
+                                   "artifact_id":  "artifact_1e2b314b_9c1c_4b75_9166_e5cc48ca1707",
+                                   "size_bytes":  5648,
+                                   "sha256_match":  true
+                               },
+                               {
+                                   "role":  "loudness_report",
+                                   "artifact_id":  "artifact_221806db_757a_4dad_bae5_0495d2489d43",
+                                   "size_bytes":  74,
+                                   "sha256_match":  true
+                               },
+                               {
+                                   "role":  "deliverable_qa",
+                                   "artifact_id":  "artifact_b9dc27e6_bcc7_4cb7_90b1_9bc1b30cea54",
+                                   "size_bytes":  557,
+                                   "sha256_match":  true
+                               },
+                               {
+                                   "role":  "coverage_report",
+                                   "artifact_id":  "artifact_93ce2ce9_357d_4937_90dc_ef2ed0959913",
+                                   "size_bytes":  261,
+                                   "sha256_match":  true
+                               },
+                               {
+                                   "role":  "source_original",
+                                   "artifact_id":  "7d33f2c6-49b4-442a-9052-a7ffc8bf1a67",
+                                   "size_bytes":  148007,
+                                   "sha256_match":  true
+                               },
+                               {
+                                   "role":  "mixed_audio",
+                                   "artifact_id":  "artifact_09db7a91_617a_4b86_beb7_7b18b6f6c2e9",
+                                   "size_bytes":  5767394,
+                                   "sha256_match":  true
+                               },
+                               {
+                                   "role":  "character_analysis",
+                                   "artifact_id":  "artifact_97af0ba6_30ec_465e_ad62_01f6acf42c53",
+                                   "size_bytes":  498,
+                                   "sha256_match":  true
+                               },
+                               {
+                                   "role":  "subtitle_srt",
+                                   "artifact_id":  "artifact_a93d7634_3e7b_4910_a675_8fb60c90cade",
+                                   "size_bytes":  733,
+                                   "sha256_match":  true
+                               },
+                               {
+                                   "role":  "scene_index",
+                                   "artifact_id":  "artifact_3f440ce7_95e1_4c47_8c63_64177d28b655",
+                                   "size_bytes":  1484,
+                                   "sha256_match":  true
+                               },
+                               {
+                                   "role":  "media_embeddings",
+                                   "artifact_id":  "artifact_f0c4c76e_eb62_483f_8b6c_b6c0c3ab46c7",
+                                   "size_bytes":  81867,
+                                   "sha256_match":  true
+                               },
+                               {
+                                   "role":  "render_audio",
+                                   "artifact_id":  "artifact_ea7298c2_d79d_43bb_8f8e_dc6e64cbfddb",
+                                   "size_bytes":  2309488,
+                                   "sha256_match":  true
+                               },
+                               {
+                                   "role":  "source_thumbnails",
+                                   "artifact_id":  "artifact_565b8164_7b44_40a1_8479_98a109f370c5",
+                                   "size_bytes":  5624,
+                                   "sha256_match":  true
+                               },
+                               {
+                                   "role":  "match_candidates",
+                                   "artifact_id":  "artifact_11117c5a_043d_4e38_ae00_c5be49192087",
+                                   "size_bytes":  1335,
+                                   "sha256_match":  true
+                               },
+                               {
+                                   "role":  "scene_analysis",
+                                   "artifact_id":  "artifact_d9de9818_7e30_45e0_a330_3a2ed538a4e5",
+                                   "size_bytes":  3735,
+                                   "sha256_match":  true
+                               },
+                               {
+                                   "role":  "clip_manifest",
+                                   "artifact_id":  "artifact_a23df138_bb9b_4032_b811_a5e6dacda6c7",
+                                   "size_bytes":  1116,
+                                   "sha256_match":  true
+                               },
+                               {
+                                   "role":  "scene_thumbnails",
+                                   "artifact_id":  "artifact_09d962a1_62e7_4808_9552_0a76fee28663",
+                                   "size_bytes":  240,
+                                   "sha256_match":  true
+                               },
+                               {
+                                   "role":  "render_video",
+                                   "artifact_id":  "artifact_ddb5dcc3_01f4_4216_aaeb_11efa88b2273",
+                                   "size_bytes":  34509,
+                                   "sha256_match":  true
+                               },
+                               {
+                                   "role":  "timeline_version",
+                                   "artifact_id":  "artifact_35bd25ab_32f8_42f0_84cf_fec069817f75",
+                                   "size_bytes":  3929,
+                                   "sha256_match":  true
+                               },
+                               {
+                                   "role":  "clip_exports",
+                                   "artifact_id":  "artifact_513baeaa_71e7_44e8_9477_aba80d4201db",
+                                   "size_bytes":  16065,
+                                   "sha256_match":  true
+                               },
+                               {
+                                   "role":  "render_metadata",
+                                   "artifact_id":  "artifact_2636679b_43ac_4ad7_99a6_a9f9661a80df",
+                                   "size_bytes":  826,
+                                   "sha256_match":  true
+                               },
+                               {
+                                   "role":  "prepared_audio",
+                                   "artifact_id":  "artifact_4e065f86_22f5_4c0c_9fd1_16d18b170647",
+                                   "size_bytes":  2309488,
+                                   "sha256_match":  true
+                               }
+                           ],
+    "render_profile_snapshot":  {
+                                    "aspect_ratio":  "16:9",
+                                    "audio_codec":  "aac",
+                                    "audio_target_lufs":  -16,
+                                    "fps":  30,
+                                    "height":  360,
+                                    "pixel_format":  "yuv420p",
+                                    "platform":  "youtube",
+                                    "profile_key":  "youtube_16_9",
+                                    "true_peak_db":  -1,
+                                    "version":  1,
+                                    "video_codec":  "libx264",
+                                    "width":  640
+                                },
+    "checks":  {
+                   "script":  {
+                                  "nonempty":  true,
+                                  "structured":  true,
+                                  "no_placeholder":  true,
+                                  "text_count":  23,
+                                  "provenance_present":  true,
+                                  "language":  "en"
+                              },
+                   "narration":  {
+                                     "nonzero_bytes":  true,
+                                     "duration_sec":  30.038095,
+                                     "has_audio_stream":  true
+                                 },
+                   "transcript":  {
+                                      "segment_count":  3,
+                                      "nonempty":  true,
+                                      "monotonic":  true,
+                                      "within_narration":  true
+                                  },
+                   "subtitles":  {
+                                     "cue_count":  9,
+                                     "srt_nonempty":  true,
+                                     "ordered":  true,
+                                     "within_narration":  true,
+                                     "formats":  [
+                                                     "srt",
+                                                     "vtt",
+                                                     "ass"
+                                                 ]
+                                 },
+                   "scenes":  {
+                                  "index_count":  4,
+                                  "analysis_count":  4,
+                                  "nonempty":  true,
+                                  "no_placeholder":  true,
+                                  "provenance_present":  false
+                              },
+                   "embeddings":  {
+                                      "item_count":  5,
+                                      "vector_count":  5,
+                                      "dimensions":  [
+                                                         768
+                                                     ],
+                                      "metadata_present":  true
+                                  },
+                   "matching":  {
+                                    "candidate_count":  1,
+                                    "selected_nonempty":  true,
+                                    "coverage_present":  true
+                                },
+                   "timeline":  {
+                                    "content_hash_present":  true,
+                                    "interval_count":  13,
+                                    "valid_ranges":  true,
+                                    "artifact_refs_present":  true
+                                },
+                   "audio_mix":  {
+                                     "duration_sec":  30.038104,
+                                     "has_audio_stream":  true,
+                                     "loudness_report_nonempty":  true
+                                 },
+                   "render":  {
+                                  "profile":  "youtube_16_9",
+                                  "expected_size":  "640x360",
+                                  "actual_size":  "640x360",
+                                  "duration_sec":  3,
+                                  "has_video_stream":  true,
+                                  "has_audio_stream":  true,
+                                  "metadata_nonempty":  true,
+                                  "deliverable_qa_nonempty":  true,
+                                  "detection":  {
+                                                    "blackdetect_events":  [
+
+                                                                           ],
+                                                    "silencedetect_events":  [
+
+                                                                             ],
+                                                    "blackdetect_observed":  false,
+                                                    "silencedetect_observed":  true
+                                                }
+                              }
+               },
+    "all_checks_passed":  false,
+    "status":  "NOT_PASS",
+    "finished_at":  "2026-08-19T04:54:25.5461873Z"
+}

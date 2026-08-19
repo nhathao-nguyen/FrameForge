@@ -5,6 +5,10 @@ $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 Push-Location $root
 try {
+    function Assert-NativeSuccess([string]$Name) {
+        if ($LASTEXITCODE -ne 0) { throw ($Name + ' failed with exit code ' + $LASTEXITCODE) }
+    }
+
     $env:POSTGRES_DB = 'nh_media'
     $env:POSTGRES_SUPERUSER = 'nh_media_admin'
     $env:POSTGRES_SUPERUSER_PASSWORD = 'GateB_Test_Postgres_Admin_2026'
@@ -19,15 +23,29 @@ try {
 
     gofmt -l packages services | ForEach-Object { if ($_ ) { throw "gofmt required: $_" } }
     go vet ./...
+    Assert-NativeSuccess 'go vet'
     go test ./...
+    Assert-NativeSuccess 'go test'
     uv lock --project services/ml-worker --check
+    Assert-NativeSuccess 'uv lock --check'
     uv run --project services/ml-worker ruff check services/ml-worker/nh_media services/ml-worker/tests
+    Assert-NativeSuccess 'Ruff'
     uv run --project services/ml-worker mypy services/ml-worker/nh_media services/ml-worker/tests
+    Assert-NativeSuccess 'mypy'
     uv run --project services/ml-worker bandit -q -r services/ml-worker/nh_media
+    Assert-NativeSuccess 'Bandit'
     uv run --project services/ml-worker pytest
+    Assert-NativeSuccess 'Python pytest'
     python tools/validate_contracts.py
+    Assert-NativeSuccess 'contract validation'
     pnpm typecheck
-    if (-not $SkipDesktop) { cargo fmt --manifest-path apps/desktop/src-tauri/Cargo.toml -- --check; cargo check --manifest-path apps/desktop/src-tauri/Cargo.toml }
+    Assert-NativeSuccess 'pnpm typecheck'
+    if (-not $SkipDesktop) {
+        cargo fmt --manifest-path apps/desktop/src-tauri/Cargo.toml -- --check
+        Assert-NativeSuccess 'cargo fmt --check'
+        cargo check --manifest-path apps/desktop/src-tauri/Cargo.toml
+        Assert-NativeSuccess 'cargo check'
+    }
     & (Join-Path $PSScriptRoot 'verify-independence.ps1')
     & (Join-Path $PSScriptRoot 'verify-secrets.ps1')
     & (Join-Path $PSScriptRoot 'check-supply-chain.ps1')

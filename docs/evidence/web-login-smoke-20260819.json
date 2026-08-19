@@ -1,0 +1,24 @@
+{
+  "schema_version": "nh-media/web-login-smoke/v1",
+  "status": "PASS",
+  "browser": "Google Chrome via Computer Use",
+  "web_url": "http://192.168.1.19:3000",
+  "api_endpoint": "http://192.168.1.19:8080",
+  "username": "admin",
+  "password_recorded": false,
+  "authenticated": true,
+  "authenticated_surface": "Workspace dashboard",
+  "projects_loaded": true,
+  "sign_out_visible": true,
+  "previous_failure": "Failed to execute 'fetch' on 'Window': Illegal invocation",
+  "repair": "packages/sdk/src/client.ts binds the default global fetch receiver",
+  "validation": [
+    "pnpm --filter @nh-media/sdk test: 4 passed",
+    "pnpm --filter @nh-media/web typecheck: passed",
+    "LAN dev stack restart: passed"
+  ],
+  "limitations": [
+    "Chrome displayed a save-password prompt; no password was saved",
+    "no project, upload or job mutation was performed during login smoke"
+  ]
+}

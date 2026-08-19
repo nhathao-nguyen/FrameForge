@@ -260,8 +260,9 @@ func (e *Executor) renderTimeline(ctx context.Context, command worker.Command, r
 	}
 	metadata, err := e.artifacts.stageJSON(ctx, command, "render_metadata", "render_metadata", map[string]any{
 		"schema_version": "1.0", "sha256": result.SHA256, "size_bytes": result.SizeBytes,
-		"duration_sec": result.DurationSec, "width": result.Width, "height": result.Height,
-		"has_video": result.HasVideo, "has_audio": result.HasAudio, "qa": result.QAReport,
+		"duration_sec": result.DurationSec, "width": result.Width, "height": result.Height, "profile_key": profile.Key,
+		"requested_profile_key": configString(command.Config, "render_profile"),
+		"has_video":             result.HasVideo, "has_audio": result.HasAudio, "qa": result.QAReport,
 	}, root)
 	return []worker.OutputRef{video, audio, metadata}, err
 }
@@ -398,8 +399,15 @@ func requiredSourceRef(command worker.Command) (worker.ArtifactRef, error) {
 }
 
 func configString(config map[string]any, key string) string {
-	value, _ := config[key].(string)
-	return strings.TrimSpace(value)
+	if value, ok := config[key].(string); ok {
+		return strings.TrimSpace(value)
+	}
+	if nested, ok := config[key].(map[string]any); ok {
+		if value, ok := nested["profile_key"].(string); ok {
+			return strings.TrimSpace(value)
+		}
+	}
+	return ""
 }
 
 func completed(command worker.Command, outputs []worker.OutputRef) worker.Result {

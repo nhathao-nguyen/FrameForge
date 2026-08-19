@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import Any, cast
 
 import pytest
 
 from nh_media.artifact_io import MemoryArtifactIO
-from nh_media.pipeline_executor import GateGProviderRuntime, execute_gate_g_node
+from nh_media.gate_g import Scene, SceneFeatures
+from nh_media.pipeline_executor import GateGProviderRuntime, _build_timeline, execute_gate_g_node
 from nh_media.providers.contracts import (
     FakeProvider,
     LLMRequest,
@@ -66,7 +67,33 @@ def runtime(*providers: object, adapter_keys: tuple[str, ...] = ("node-primary",
 
 
 def read_state(io: MemoryArtifactIO, ref: dict[str, object]) -> dict[str, Any]:
-    return json.loads(io.values[str(ref["artifact_id"])].decode())
+    return cast(dict[str, Any], json.loads(io.values[str(ref["artifact_id"])].decode()))
+
+
+def test_timeline_builder_excludes_dark_scenes_from_render_selection() -> None:
+    command_value = {"project_id": "project_12345678_1234_1234_1234_123456789012"}
+    scenes = [
+        Scene("scene-1", "source-v1", 0.0, 3.0, 0.2),
+        Scene("scene-2", "source-v1", 3.0, 6.0, 0.2),
+        Scene("scene-3", "source-v1", 6.0, 12.0, 0.2),
+    ]
+    state = {
+        "scenes": [scene.__dict__ for scene in scenes],
+        "scene_features": [
+            SceneFeatures("scene-1", 0.01, 0.0, 0.25, ("key-1",)).__dict__,
+            SceneFeatures("scene-2", 0.30, 0.0, 1.0, ("key-2",)).__dict__,
+            SceneFeatures("scene-3", 0.01, 0.0, 0.25, ("key-3",)).__dict__,
+        ],
+        "subtitle_cues": [],
+        "narration": {"duration_sec": 3.0, "narration_id": "narration-1", "script_version_id": "script-1"},
+        "match_proposals": [{"proposal_id": "proposal-1"}],
+        "selection": {"selected_candidate_id": "candidate-1"},
+    }
+    timeline = _build_timeline(command_value | {"input_refs": [{"artifact_id": "artifact-video", "role": "prepared_video"}, {"artifact_id": "artifact-audio", "role": "narration_audio"}]}, state)
+    clips = timeline["tracks"][0]["clips"]
+    assert len(clips) == 1
+    assert clips[0]["source_in_sec"] == 3.0
+    assert clips[0]["source_out_sec"] == 6.0
 
 
 def test_research_node_retries_and_records_primary_provider() -> None:

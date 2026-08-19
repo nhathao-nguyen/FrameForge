@@ -55,7 +55,7 @@ def _safe_id(value: str) -> str:
 
 def _jsonable(value: Any) -> Any:
     if is_dataclass(value):
-        return _jsonable(asdict(value))
+        return _jsonable(asdict(value))  # type: ignore[arg-type]
     if isinstance(value, bytes):
         return {"sha256": hashlib.sha256(value).hexdigest(), "size_bytes": len(value)}
     if isinstance(value, Mapping):
@@ -219,6 +219,12 @@ def _structured(text: str) -> dict[str, Any] | None:
     return dict(value) if isinstance(value, Mapping) else None
 
 
+def _usage(value: Any) -> Mapping[str, int]:
+    if not isinstance(value, Mapping):
+        return {}
+    return {str(key): int(item) for key, item in value.items() if isinstance(item, (int, float)) and not isinstance(item, bool)}
+
+
 class _Configured:
     def __init__(self, descriptor: ProviderDescriptor, spec: Mapping[str, Any]) -> None:
         descriptor.validate()
@@ -255,7 +261,7 @@ class OpenAIChatProvider(_Configured):
         text = _content(message.get("content", "")) if isinstance(message, Mapping) else ""
         if not text.strip():
             raise ProviderError("invalid_response", self.descriptor.adapter_key, safe_message="Provider returned empty chat content.")
-        usage = payload.get("usage") if isinstance(payload.get("usage"), Mapping) else {}
+        usage = _usage(payload.get("usage"))
         return LLMResponse(text, _structured(text) if request.response_schema else None, str(choices[0].get("finish_reason", "stop")), usage, _meta(self.descriptor, context, self.model, started, body, response_headers))
 
 
@@ -288,7 +294,7 @@ class OllamaLLMProvider(OpenAIChatProvider):
         text = _content(message.get("content", "")) if isinstance(message, Mapping) else ""
         if not text.strip():
             raise ProviderError("invalid_response", self.descriptor.adapter_key, safe_message="Local model returned empty chat content.")
-        usage = payload.get("usage") if isinstance(payload.get("usage"), Mapping) else {}
+        usage = _usage(payload.get("usage"))
         return LLMResponse(text, _structured(text) if request.response_schema else None, str(choices[0].get("finish_reason", "stop")), usage, _meta(self.descriptor, context, self.model, started, body, response_headers))
 
 
@@ -350,7 +356,7 @@ class SapiTTSProvider(_Configured):
         _context_check(context)
         started = time.monotonic()
         try:
-            import pyttsx3  # type: ignore[import-not-found]
+            import pyttsx3  # type: ignore[import-untyped]
         except ImportError as exc:
             raise ProviderError("unavailable", self.descriptor.adapter_key, safe_message="Windows speech runtime is not installed.") from exc
         with tempfile.TemporaryDirectory(prefix="nh-media-tts-") as root:
@@ -410,7 +416,7 @@ class FasterWhisperASRProvider(_Configured):
         if not request.audio_bytes:
             raise ProviderError("invalid_request", self.descriptor.adapter_key, safe_message="ASR audio bytes are missing.")
         try:
-            from faster_whisper import WhisperModel  # type: ignore[import-not-found]
+            from faster_whisper import WhisperModel  # type: ignore[import-untyped]
         except ImportError as exc:
             raise ProviderError("unavailable", self.descriptor.adapter_key, safe_message="The local ASR runtime is not installed.") from exc
         device = str(self.spec.get("device", "cpu"))

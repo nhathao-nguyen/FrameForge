@@ -159,17 +159,48 @@ func (s *SQLStore) EnsureDefaultWorkflow(ctx context.Context, userID string) err
 	return s.EnsureDefaultRenderProfile(ctx, userID)
 }
 
-// EnsureDefaultRenderProfile installs the reviewed native profile used by the
-// local render acceptance path. It is system-owned, immutable once active and
-// safe to call on every API bootstrap.
+// EnsureDefaultRenderProfile installs the reviewed native profiles used by the
+// local render acceptance path. They are system-owned, immutable once active
+// and safe to call on every API bootstrap.
 func (s *SQLStore) EnsureDefaultRenderProfile(ctx context.Context, userID string) error {
 	if userID == "" {
 		return errors.New("render profile seed requires creator")
 	}
-	document := json.RawMessage(`{"profile_key":"youtube_16_9","version":1,"platform":"youtube","aspect_ratio":"16:9","width":640,"height":360,"fps":30,"video_codec":"libx264","audio_codec":"aac","pixel_format":"yuv420p","audio_target_lufs":-16,"true_peak_db":-1}`)
-	digest := sha256.Sum256(document)
-	_, err := s.DB.ExecContext(ctx, `INSERT INTO render_profiles(workspace_id,profile_key,version,status,schema_version,document,content_hash,created_by) SELECT NULL,'youtube_16_9',1,'active','1.0',$1,$2,$3 WHERE NOT EXISTS (SELECT 1 FROM render_profiles WHERE workspace_id IS NULL AND profile_key='youtube_16_9' AND version=1)`, document, hex.EncodeToString(digest[:]), userID)
-	return err
+	profiles := []struct {
+		key         string
+		platform    string
+		aspectRatio string
+		width       int
+		height      int
+	}{
+		{key: "youtube_16_9", platform: "youtube", aspectRatio: "16:9", width: 640, height: 360},
+		{key: "shorts_9_16", platform: "youtube_shorts", aspectRatio: "9:16", width: 360, height: 640},
+		{key: "square_1_1", platform: "square", aspectRatio: "1:1", width: 480, height: 480},
+	}
+	for _, profile := range profiles {
+		document, err := json.Marshal(map[string]any{
+			"profile_key":       profile.key,
+			"version":           1,
+			"platform":          profile.platform,
+			"aspect_ratio":      profile.aspectRatio,
+			"width":             profile.width,
+			"height":            profile.height,
+			"fps":               30,
+			"video_codec":       "libx264",
+			"audio_codec":       "aac",
+			"pixel_format":      "yuv420p",
+			"audio_target_lufs": -16,
+			"true_peak_db":      -1,
+		})
+		if err != nil {
+			return err
+		}
+		digest := sha256.Sum256(document)
+		if _, err := s.DB.ExecContext(ctx, `INSERT INTO render_profiles(workspace_id,profile_key,version,status,schema_version,document,content_hash,created_by) SELECT NULL,$1,1,'active','1.0',$2,$3,$4 WHERE NOT EXISTS (SELECT 1 FROM render_profiles WHERE workspace_id IS NULL AND profile_key=$1 AND version=1)`, profile.key, document, hex.EncodeToString(digest[:]), userID); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (s *SQLStore) RequireWorkspaceRole(ctx context.Context, userID, workspaceID string, allowed ...string) (string, error) {

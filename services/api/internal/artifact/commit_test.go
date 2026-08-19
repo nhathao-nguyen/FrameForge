@@ -86,3 +86,36 @@ func TestCommitRejectsDuplicateAndMarksOrphanOnPublishFailure(t *testing.T) {
 		t.Fatalf("publish failure was not compensated: err=%v orphaned=%d", err, len(repo.orphaned))
 	}
 }
+
+func TestCommitReusesMatchingObjectAfterPromotionReplay(t *testing.T) {
+	store, err := storage.NewLocalStorage(t.TempDir(), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	first, err := store.PutStaged(context.Background(), storage.Scope{WorkspaceID: "ws_1", ProjectID: "proj_1"}, strings.NewReader("media"), "video/mp4")
+	if err != nil {
+		t.Fatal(err)
+	}
+	finalKey := "workspaces/ws_1/projects/proj_1/jobs/job_1/steps/step_1/outputs/output_1"
+	if _, err := store.Promote(context.Background(), first, finalKey, storage.Preconditions{IfNoneMatch: true}); err != nil {
+		t.Fatal(err)
+	}
+	// The second delivery has a distinct staging object but the same
+	// deterministic output. It must publish the already-promoted bytes instead
+	// of failing on the immutable final-key precondition.
+	second, err := store.PutStaged(context.Background(), storage.Scope{WorkspaceID: "ws_1", ProjectID: "proj_1"}, strings.NewReader("media"), "video/mp4")
+	if err != nil {
+		t.Fatal(err)
+	}
+	repo := &memoryRepository{}
+	value, err := (CommitService{Storage: store, Repository: repo}).Commit(context.Background(), CommitRequest{
+		ProjectID: "proj_1", Kind: "video", Role: "render_video", FinalKey: finalKey,
+		ExpectedSHA256: second.SHA256, Staged: NewStaged(second), ContentType: "video/mp4",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if value.Status != "committed" || value.SHA256 != second.SHA256 || len(repo.published) != 1 {
+		t.Fatalf("unexpected replay commit: %#v %#v", value, repo)
+	}
+}

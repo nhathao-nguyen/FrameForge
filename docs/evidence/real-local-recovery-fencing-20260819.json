@@ -1,0 +1,22 @@
+{
+  "schema_version": "nh-media/real-local-recovery-fencing/v1",
+  "status": "PASS",
+  "active_restart_probe": "docs/evidence/real-local-active-restart-probe-20260819.json",
+  "job_id": "f8524c9b-4c6e-4c7d-ba9e-75d8e8d83ed7",
+  "result_contract": "worker-result/v1",
+  "attempt_id_present": true,
+  "attempt_id_prefix": "attempt_",
+  "observed_result_streams": ["probe", "media", "ai", "system"],
+  "recovery_controls": [
+    "controller startup requeues durable queued steps",
+    "Redis result consumption reclaims pending entries after controller restart",
+    "worker results carry the durable attempt identifier and are fenced by the current attempt",
+    "replayed final-object promotion verifies existing size and SHA-256 before idempotent reuse"
+  ],
+  "observed_outcome": "the four-service active restart probe completed with terminal_status=completed and active_restart_count=4",
+  "limitations": [
+    "the probe restarts the tracked API/Go/Python/web process set rather than proving isolated worker-process crash recovery",
+    "no power-loss simulation was performed",
+    "physical second-device LAN acceptance remains external input required"
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "schema_version": "nh-media/real-local-edge-scene-detection/v1",
+  "media_path": "C:\\Users\\PC\\AppData\\Local\\NH-Media\\evidence\\real-local-corpus-20260819-acceptance\\corpus-edge-fastcuts-static-silence.mp4",
+  "scene_count": 4,
+  "scene_durations": [
+    1.0,
+    1.0,
+    4.0,
+    6.0
+  ],
+  "feature_count": 4,
+  "keyframe_count": 4,
+  "status": "PASS",
+  "finished_at": "2026-08-19T05:06:28.3724666Z"
+}

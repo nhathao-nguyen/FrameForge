@@ -142,6 +142,103 @@ owner: repository owner / task assignee
 - T605 remains unstarted; this evidence is same-machine local only. See the
   [provider capability matrix](../evidence/provider-capability-matrix-20260819.md).
 
+## Local/LAN acceptance continuation — 2026-08-19
+
+- Real local provider smoke and Product API traces are recorded in
+  [`../evidence/local-lan-acceptance-20260819.md`](../evidence/local-lan-acceptance-20260819.md)
+  and `docs/evidence/real-local-gate-h-live-20260819-r14.json` through `r17.json`,
+  with current artifact-level proofs in `r31.json` and `r35.json`.
+- r14 through r17 remain retained PASS traces; current-tree full artifact
+  validation is PASS for landscape r31 and portrait r35. Standalone profile
+  smoke is PASS for `youtube_16_9` 640x360, `shorts_9_16` 360x640 and
+  `square_1_1` 480x480, with no cross-profile artifact aliasing.
+- Recovery acceptance now passes locally and on the server-side LAN profile,
+  including the Python Redis analysis Job after tracked process restart and
+  SSE snapshot/reconnect. The Python startup capability set includes
+  `analysis,ai,ml,system`.
+- Physical second-device acceptance remains **NOT_PASS / EXTERNAL INPUT
+  REQUIRED** in this continuation. `accept-lan-client.ps1` was run on the
+  server and correctly rejected same-machine identity; rerun it from another
+  Windows device before claiming physical LAN PASS.
+- r10/r11/r12 remain retained failure evidence for the scene-selection/render
+  repairs; r13 and r16 provide the successful portrait recovery traces. T605
+  remains unstarted.
+
+## Prompt continuation — 2026-08-19
+
+- Artifact verification now checks signed downloads, SHA-256, nonempty
+  versioned worker payloads, provenance, timed transcript/subtitle cues,
+  embeddings, matching, TimelineVersion ranges, mixed audio, ffprobe streams,
+  profile dimensions and deliverable QA. r31 and r35 are artifact-level PASS.
+- API render requests persist the exact profile in the Job command; worker
+  command resolution and artifact commits preserve per-profile outputs. A
+  completed duplicate render returns safe HTTP 412 without creating another
+  Job (r34).
+- The local corpus now has an owned edge fixture for fast cuts, static content,
+  quiet audio and silence gaps. Real scene detection on it returned 4 scenes,
+  4 feature records and 4 keyframes (PASS).
+- `tools/verify.ps1` now fails on nonzero native exit codes. With the reviewed
+  FFmpeg/ffprobe environment, full Go/Python/Rust/TypeScript/contracts,
+  independence, secrets, supply-chain and Gate H live verification pass.
+- Web login surface smoke and Tauri process/build smoke pass; authenticated UI
+  form submission was not performed. Resource observation pass shows healthy
+  Compose, API/web listeners, GPU/process usage and no runaway process.
+- r22/r23/r29 remain honest retained failure evidence. Physical second-device
+  LAN acceptance remains **NOT_PASS / EXTERNAL INPUT REQUIRED** because no
+  different physical client is available on this run.
+
+## Current-tree recovery repair and final local evidence — 2026-08-19
+
+- `real-local-gate-h-live-20260819-r38.json` plus
+  `real-local-artifact-validation-20260819-r38.json` are PASS on the current
+  code after the recovery repair: 25/25 steps, real local providers, signed
+  downloads with matching SHA-256, subtitles/transcript/embeddings/matching,
+  TimelineVersion QA and 640x360 H.264/AAC render QA.
+- `real-local-ai-failure-20260819-r3.json` is an intentional local Ollama
+  endpoint failure. The Product API job failed in about 13 seconds with no
+  fake success; failure evidence preserves `fallback_exhausted`, transient
+  category and `retryable=false`. The retry sweeper repair deduplicates the
+  `retrying -> queued` Job transition when several steps retry together, so the
+  job reaches terminal failure instead of remaining stuck.
+- `real-local-service-restart-matrix-20260819-r38.json` and
+  `real-local-resource-observation-20260819-r2.json` are PASS for service
+  readiness, durable completed-job state, healthy Compose, Redis pending=0,
+  observed Python workers, Ollama/GPU and no runaway process. The restart
+  matrix is between completed jobs and does not prove in-flight power-loss
+  chaos recovery.
+- Current regression is green: `tools/verify.ps1` and
+  `tools/verify-gate-h.ps1 -IncludeLive` pass with reviewed FFmpeg/ffprobe;
+  Python has 38 tests. Authenticated UI submission and physical second-device
+  LAN acceptance remain unproven; do not claim overall Prompt acceptance PASS.
+
+## Final active-restart and recovery-fencing evidence — 2026-08-19
+
+- `real-local-active-restart-probe-20260819.json` is **PASS** on the current
+  tree: PostgreSQL, Redis, MinIO and the tracked API/Go/Python/web set were
+  restarted while an active Product API job was running; all four services
+  returned ready and the job ended `completed`.
+- `real-local-recovery-fencing-20260819.json` records the current recovery
+  contract: durable `attempt_id` values are carried in worker results, pending
+  Redis results are reclaimable after controller restart, and result replay
+  fences against the durable attempt before applying output. Final-object
+  promotion verifies an existing object by size and SHA-256 before reuse.
+- The final regression rerun passed with the reviewed FFmpeg/ffprobe pair;
+  Python reported 38 passing tests. The strict Prompt verdict remains
+  **NOT_PASS / EXTERNAL INPUT REQUIRED** because no different physical LAN
+  client was available and authenticated UI submission was not performed.
+
+## Web login smoke after SDK repair — 2026-08-19
+
+- `web-login-smoke-20260819.json` is **PASS**. Computer Use submitted the
+  configured Local Admin form at `http://192.168.1.19:3000` and reached the
+  server-authoritative `Workspace dashboard`; Projects loaded and `Sign out`
+  was visible.
+- The cause was repaired in `packages/sdk/src/client.ts`: the default global
+  `fetch` is now bound to `globalThis` before invocation. SDK tests (4) and web
+  typecheck passed, and the LAN dev stack restarted successfully.
+- Chrome showed a save-password prompt, which was not accepted. No project,
+  upload or job mutation was performed in this smoke.
+
 ## Decision status
 
 Open architectural/product questions: **0**. Owner-decision blockers: **0**. OQ-07 and OQ-11 are

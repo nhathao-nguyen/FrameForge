@@ -44,3 +44,22 @@ def test_worker_result_rejects_non_object_output_ref() -> None:
         pass
     else:
         raise AssertionError("non-object worker output ref was accepted")
+
+
+def test_worker_command_allows_bounded_llm_output_tokens() -> None:
+    validate_worker_command(
+        {
+            "schema_version": "worker-command/v1",
+            "message_id": "msg_ai_001",
+            "workspace_id": "workspace_ai_001",
+            "project_id": "project_ai_001",
+            "job_id": "job_ai_001",
+            "pipeline_run_id": "run_ai_001",
+            "job_step_id": "step_ai_001",
+            "node_key": "generate_script",
+            "capability": "ai",
+            "attempt": 1,
+            "input_refs": [],
+            "config": {"max_output_tokens": 256},
+        }
+    )

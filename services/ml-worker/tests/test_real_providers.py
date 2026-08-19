@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from email.message import Message
 from urllib.error import HTTPError
 
 import pytest
@@ -77,9 +78,9 @@ def test_remote_http_failures_normalize_to_port_errors(
     monkeypatch.setenv("NH_MEDIA_TEST_API_KEY", "test-only-value")
 
     def raise_http_error(*_args: object, **_kwargs: object) -> object:
-        raise HTTPError("https://provider.invalid", status, "test", {}, None)
+        raise HTTPError("https://provider.invalid", status, "test", Message(), None)
 
-    monkeypatch.setattr(real.urlrequest, "urlopen", raise_http_error)
+    monkeypatch.setattr(getattr(real, "urlrequest"), "urlopen", raise_http_error)
     provider = real.OpenAIChatProvider(
         "openai-llm",
         {"deployment": "remote", "endpoint": "https://provider.invalid/v1", "model": "test-model", "key_ref": "env:NH_MEDIA_TEST_API_KEY"},
@@ -93,7 +94,7 @@ def test_remote_http_failures_normalize_to_port_errors(
 
 def test_malformed_remote_json_is_normalized(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("NH_MEDIA_TEST_API_KEY", "test-only-value")
-    monkeypatch.setattr(real.urlrequest, "urlopen", lambda *_args, **_kwargs: _Response(b"not-json"))
+    monkeypatch.setattr(getattr(real, "urlrequest"), "urlopen", lambda *_args, **_kwargs: _Response(b"not-json"))
     provider = real.OpenAIChatProvider(
         "openai-llm",
         {"deployment": "remote", "endpoint": "https://provider.invalid/v1", "model": "test-model", "key_ref": "env:NH_MEDIA_TEST_API_KEY"},

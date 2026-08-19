@@ -267,7 +267,7 @@ function Start-NHStack {
 		$env:NH_MEDIA_QUEUE_CAPABILITIES = 'probe,thumbnail,media,render'
         $records += Start-NHProcess 'media-worker' $mediaBinary @() $repoRoot
         Write-ProcessState $records
-		$env:NH_MEDIA_QUEUE_CAPABILITIES = 'ai,ml,system'
+		$env:NH_MEDIA_QUEUE_CAPABILITIES = 'analysis,ai,ml,system'
         $records += Start-NHProcess 'ml-worker' $uv @('run', '--project', 'services/ml-worker', 'python', '-m', 'nh_media.worker') $repoRoot
         Write-ProcessState $records
 

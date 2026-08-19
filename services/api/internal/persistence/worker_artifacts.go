@@ -53,7 +53,23 @@ func (c WorkerArtifactCommitter) CommitWorkerArtifact(ctx context.Context, works
 		return worker.OutputRef{}, err
 	}
 	finalKey := fmt.Sprintf("workspaces/%s/projects/%s/jobs/%s/steps/%s/outputs/%s", safeKey(workspaceID), safeKey(projectID), safeKey(jobID), safeKey(stepID), safeKey(ref.ArtifactID))
-	committed, err := (artifact.CommitService{Storage: c.Storage, Repository: c.Repository}).Commit(ctx, artifact.CommitRequest{ProjectID: projectID, Kind: ref.Kind, Role: ref.Role, FinalKey: finalKey, ExpectedSHA256: ref.SHA256, Staged: artifact.NewStaged(staged), ContentType: contentType, Metadata: map[string]any{"worker_artifact_id": ref.ArtifactID, "worker_message_id": messageID}, IfNoneMatch: true})
+	// Worker outputs are immutable per job step, not one canonical role for the
+	// entire project.  A project can legitimately contain 16:9, 9:16 and 1:1
+	// renders with the same output roles.  The final object key remains scoped
+	// to job/step/output and is still promoted with IfNoneMatch, so a replay of
+	// the same worker message is idempotent without aliasing a different render
+	// to the first project's canonical role.
+	committed, err := (artifact.CommitService{Storage: c.Storage, Repository: c.Repository}).Commit(ctx, artifact.CommitRequest{ProjectID: projectID, Kind: ref.Kind, Role: ref.Role, FinalKey: finalKey, ExpectedSHA256: ref.SHA256, Staged: artifact.NewStaged(staged), ContentType: contentType, Metadata: map[string]any{"worker_artifact_id": ref.ArtifactID, "worker_message_id": messageID}, IfNoneMatch: false})
+	if err != nil {
+		// If the worker result was committed before the controller crashed, the
+		// same scoped final key is already authoritative.  Reuse it only after
+		// checking project, status and checksum; unrelated commit failures still
+		// propagate to the reconciler.
+		if existing, foundErr := c.findCommittedWorkerOutput(ctx, projectID, finalKey, ref.SHA256); foundErr == nil {
+			committed = existing
+			err = nil
+		}
+	}
 	if errors.Is(err, artifact.ErrDuplicateCanonicalRole) {
 		if committed.ID == "" {
 			return worker.OutputRef{}, err
@@ -65,6 +81,25 @@ func (c WorkerArtifactCommitter) CommitWorkerArtifact(ctx context.Context, works
 		return worker.OutputRef{}, err
 	}
 	return worker.OutputRef{ArtifactID: contractArtifactID(committed.ID), Kind: committed.Kind, Role: committed.Role, SHA256: committed.SHA256, SizeBytes: committed.SizeBytes, ContentType: committed.ContentType}, nil
+}
+
+func (c WorkerArtifactCommitter) findCommittedWorkerOutput(ctx context.Context, projectID, objectKey, checksum string) (artifact.Artifact, error) {
+	if c.Repository == nil || c.Repository.SQL == nil || c.Repository.SQL.DB == nil {
+		return artifact.Artifact{}, errors.New("Artifact repository database is required")
+	}
+	var value artifact.Artifact
+	var objectVersion, contentType sql.NullString
+	err := c.Repository.SQL.DB.QueryRowContext(ctx, `SELECT id::text,project_id::text,kind,role,status,storage_backend,object_key,object_version,content_type,size_bytes,sha256 FROM artifacts WHERE project_id=$1::uuid AND object_key=$2 AND status='committed' AND sha256=$3 LIMIT 1`, projectID, objectKey, checksum).Scan(&value.ID, &value.ProjectID, &value.Kind, &value.Role, &value.Status, &value.Locator.Backend, &value.Locator.ObjectKey, &objectVersion, &contentType, &value.SizeBytes, &value.SHA256)
+	if err != nil {
+		return artifact.Artifact{}, err
+	}
+	if objectVersion.Valid {
+		value.Locator.ObjectVersion = objectVersion.String
+	}
+	if contentType.Valid {
+		value.ContentType = contentType.String
+	}
+	return value, nil
 }
 
 // FinalizeValidatedUpload promotes the staged source Artifact only after the

@@ -6,6 +6,8 @@ param(
     [string]$EvidencePath = '',
     [string]$CorpusPath = '',
     [string]$ProviderPolicyPath = '',
+    [ValidateSet('youtube_16_9', 'shorts_9_16', 'square_1_1')]
+    [string]$RenderProfileKey = 'youtube_16_9',
     [int]$TimeoutSeconds = 360
 )
 
@@ -80,6 +82,7 @@ $report = [ordered]@{
     ffprobe_sha256 = (Get-FileHash -LiteralPath $FfprobePath -Algorithm SHA256).Hash.ToLowerInvariant()
     provider_policy_path = if ($ProviderPolicyPath) { [IO.Path]::GetFullPath($ProviderPolicyPath) } else { '' }
     corpus_path = if ($CorpusPath) { [IO.Path]::GetFullPath($CorpusPath) } else { '' }
+    render_profile_key = $RenderProfileKey
 }
 $fixture = if ($CorpusPath) { [IO.Path]::GetFullPath($CorpusPath) } else { Join-Path ([IO.Path]::GetTempPath()) ('nh-media-gate-h-source-' + [guid]::NewGuid().ToString() + '.mp4') }
 $removeFixture = [string]::IsNullOrWhiteSpace($CorpusPath)
@@ -132,7 +135,19 @@ try {
     $report.movie_job_id = $jobId
     $terminal = Wait-JobTerminal $projectId $jobId $token $TimeoutSeconds
     $report.movie_job_status = [string]$terminal.status
-    if ([string]$terminal.status -ne 'completed') { throw 'movie_recap Job did not complete.' }
+    if ([string]$terminal.status -ne 'completed') {
+        $movieSteps = @(Collection-Items (Invoke-Api 'GET' ('/projects/' + $projectId + '/jobs/' + $jobId + '/steps') $token))
+        $movieEvents = @(Collection-Items (Invoke-Api 'GET' ('/projects/' + $projectId + '/jobs/' + $jobId + '/events') $token))
+        $report.movie_failure_snapshot = [ordered]@{
+            failed_steps = @($movieSteps | Where-Object { [string]$_.status -in @('failed', 'dead_lettered') } | ForEach-Object {
+                [ordered]@{ node_key = [string]$_.node_key; status = [string]$_.status; current_attempt = [int]$_.current_attempt }
+            })
+            failure_events = @($movieEvents | Where-Object { [string]$_.event_type -match 'failed|retry|dead' } | ForEach-Object {
+                [ordered]@{ sequence = [int64]$_.sequence; event_type = [string]$_.event_type; node_key = [string]$_.node_key; payload = $_.payload }
+            })
+        }
+        throw 'movie_recap Job did not complete.'
+    }
 
     $timelineDocument = @{
         schema_version = '1.0'
@@ -172,7 +187,7 @@ try {
 
     $renderRequest = Invoke-Api 'POST' ('/projects/' + $projectId + '/renders') $token @{
         timeline_version_id = $timelineVersionId
-        render_profile = @{ profile_key = 'youtube_16_9'; version = 1 }
+        render_profile = @{ profile_key = $RenderProfileKey; version = 1 }
         preview = $false
         overrides = @{}
     }
@@ -231,6 +246,7 @@ try {
     $report.artifact_refs = $artifactRefs
     $report.downloads = $downloadEvidence
     $report.trace_complete = ($report.movie_job_status -eq 'completed' -and $report.render_job_status -eq 'completed' -and $report.render.status -eq 'completed' -and $report.completed_step_count -eq $report.step_count -and $report.timeline.validation_valid -and $artifactRefs.Count -gt 0 -and @($downloadEvidence | Where-Object { -not $_.sha256_match }).Count -eq 0)
+    $report.status = if ($report.trace_complete) { 'PASS' } else { 'FAIL' }
     $report.finished_at = (Get-Date).ToUniversalTime().ToString('o')
     $report | ConvertTo-Json -Depth 30 | Set-Content -LiteralPath $EvidencePath -Encoding UTF8
     Get-Content -Raw -LiteralPath $EvidencePath

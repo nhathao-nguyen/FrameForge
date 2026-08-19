@@ -45,7 +45,11 @@ export class ProductApiClient {
 
   constructor(options: ProductApiClientOptions) {
     this.baseUrl = normalizeBaseUrl(options.baseUrl);
-    this.fetcher = options.fetcher || fetch;
+    // Keep the browser's global receiver when the SDK invokes the default
+    // fetcher through the client instance. Some Window implementations throw
+    // `Illegal invocation` when fetch is called with the ProductApiClient as
+    // its receiver.
+    this.fetcher = options.fetcher || globalThis.fetch.bind(globalThis);
     this.onToken = options.onToken;
   }
 

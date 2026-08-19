@@ -77,3 +77,25 @@ func TestLeaseAwareResultDoesNotAckUnknownControllerLease(t *testing.T) {
 		t.Fatalf("count=%d err=%v acked=%d", count, err, source.acked)
 	}
 }
+
+type restartingClaimResultSource struct{ calls int }
+
+func (f *restartingClaimResultSource) ConsumeWorkerResults(ctx context.Context, _ string, _ string, _ int, _ time.Duration) ([]queue.ResultDelivery, error) {
+	f.calls++
+	if f.calls == 1 {
+		return []queue.ResultDelivery{{Stream: "results", EntryID: "1-0", Result: worker.Result{MessageID: "msg_missing_001"}}}, nil
+	}
+	return nil, context.Canceled
+}
+
+func (f *restartingClaimResultSource) AckWorkerResult(context.Context, string, string) error {
+	return nil
+}
+
+func TestLeaseAwareResultRunSurvivesUnknownControllerLease(t *testing.T) {
+	source := &restartingClaimResultSource{}
+	err := (LeaseAwareResultReconciler{Source: source, Claims: NewLeaseRegistry(), Applier: fakeClaimResultApplier{}}).Run(context.Background(), "analysis", "controller", time.Millisecond)
+	if err != nil || source.calls != 2 {
+		t.Fatalf("err=%v source_calls=%d", err, source.calls)
+	}
+}

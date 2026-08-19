@@ -1,0 +1,63 @@
+﻿{
+    "schema_version":  "nh-media/render-profile-smoke/v1",
+    "project_id":  "c0dddd5d-7bd0-4aaf-8ecd-f4cda4cf7e5c",
+    "timeline_version_id":  "9275296e-21ba-436b-94a6-3462727b14a8",
+    "render_id":  "91bb06a5-f83c-4b38-ae46-a0e7ae15d2ac",
+    "job_id":  "1056b39b-56dd-4416-8649-e72cdd353cef",
+    "requested_profile_key":  "shorts_9_16",
+    "worker_profile_key":  "youtube_16_9",
+    "expected_size":  "360x640",
+    "actual_size":  "640x360",
+    "duration_sec":  27.233333,
+    "has_video":  true,
+    "has_audio":  true,
+    "render_metadata":  {
+                            "duration_sec":  27.233333,
+                            "has_audio":  true,
+                            "has_video":  true,
+                            "height":  360,
+                            "profile_key":  "youtube_16_9",
+                            "qa":  {
+                                       "passed":  true,
+                                       "errors":  null,
+                                       "duration_sec":  27.233333,
+                                       "width":  640,
+                                       "height":  360,
+                                       "has_video":  true,
+                                       "has_audio":  true,
+                                       "video_codec":  "h264",
+                                       "audio_codec":  "aac",
+                                       "black_detected":  false,
+                                       "black_duration_sec":  0,
+                                       "black_ratio":  0,
+                                       "black_segments":  [
+
+                                                          ],
+                                       "black_policy":  {
+                                                            "minimum_segment_sec":  0.15,
+                                                            "pixel_threshold":  0.1,
+                                                            "maximum_ratio":  0.35,
+                                                            "maximum_continuous_sec":  1.25
+                                                        },
+                                       "silence_detected":  false,
+                                       "silence_duration_sec":  0,
+                                       "silence_ratio":  0,
+                                       "silence_segments":  [
+
+                                                            ],
+                                       "silence_policy":  {
+                                                              "noise_threshold_db":  -50,
+                                                              "minimum_segment_sec":  0.15,
+                                                              "maximum_ratio":  0.75,
+                                                              "maximum_continuous_sec":  0.75
+                                                          }
+                                   },
+                            "schema_version":  "1.0",
+                            "sha256":  "ee748bdc75a90013deb74f07c6ca2597cd526d7d1c8a46615cf92f56c4dc6d4a",
+                            "size_bytes":  60441,
+                            "width":  640
+                        },
+    "profile_dimensions_pass":  false,
+    "status":  "NOT_PASS",
+    "finished_at":  "2026-08-19T04:42:08.4819774Z"
+}

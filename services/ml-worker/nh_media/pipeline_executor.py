@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import os
-import subprocess
+import subprocess  # nosec B404 - executable and argv are fixed by the local media policy
 import tempfile
 from dataclasses import asdict
 from pathlib import Path
@@ -289,7 +289,15 @@ def execute_gate_g_node(command: dict[str, Any], artifacts: ArtifactIO, provider
         features = tuple(_features(item) for item in state["scene_features"])
         keyframe_bytes = _extract_keyframe_bytes(command, artifacts, scenes, _required_tool("NH_MEDIA_FFMPEG_PATH"))
         scene_analyses = analyze_scenes(scenes, features, runtime.provider(ProviderKind.VLM), context, keyframe_bytes=keyframe_bytes)
-        return [_json_output(command, artifacts, "scene_analysis", {"scene_analyses": [asdict(item) for item in scene_analyses]})]
+        return [_json_output(command, artifacts, "scene_analysis", {
+            "scene_analyses": [asdict(item) for item in scene_analyses],
+            "provenance": {
+                "source_revision": scenes[0].source_revision if scenes else "",
+                "scene_ids": [item.scene_id for item in scenes],
+                "keyframe_refs": [ref for item in features for ref in item.keyframe_refs],
+                "provider_snapshots": [item.provider_snapshot for item in scene_analyses],
+            },
+        })]
     if node == "detect_characters":
         features = tuple(_features(item) for item in state["scene_features"])
         observations = tuple(AppearanceObservation(f"appearance_{item.scene_id}", (item.mean_luma, item.motion_score, item.quality_score), item.scene_id, state["scenes"][0]["source_revision"]) for item in features)
@@ -530,10 +538,9 @@ def _build_timeline(command: dict[str, Any], state: dict[str, Any]) -> dict[str,
     narration_ref = _required_ref(command, "narration_audio")
     duration = float(narration["duration_sec"])
     feature_by_id = {item["scene_id"]: item for item in state.get("scene_features", []) if isinstance(item, dict) and "scene_id" in item}
-    preferred = [scene for scene in scenes if float(feature_by_id.get(scene.scene_id, {}).get("quality_score", 1.0)) >= 0.4]
-    selected = (preferred + [scene for scene in scenes if scene not in preferred])[:3]
+    selected = [scene for scene in scenes if float(feature_by_id.get(scene.scene_id, {}).get("quality_score", 0.0)) >= 0.4][:3]
     if not selected:
-        raise ValueError("movie recap timeline requires a detected scene")
+        raise ValueError("movie recap timeline requires a scene that passes dark-content and quality policy")
     clip_duration = duration / len(selected)
     video_clips = []
     for index, scene in enumerate(selected):

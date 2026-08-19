@@ -142,6 +142,7 @@ func (c *RedisController) RunOnce(ctx context.Context, block time.Duration) (int
 			if executeErr != nil {
 				result = failedResult(command, executeErr)
 			}
+			result.AttemptID = command.AttemptID
 			if err := worker.ValidateResult(result); err != nil {
 				return processed, fmt.Errorf("worker executor returned invalid result: %w", err)
 			}
