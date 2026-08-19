@@ -1,5 +1,5 @@
 ---
-last_verified: 2026-08-18
+last_verified: 2026-08-19
 source: ../SPEC-AUDIT-REPORT.md; ../IMPLEMENTATION-ORDER.md; git metadata
 owner: task assignee / release owner
 ---
@@ -144,3 +144,18 @@ capabilities.
 | 2026-08-18 | T604 upstream refresh | `git ls-remote https://github.com/zcbacxc/movie-narrator.git HEAD refs/heads/main`; `docs/research/upstream-refresh-20260818.md`; `tools/refresh-upstream.ps1` | pass: current ref/license/capability observation refreshed; no checkout/source/package/runtime coupling | research evidence only |
 
 **GATE H implementation: T600 PASS / T601 PASS / T602 PASS / T603 PASS (same-machine local scope) / T604 PASS. T605 was not started.**
+
+## Prompt 8 whole-repository audit evidence
+
+| 2026-08-19 | Prompt 8 audit and regression repair | `npm.cmd run verify` with reviewed T002 FFmpeg/ffprobe paths; `go test ./... -count=1`; `go vet ./...`; `uv lock --project services/ml-worker --check`; `uv run --project services/ml-worker pytest`; `python tools/validate_contracts.py`; `pnpm --filter @nh-media/web build`; `pnpm --filter @nh-media/sdk test`; `git diff --check`; `tools/verify-independence.ps1`; `tools/verify-secrets.ps1`; `tools/check-supply-chain.ps1`; `python tools/check_memory.py --max-age 0` | pass: Go formatting repaired across `packages/` and `services/`, `.gitattributes` now keeps Go source in LF form on Windows, Go/Python/TypeScript/Rust/security/contract/independence/supply-chain checks, web production build, SDK tests and real-media render tests passed with the reviewed binaries; stale compatibility test name removed | Docker Desktop daemon was unavailable during this turn, so fresh live Compose/T550/T603 reruns and clean-room infrastructure proof could not be repeated; prior 2026-08-18 Gate H/T603 evidence remains the current accepted live evidence; Node 24.19.0 emits the documented engine warning against the 24.14.1 pin |
+## Real local/API continuation after Prompt 8
+
+| Date | Scope | Commands/evidence | Result | Limitations |
+|---|---|---|---|---|
+| 2026-08-19 | Real local provider smoke | `uv run python tools/real-local-provider-smoke.py --output docs/evidence/real-local-provider-smoke-20260819-r2.json` with Ollama, Windows SAPI and faster-whisper | pass: real LLM `qwen2.5:3b`, VLM `moondream`, TTS SAPI WAV, ASR `tiny.en`, and 768-dimensional `nomic-embed-text` | model quality is not a product acceptance score; corpus is generated legal-safe media |
+| 2026-08-19 | API provider boundary and failure mapping | `uv run python tools/real-api-provider-smoke.py --policy tools/provider-policy-real-api.json --output docs/evidence/real-api-provider-smoke-20260819.json`; `uv run pytest tests -q` with reviewed FFmpeg environment | pass: API smoke safely reports all five capabilities `BLOCKED` without an owner credential; Python suite 35 passed; typed remote adapters normalize missing credential, HTTP 401/429/503 and malformed JSON without secrets | no remote network call was authorized or performed; live API quality remains unverified |
+| 2026-08-19 | Real Product API local AI E2E | `tools/accept-gate-h-live.ps1 -CorpusPath ...\real-local-corpus-20260819-091246\corpus-landscape.mp4 -ProviderPolicyPath tools/provider-policy-real-local.json -EvidencePath docs/evidence/real-local-gate-h-live-20260819-r8.json -TimeoutSeconds 600` | PASS: PostgreSQL/Redis/MinIO upload and validation, real local provider calls, 25/25 JobSteps, TimelineVersion validation/approval, mix, Go render/ffprobe QA, clip export and signed artifact downloads; `trace_complete=true`, zero SHA-256 mismatches | same-machine local scope; no VPS/DNS/TLS/load/power-loss/second-device proof; T605 remains unstarted |
+| 2026-08-19 | Renderer repair | focused Go render compile/debug against r7 artifacts; rebuilt/restarted `tools/dev.ps1 -Profile local -Action restart` before r8 | pass: explicit typed narration/audio is connected, output uses `-shortest`, real output passes dimensions/codecs/duration/black/silence QA | reviewed FFmpeg profile remains H.264/AAC/libx264; GPU encode is not claimed |
+
+The capability matrix and WEB_SESSION boundary are recorded in
+[`../evidence/provider-capability-matrix-20260819.md`](../evidence/provider-capability-matrix-20260819.md).

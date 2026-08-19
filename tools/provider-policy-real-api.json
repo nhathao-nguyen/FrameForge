@@ -1,0 +1,50 @@
+{
+  "mode": "api",
+  "configuration_id": "config_real_api_openai_20260819",
+  "configuration_revision": 1,
+  "privacy_policy": "workspace_private",
+  "timeout_sec": 120,
+  "alignment_tolerance_sec": 1.5,
+  "output_limit": 96,
+  "subtitle_max_cps": 28,
+  "subtitle_max_line_chars": 84,
+  "adapter_keys": {
+    "llm": ["openai-llm"],
+    "vlm": ["openai-vlm"],
+    "tts": ["openai-tts"],
+    "asr": ["openai-asr"],
+    "embedding": ["openai-embedding"]
+  },
+  "providers": {
+    "openai-llm": {
+      "deployment": "remote",
+      "endpoint": "https://api.openai.com/v1",
+      "model": "gpt-4o-mini",
+      "key_ref": "env:OPENAI_API_KEY"
+    },
+    "openai-vlm": {
+      "deployment": "remote",
+      "endpoint": "https://api.openai.com/v1",
+      "model": "gpt-4o-mini",
+      "key_ref": "env:OPENAI_API_KEY"
+    },
+    "openai-tts": {
+      "deployment": "remote",
+      "endpoint": "https://api.openai.com/v1",
+      "model": "gpt-4o-mini-tts",
+      "key_ref": "env:OPENAI_API_KEY"
+    },
+    "openai-asr": {
+      "deployment": "remote",
+      "endpoint": "https://api.openai.com/v1",
+      "model": "whisper-1",
+      "key_ref": "env:OPENAI_API_KEY"
+    },
+    "openai-embedding": {
+      "deployment": "remote",
+      "endpoint": "https://api.openai.com/v1",
+      "model": "text-embedding-3-small",
+      "key_ref": "env:OPENAI_API_KEY"
+    }
+  }
+}

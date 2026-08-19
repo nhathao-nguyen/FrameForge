@@ -258,6 +258,10 @@ class VLMInput:
     scene_id: str
     source_revision: str
     timestamp_sec: float | None = None
+    # Bytes are materialized only inside the executor sandbox.  The durable
+    # contract still carries the Artifact ref; this optional field prevents a
+    # provider adapter from having to know anything about storage.
+    image_bytes: bytes | None = None
 
 
 @dataclass(frozen=True)
@@ -348,6 +352,9 @@ class ASRRequest:
     # nodes leave these fields empty and the adapter reads the audio Artifact.
     fixture_text: str = ""
     fixture_duration_sec: float | None = None
+    # Bytes are never serialized into commands or events.  They are supplied
+    # only for the duration of one worker-local provider call.
+    audio_bytes: bytes | None = None
 
 
 @dataclass(frozen=True)

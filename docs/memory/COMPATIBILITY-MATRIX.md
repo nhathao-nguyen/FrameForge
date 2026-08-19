@@ -1,5 +1,5 @@
 ---
-last_verified: 2026-08-18
+last_verified: 2026-08-19
 source: ../UPSTREAM-REFERENCE-POLICY.md; ../UPSTREAM-CAPABILITY-MATRIX.md; ../09-INDEPENDENT-IMPLEMENTATION-FROM-REFERENCE.md
 owner: architecture owner / task assignee
 ---

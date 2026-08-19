@@ -1,0 +1,39 @@
+{
+  "capabilities": {
+    "embedding": {
+      "adapter_key": "ollama-embedding",
+      "error": {
+        "code": "internal",
+        "safe_message": "TypeError"
+      },
+      "status": "BLOCKED"
+    },
+    "llm": {
+      "adapter_key": "ollama-openai-llm",
+      "adapter_version": "real-openai-compatible-v1",
+      "model": "qwen2.5:3b",
+      "provider_request_id": "ollama-openai-llm-20cd7e40f4196239",
+      "sample_text": "The local provider is ready.",
+      "status": "PASS"
+    },
+    "tts": {
+      "adapter_key": "sapi-tts",
+      "error": {
+        "code": "internal",
+        "safe_message": "TypeError"
+      },
+      "status": "BLOCKED"
+    },
+    "vlm": {
+      "adapter_key": "ollama-vlm",
+      "adapter_version": "real-ollama-v1",
+      "model": "moondream",
+      "provider_request_id": "ollama-vlm-d98c3eda8a6aed09",
+      "status": "PASS"
+    }
+  },
+  "finished_at_utc": "2026-08-19T01:55:39Z",
+  "mode": "LOCAL",
+  "run_id": "real-local-provider-smoke-20260819",
+  "started_at_utc": "2026-08-19T01:54:28Z"
+}

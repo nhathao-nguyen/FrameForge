@@ -1,0 +1,66 @@
+{
+  "capabilities": {
+    "asr": {
+      "adapter_key": "openai-asr",
+      "credential_ref": "env:OPENAI_API_KEY",
+      "deployment": "remote",
+      "error": {
+        "code": "auth_failed",
+        "safe_message": "The configured API credential is unavailable."
+      },
+      "model": "whisper-1",
+      "status": "BLOCKED"
+    },
+    "embedding": {
+      "adapter_key": "openai-embedding",
+      "credential_ref": "env:OPENAI_API_KEY",
+      "deployment": "remote",
+      "error": {
+        "code": "auth_failed",
+        "safe_message": "The configured API credential is unavailable."
+      },
+      "model": "text-embedding-3-small",
+      "status": "BLOCKED"
+    },
+    "llm": {
+      "adapter_key": "openai-llm",
+      "credential_ref": "env:OPENAI_API_KEY",
+      "deployment": "remote",
+      "error": {
+        "code": "auth_failed",
+        "safe_message": "The configured API credential is unavailable."
+      },
+      "model": "gpt-4o-mini",
+      "status": "BLOCKED"
+    },
+    "tts": {
+      "adapter_key": "openai-tts",
+      "credential_ref": "env:OPENAI_API_KEY",
+      "deployment": "remote",
+      "error": {
+        "code": "auth_failed",
+        "safe_message": "The configured API credential is unavailable."
+      },
+      "model": "gpt-4o-mini-tts",
+      "status": "BLOCKED"
+    },
+    "vlm": {
+      "adapter_key": "openai-vlm",
+      "credential_ref": "env:OPENAI_API_KEY",
+      "deployment": "remote",
+      "error": {
+        "code": "auth_failed",
+        "safe_message": "The configured API credential is unavailable."
+      },
+      "model": "gpt-4o-mini",
+      "status": "BLOCKED"
+    }
+  },
+  "finished_at_utc": "2026-08-19T02:37:51Z",
+  "mode": "API",
+  "network_probe": "not_run",
+  "note": "No credential value, media, request body, or provider response is recorded.",
+  "policy_path": "D:\\nhathao\\codex\\NH-Media\\tools\\provider-policy-real-api.json",
+  "schema_version": "nh-media/provider-smoke/v1",
+  "started_at_utc": "2026-08-19T02:37:51Z"
+}

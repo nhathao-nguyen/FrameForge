@@ -1,5 +1,5 @@
 ---
-last_verified: 2026-08-18
+last_verified: 2026-08-19
 source: ../../PROJECT_REBUILD_PLAN.md; ../00-PROJECT-CONTEXT.md; ../GLOSSARY.md; ../CODEX-INSTRUCTIONS.md
 owner: repository owner / task assignee
 ---
@@ -76,6 +76,23 @@ product boundary. Movie Narrator is external research/reference material only.
 | `completed` | Canonical successful terminal state. |
 | `dead_lettered` | Canonical terminal state after exhausted policy. |
 | `local path` | Executor/storage-adapter detail only. |
+
+## Real provider continuation — 2026-08-19
+
+- The real local provider boundary is now executable through `ProviderResolver` and an immutable
+  `provider_policy` snapshot: Ollama LLM/VLM/embedding, Windows SAPI TTS and CPU/int8
+  faster-whisper ASR. Provider adapters return typed results and normalized safe errors; only
+  executor-local bytes are materialized and durable contracts retain Artifact refs.
+- The full Product API local trace is
+  [`docs/evidence/real-local-gate-h-live-20260819-r8.json`](../evidence/real-local-gate-h-live-20260819-r8.json):
+  upload → PostgreSQL/Redis/MinIO → 25 real worker steps → Timeline approval → mix/render/QA/clip
+  export → signed download hashes, with `trace_complete=true`.
+- API mode uses opaque `key_ref` environment names only. The current host has no API credential;
+  all five API smoke rows are BLOCKED, not PASS. Future WEB_SESSION cookies/session tokens are a
+  separate unimplemented adapter boundary and must never enter client state, Job params, events,
+  Artifact metadata, logs or prompts.
+- The generated corpus is legal-safe test media only. Model quality, remote API quality, GPU
+  render acceleration, public deployment and T605 are not claimed.
 
 ## Task intake
 

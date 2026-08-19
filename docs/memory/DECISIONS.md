@@ -1,5 +1,5 @@
 ---
-last_verified: 2026-08-18
+last_verified: 2026-08-19
 source: owner instruction; AGENTS.md; ../OPEN-QUESTIONS.md; ../CODEX-INSTRUCTIONS.md
 owner: repository owner / task assignee
 ---
@@ -30,6 +30,7 @@ This file records current approved decisions. Recommendations in OPEN questions 
 | D-T530-002 | 2026-08-18 | task contract repair | Canonical Timeline `source_ref` permits bounded `rights_status` and non-empty `rights_metadata`; music clips require `owned` or `cleared` rights before renderer compilation. | Renderer-only fields outside the strict Timeline schema or accepting unproven music rights. | Product API validation and renderer preconditions now accept and reject the same document contract. |
 | D-T531-001 | 2026-08-18 | task implementation audit | Renderer truth is the canonical TimelineVersion; Go compiles bounded multi-clip media/audio/subtitle plans and performs real ffprobe deliverable QA before Artifact commit. | Caller-supplied FFmpeg argv, synthetic narration bytes or commit-before-QA. | Profile dimensions/codecs, duration, required audio, sandbox paths and post-QA checks are explicit acceptance gates. |
 | D-T531-002 | 2026-08-18 | task contract repair | Worker commands/results carry scoped identity and Artifact refs only. Workers request lease/step-scoped transfer grants from internal authenticated Product API endpoints and move bytes directly to/from object storage; Redis and Product API do not proxy media bytes. | Durable local paths, signed URLs on Redis or large-media Product API proxying. | Python and Go capability workers can execute the built-in DAG without crossing the storage/security boundary. |
+| D-T500-003 | 2026-08-19 | task implementation audit | Real provider mode is selected by an immutable Job `provider_policy` snapshot. Remote credentials use opaque `key_ref: env:NAME` references resolved only inside an isolated adapter; values never enter Job params, Redis, logs or Artifacts. Future WEB_SESSION is a separate explicit adapter with owner consent, scoped SecretStore custody and no silent fallback. | Frontend-held keys/cookies, durable secret values, implicit browser fallback or provider branches in domain code. | Local real providers can be accepted independently; API mode remains blocked until an owner credential and explicit remote-data policy are supplied. |
 
 Earlier local notes that described V1 compatibility, `LegacyMovieNarratorAdapter`, FrameForge module
 identity or a Python Product API are superseded by D-T000-012 through D-T000-017 and are not current

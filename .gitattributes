@@ -1,0 +1,3 @@
+# Go formatting is byte-sensitive; keep source files in the canonical gofmt LF form
+# even when a Windows checkout has core.autocrlf enabled.
+*.go text eol=lf

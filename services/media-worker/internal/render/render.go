@@ -442,7 +442,7 @@ func Compile(input CompileInput) (Plan, error) {
 	}
 	args = append(args, "-c:v", input.Profile.VideoCodec, "-pix_fmt", input.Profile.PixelFormat, "-r", strconv.Itoa(input.Profile.FPS))
 	if audioLabel != "" {
-		args = append(args, "-c:a", input.Profile.AudioCodec)
+		args = append(args, "-c:a", input.Profile.AudioCodec, "-shortest")
 	}
 	args = append(args, "-movflags", "+faststart", input.OutputPath)
 	outputPaths := []string{input.OutputPath}
@@ -540,31 +540,10 @@ func compileFilterGraph(document timelineDocument, videoClips []timelineClip, in
 			}
 		}
 	}
-	if len(audioLabels) == 0 {
-		return strings.Join(parts, ";"), videoOutput, "", nil
-	}
-	audioOutput := ""
-	if hasCrossfade(videoClips) {
-		current := audioLabels[0]
-		for index := 1; index < len(audioLabels); index++ {
-			transitionDuration := transitionDurationFor(videoClips[index], videoClips[index-1])
-			if transitionDuration <= 0 {
-				transitionDuration = 0.001
-			}
-			next := fmt.Sprintf("ax%d", index)
-			parts = append(parts, fmt.Sprintf("[%s][%s]acrossfade=d=%s:c1=tri:c2=tri[%s]", current, audioLabels[index], formatSeconds(transitionDuration), next))
-			current = next
-		}
-		audioOutput = current
-	} else {
-		concatAudioInputs := ""
-		for _, label := range audioLabels {
-			concatAudioInputs += "[" + label + "]"
-		}
-		parts = append(parts, fmt.Sprintf("%sconcat=n=%d:v=0:a=1[acat]", concatAudioInputs, len(audioLabels)))
-		audioOutput = "acat"
-	}
-	extraIndex := 0
+	// Typed timeline audio is compiled at the same boundary as source-video
+	// audio. The source video remains a base bed when it has audio, while
+	// narration/music/sfx clips are delayed, mixed and policy-shaped below.
+	explicitAudioLabels := make([]string, 0)
 	for trackIndex, track := range document.Tracks {
 		if track.Kind != "narration" && track.Kind != "music" && track.Kind != "sfx" {
 			continue
@@ -572,9 +551,15 @@ func compileFilterGraph(document timelineDocument, videoClips []timelineClip, in
 		for _, clip := range track.Clips {
 			inputNumber, ok := inputIndex[filepath.Clean(clip.Source.ArtifactID)]
 			if !ok {
-				continue
+				return "", "", "", fmt.Errorf("audio clip %q has no resolved Artifact input", clip.ID)
 			}
-			label := "extra" + clip.ID
+			duration := clip.TimelineOut - clip.TimelineIn
+			speed := clipSpeed(clip)
+			trimDuration := duration * speed
+			if clip.SourceOut != nil && clip.SourceIn != nil {
+				trimDuration = *clip.SourceOut - *clip.SourceIn
+			}
+			label := fmt.Sprintf("explicitAudio%d_%d", trackIndex, len(explicitAudioLabels))
 			volume := 1.0
 			gainDB := 0.0
 			fadeIn := 0.0
@@ -592,7 +577,7 @@ func compileFilterGraph(document timelineDocument, videoClips []timelineClip, in
 					volume *= math.Pow(10, track.Mix.DuckDB/20)
 				}
 			}
-			filter := fmt.Sprintf("[%d:a]atrim=start=%s:duration=%s,asetpts=PTS-STARTPTS,adelay=%d|%d,volume=%s", inputNumber, formatSeconds(sourceIn(clip)), formatSeconds(clip.TimelineOut-clip.TimelineIn), int(clip.TimelineIn*1000), int(clip.TimelineIn*1000), formatSeconds(volume))
+			filter := fmt.Sprintf("[%d:a]atrim=start=%s:duration=%s,asetpts=PTS-STARTPTS,asetpts=PTS/%s,adelay=%d|%d,volume=%s", inputNumber, formatSeconds(sourceIn(clip)), formatSeconds(trimDuration), formatSeconds(speed), int(math.Round(clip.TimelineIn*1000)), int(math.Round(clip.TimelineIn*1000)), formatSeconds(volume))
 			if gainDB != 0 {
 				filter += fmt.Sprintf(",volume=%sdB", formatSeconds(gainDB))
 			}
@@ -600,13 +585,53 @@ func compileFilterGraph(document timelineDocument, videoClips []timelineClip, in
 				filter += fmt.Sprintf(",afade=t=in:st=0:d=%s", formatSeconds(fadeIn))
 			}
 			if fadeOut > 0 {
-				filter += fmt.Sprintf(",afade=t=out:st=%s:d=%s", formatSeconds(maxFloat(0, clip.TimelineOut-clip.TimelineIn-fadeOut)), formatSeconds(fadeOut))
+				filter += fmt.Sprintf(",afade=t=out:st=%s:d=%s", formatSeconds(maxFloat(0, duration-fadeOut)), formatSeconds(fadeOut))
 			}
 			parts = append(parts, filter+"["+label+"]")
-			mixedLabel := fmt.Sprintf("amixout%d", extraIndex+trackIndex)
-			extraIndex++
-			parts = append(parts, fmt.Sprintf("[%s][%s]amix=inputs=2:duration=longest:dropout_transition=0,loudnorm=I=%s:TP=%s:print_format=summary[%s]", audioOutput, label, formatSeconds(profile.AudioTargetLUFS), formatSeconds(profile.TruePeakDB), mixedLabel))
-			audioOutput = mixedLabel
+			explicitAudioLabels = append(explicitAudioLabels, label)
+		}
+	}
+	if len(audioLabels) == 0 {
+		if len(explicitAudioLabels) == 0 {
+			return strings.Join(parts, ";"), videoOutput, "", nil
+		}
+	}
+	audioOutput := ""
+	if hasCrossfade(videoClips) && len(audioLabels) > 0 {
+		current := audioLabels[0]
+		for index := 1; index < len(audioLabels); index++ {
+			transitionDuration := transitionDurationFor(videoClips[index], videoClips[index-1])
+			if transitionDuration <= 0 {
+				transitionDuration = 0.001
+			}
+			next := fmt.Sprintf("ax%d", index)
+			parts = append(parts, fmt.Sprintf("[%s][%s]acrossfade=d=%s:c1=tri:c2=tri[%s]", current, audioLabels[index], formatSeconds(transitionDuration), next))
+			current = next
+		}
+		audioOutput = current
+	} else if len(audioLabels) > 0 {
+		concatAudioInputs := ""
+		for _, label := range audioLabels {
+			concatAudioInputs += "[" + label + "]"
+		}
+		parts = append(parts, fmt.Sprintf("%sconcat=n=%d:v=0:a=1[acat]", concatAudioInputs, len(audioLabels)))
+		audioOutput = "acat"
+	}
+	if len(explicitAudioLabels) > 0 {
+		explicitAudioOutput := explicitAudioLabels[0]
+		if len(explicitAudioLabels) > 1 {
+			explicitAudioOutput = "explicitAudioMix"
+			inputs := ""
+			for _, label := range explicitAudioLabels {
+				inputs += "[" + label + "]"
+			}
+			parts = append(parts, fmt.Sprintf("%samix=inputs=%d:duration=longest:dropout_transition=0[%s]", inputs, len(explicitAudioLabels), explicitAudioOutput))
+		}
+		if audioOutput == "" {
+			audioOutput = explicitAudioOutput
+		} else {
+			parts = append(parts, fmt.Sprintf("[%s][%s]amix=inputs=2:duration=longest:dropout_transition=0,loudnorm=I=%s:TP=%s:print_format=summary[finalAudio]", audioOutput, explicitAudioOutput, formatSeconds(profile.AudioTargetLUFS), formatSeconds(profile.TruePeakDB)))
+			audioOutput = "finalAudio"
 		}
 	}
 	return strings.Join(parts, ";"), videoOutput, audioOutput, nil

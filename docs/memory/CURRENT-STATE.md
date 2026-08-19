@@ -1,5 +1,5 @@
 ---
-last_verified: 2026-08-18
+last_verified: 2026-08-19
 source: git status/log/branch metadata; ../SPEC-AUDIT-REPORT.md; ../IMPLEMENTATION-ORDER.md; TEST-EVIDENCE.md; ../evidence/gate-g-dependency-preflight-20260818.md; ../evidence/gate-g-capability-coverage.md
 owner: repository owner / task assignee
 ---
@@ -108,6 +108,10 @@ owner: repository owner / task assignee
   and verifies a canonical multi-scene Timeline plus non-empty video/audio render, mix, QA and clip
   export Artifacts. Scheduler dependency-frontier advancement, terminal hard/soft failure aggregation
   and retry delivery are part of this executable path rather than package-only evidence.
+- Prompt 8 audit on 2026-08-19 repaired the Go formatting gate across `packages/` and `services/`,
+  removed a stale compatibility-worker test name, refreshed memory metadata/evidence, and reran the
+  broad non-live regression suite successfully. Docker Desktop was unavailable for a fresh live
+  Compose/T550/T603 rerun; unchanged prior live evidence remains the accepted Local/LAN proof.
 - Gate G native coverage includes provider ports, research/script/style, TTS, ASR/alignment,
   subtitles/translation/bilingual QA, scenes/filters/VLM/characters, text and visual embeddings,
   matching/coverage/candidates, reference style, typed audio/BGM policy, Timeline compilation,
@@ -119,6 +123,24 @@ owner: repository owner / task assignee
   node, durable execution-graph bootstrap, Job/Run/Step/Review/Render commands, checkpoint/recovery,
   retry/DLQ adapters, cancellation, partial stop-after pause, and SSE. The live evidence and its
   limitations are recorded in TEST-EVIDENCE.md; no later Gate F task is implied.
+
+## Real local/API continuation — 2026-08-19
+
+- The prior provider-free Gate G boundary was extended with explicit real adapters and a
+  policy-bound worker snapshot. Local smoke passed for Ollama `qwen2.5:3b`/`moondream`, Windows
+  SAPI, CPU/int8 `faster-whisper tiny.en`, and Ollama `nomic-embed-text` (768 dimensions).
+- Full Product API trace [real-local-gate-h-live-20260819-r8.json](../evidence/real-local-gate-h-live-20260819-r8.json)
+  is PASS: upload/validation through PostgreSQL, Redis and MinIO; real local AI nodes; 25/25
+  completed steps; TimelineVersion validation/approval; mix, Go render/ffprobe QA, clip export;
+  all artifact downloads hash-match; `trace_complete=true`.
+- API parity is implemented at the typed adapter/policy boundary but is not live-accepted: the
+  smoke reports all five API capabilities BLOCKED because no owner credential is present. No API
+  key is stored in policy, Job params, Redis, logs or evidence. Remote live quality is unverified.
+- Future WEB_SESSION is a separate, unimplemented explicit adapter boundary. Cookies/session
+  tokens must stay in the server SecretStore and never enter frontend state, Job params, events,
+  Artifact metadata, logs or prompts.
+- T605 remains unstarted; this evidence is same-machine local only. See the
+  [provider capability matrix](../evidence/provider-capability-matrix-20260819.md).
 
 ## Decision status
 

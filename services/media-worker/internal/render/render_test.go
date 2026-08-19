@@ -106,7 +106,7 @@ func TestCompileSupportsMultiClipTransitionsAudioAndSafeSubtitles(t *testing.T) 
 		t.Fatal(err)
 	}
 	joined := strings.Join(plan.Args, "\x00")
-	for _, required := range []string{"concat=n=3", "fade=t=out", "fade=t=in", "amix=inputs=2", "drawtext=text='Xin chào\\:", "\\; 世界"} {
+	for _, required := range []string{"concat=n=3", "fade=t=out", "fade=t=in", "amix=inputs=2", "-shortest", "drawtext=text='Xin chào\\:", "\\; 世界"} {
 		if !strings.Contains(joined, required) {
 			t.Fatalf("compiled plan omitted %q: %s", required, joined)
 		}

@@ -1,10 +1,20 @@
 ---
-last_verified: 2026-08-18
+last_verified: 2026-08-19
 source: owner instruction; git history; docs/memory/
 owner: repository owner / task assignee
 ---
 
 # Memory changelog
+
+## 2026-08-19 — Prompt 8 whole-repository audit
+
+- Repaired the Go formatting gate across the checked-in `packages/` and `services/` tree, added the
+  LF `.gitattributes` guard for Windows checkouts, and removed a stale compatibility-worker test name
+  without changing runtime behavior.
+- Refreshed dated memory/evidence metadata and recorded successful broad Go/Python/contract/client,
+  web-build, security, independence and supply-chain regression checks.
+- Fresh live Compose/T550/T603 rerun was unavailable because Docker Desktop was stopped; prior
+  unchanged 2026-08-18 live Local/LAN evidence remains the accepted proof. T605 was not started.
 
 ## 2026-08-18 — Gate G Prompt 6 final acceptance repair
 

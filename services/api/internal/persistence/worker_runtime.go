@@ -330,6 +330,14 @@ func (s *SQLStore) ResolveWorkerCommand(ctx context.Context, workspaceID string,
 	config := mapFromJSON(configJSON)
 	var jobSnapshot map[string]any
 	if json.Unmarshal(inputRefsJSON, &jobSnapshot) == nil {
+		if params, ok := jobSnapshot["params"].(map[string]any); ok {
+			// Provider bindings are an immutable job snapshot. Secrets are not
+			// accepted here; adapters resolve only opaque environment/SecretStore
+			// references inside the worker boundary.
+			if policy, ok := params["provider_policy"].(map[string]any); ok {
+				config["provider_policy"] = policy
+			}
+		}
 		if profile, ok := jobSnapshot["render_profile"].(map[string]any); ok {
 			if key, ok := profile["profile_key"].(string); ok && strings.TrimSpace(key) != "" {
 				config["render_profile"] = key

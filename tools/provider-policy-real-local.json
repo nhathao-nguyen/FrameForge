@@ -1,0 +1,46 @@
+{
+  "mode": "local",
+  "configuration_id": "config_real_local_20260819",
+  "configuration_revision": 1,
+  "privacy_policy": "local_only",
+  "timeout_sec": 180,
+  "alignment_tolerance_sec": 1.5,
+  "output_limit": 96,
+  "subtitle_max_cps": 28,
+  "subtitle_max_line_chars": 84,
+  "adapter_keys": {
+    "llm": ["ollama-openai-llm"],
+    "vlm": ["ollama-vlm"],
+    "tts": ["sapi-tts"],
+    "asr": ["faster-whisper-asr"],
+    "embedding": ["ollama-embedding"]
+  },
+  "providers": {
+    "ollama-openai-llm": {
+      "deployment": "local",
+      "endpoint": "http://127.0.0.1:11434/v1",
+      "model": "qwen2.5:3b"
+    },
+    "ollama-vlm": {
+      "deployment": "local",
+      "endpoint": "http://127.0.0.1:11434",
+      "model": "moondream"
+    },
+    "sapi-tts": {
+      "deployment": "local",
+      "voice_id": "voice-local"
+    },
+    "faster-whisper-asr": {
+      "deployment": "local",
+      "model": "tiny.en",
+      "device": "cpu",
+      "compute_type": "int8"
+    },
+    "ollama-embedding": {
+      "deployment": "local",
+      "endpoint": "http://127.0.0.1:11434",
+      "model": "nomic-embed-text",
+      "dimension": 768
+    }
+  }
+}

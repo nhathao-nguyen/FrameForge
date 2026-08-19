@@ -1,0 +1,19 @@
+{
+  "schema_version": "nh-media/gate-h-live/v1",
+  "started_at": "2026-08-19T02:29:44.0027185Z",
+  "api_base_url": "http://127.0.0.1:8080",
+  "ffmpeg_sha256": "af9e7af850346ae908745f6191cdcf9581889e915f8fe2dd6ab8cabef21161d9",
+  "ffprobe_sha256": "6d2b7ac8cd07da82f066994be8bcf0c74ab1aba7f248bb75025fcc543711181a",
+  "provider_policy_path": "D:\\nhathao\\codex\\NH-Media\\tools\\provider-policy-real-local.json",
+  "corpus_path": "C:\\Users\\PC\\AppData\\Local\\NH-Media\\evidence\\real-local-corpus-20260819-091246\\corpus-landscape.mp4",
+  "project_id": "70fb3eb4-dbff-4ee4-82a9-01bb210e6e76",
+  "validation_job_id": "79edae8c-b051-4eea-a8b1-284be9c71766",
+  "validation_status": "completed",
+  "source_artifact_id": "b8dd8d15-5081-4657-9612-37b64d86e1ef",
+  "source_sha256": "39a047b207d97384363e43db87c6a30a6d0b56a20994a1065cffb9ab9ee80814",
+  "movie_job_id": "8daa9a95-b118-4a9f-8ceb-c183b87bc2fe",
+  "movie_job_status": "failed",
+  "status": "FAIL",
+  "error": "movie_recap Job did not complete.",
+  "failed_at": "2026-08-19T02:30:42.2190776Z"
+}

@@ -4,6 +4,8 @@ param(
     [string]$FfmpegPath = $env:NH_MEDIA_FFMPEG_PATH,
     [string]$FfprobePath = $env:NH_MEDIA_FFPROBE_PATH,
     [string]$EvidencePath = '',
+    [string]$CorpusPath = '',
+    [string]$ProviderPolicyPath = '',
     [int]$TimeoutSeconds = 360
 )
 
@@ -62,6 +64,11 @@ if ((Get-FileHash -LiteralPath $FfprobePath -Algorithm SHA256).Hash -ne $expecte
 if ([string]::IsNullOrWhiteSpace($EvidencePath)) {
     $EvidencePath = Join-Path ([IO.Path]::GetTempPath()) ('nh-media-gate-h-live-' + [guid]::NewGuid().ToString() + '.json')
 }
+$providerPolicy = $null
+if (-not [string]::IsNullOrWhiteSpace($ProviderPolicyPath)) {
+    if (-not (Test-Path -LiteralPath $ProviderPolicyPath -PathType Leaf)) { throw "Provider policy was not found: $ProviderPolicyPath" }
+    $providerPolicy = Get-Content -Raw -LiteralPath $ProviderPolicyPath | ConvertFrom-Json
+}
 $evidenceDirectory = Split-Path -Parent ([IO.Path]::GetFullPath($EvidencePath))
 New-Item -ItemType Directory -Force -Path $evidenceDirectory | Out-Null
 
@@ -71,8 +78,11 @@ $report = [ordered]@{
     api_base_url = $ApiBaseUrl
     ffmpeg_sha256 = (Get-FileHash -LiteralPath $FfmpegPath -Algorithm SHA256).Hash.ToLowerInvariant()
     ffprobe_sha256 = (Get-FileHash -LiteralPath $FfprobePath -Algorithm SHA256).Hash.ToLowerInvariant()
+    provider_policy_path = if ($ProviderPolicyPath) { [IO.Path]::GetFullPath($ProviderPolicyPath) } else { '' }
+    corpus_path = if ($CorpusPath) { [IO.Path]::GetFullPath($CorpusPath) } else { '' }
 }
-$fixture = Join-Path ([IO.Path]::GetTempPath()) ('nh-media-gate-h-source-' + [guid]::NewGuid().ToString() + '.mp4')
+$fixture = if ($CorpusPath) { [IO.Path]::GetFullPath($CorpusPath) } else { Join-Path ([IO.Path]::GetTempPath()) ('nh-media-gate-h-source-' + [guid]::NewGuid().ToString() + '.mp4') }
+$removeFixture = [string]::IsNullOrWhiteSpace($CorpusPath)
 try {
     $login = Invoke-Api 'POST' '/auth/local/login' '' @{ username = $env:NH_API_ADMIN_USERNAME; password = $env:NH_API_ADMIN_PASSWORD }
     $token = [string]$login.access_token
@@ -82,8 +92,12 @@ try {
     $projectId = [string]$project.id
     $report.project_id = $projectId
 
-    & $FfmpegPath '-hide_banner' '-loglevel' 'error' '-f' 'lavfi' '-i' 'testsrc=size=640x360:rate=24' '-f' 'lavfi' '-i' 'sine=frequency=440:sample_rate=48000' '-t' '3' '-c:v' 'libx264' '-pix_fmt' 'yuv420p' '-c:a' 'aac' '-shortest' '-y' $fixture
-    if ($LASTEXITCODE -ne 0) { throw 'FFmpeg fixture generation failed.' }
+    if ($removeFixture) {
+        & $FfmpegPath '-hide_banner' '-loglevel' 'error' '-f' 'lavfi' '-i' 'testsrc=size=640x360:rate=24' '-f' 'lavfi' '-i' 'sine=frequency=440:sample_rate=48000' '-t' '3' '-c:v' 'libx264' '-pix_fmt' 'yuv420p' '-c:a' 'aac' '-shortest' '-y' $fixture
+        if ($LASTEXITCODE -ne 0) { throw 'FFmpeg fixture generation failed.' }
+    } elseif (-not (Test-Path -LiteralPath $fixture -PathType Leaf)) {
+        throw "Corpus media was not found: $fixture"
+    }
     & $FfprobePath '-v' 'error' '-of' 'json' '-show_format' '-show_streams' $fixture | Out-Null
     if ($LASTEXITCODE -ne 0) { throw 'ffprobe fixture validation failed.' }
 
@@ -111,7 +125,9 @@ try {
     $report.source_artifact_id = $sourceArtifactId
     $report.source_sha256 = $fixtureHash
 
-    $job = Invoke-Api 'POST' ('/projects/' + $projectId + '/jobs') $token @{ kind = 'pipeline'; workflow_key = 'movie_recap'; mode = 'automatic'; auto_start = $true; input = @{ artifacts = @(@{ artifact_id = $sourceArtifactId; role = 'source_original'; sha256 = $fixtureHash }) }; params = @{ duration_sec = 3; language = 'en' } } @{'Idempotency-Key' = 'gate-h-live-movie-' + [guid]::NewGuid().ToString() }
+    $jobParams = @{ duration_sec = 3; language = 'en' }
+    if ($null -ne $providerPolicy) { $jobParams.provider_policy = $providerPolicy }
+    $job = Invoke-Api 'POST' ('/projects/' + $projectId + '/jobs') $token @{ kind = 'pipeline'; workflow_key = 'movie_recap'; mode = 'automatic'; auto_start = $true; input = @{ artifacts = @(@{ artifact_id = $sourceArtifactId; role = 'source_original'; sha256 = $fixtureHash }) }; params = $jobParams } @{'Idempotency-Key' = 'gate-h-live-movie-' + [guid]::NewGuid().ToString() }
     $jobId = [string]$job.id
     $report.movie_job_id = $jobId
     $terminal = Wait-JobTerminal $projectId $jobId $token $TimeoutSeconds
@@ -228,5 +244,5 @@ catch {
     exit 1
 }
 finally {
-    if (Test-Path -LiteralPath $fixture) { Remove-Item -LiteralPath $fixture -Force }
+    if ($removeFixture -and (Test-Path -LiteralPath $fixture)) { Remove-Item -LiteralPath $fixture -Force }
 }

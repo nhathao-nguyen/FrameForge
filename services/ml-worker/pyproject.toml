@@ -5,6 +5,8 @@ description = "Isolated NH-Media Python ML worker foundation"
 requires-python = ">=3.13,<3.14"
 dependencies = [
     "redis==6.4.0",
+    "faster-whisper==1.2.0",
+    "pyttsx3==2.99",
 ]
 
 [tool.uv]

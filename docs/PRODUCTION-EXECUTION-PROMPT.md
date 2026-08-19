@@ -1,5 +1,5 @@
 ---
-last_verified: 2026-08-18
+last_verified: 2026-08-19
 source: docs/PRODUCTION-PLAN.md; docs/SETUP-PLAN.md; AGENTS.md; docs/CODEX-INSTRUCTIONS.md; docs/memory/README.md
 owner: repository owner / execution agent
 ---

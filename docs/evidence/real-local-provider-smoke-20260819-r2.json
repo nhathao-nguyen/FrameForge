@@ -1,0 +1,46 @@
+{
+  "capabilities": {
+    "asr": {
+      "adapter_key": "faster-whisper-asr",
+      "adapter_version": "real-faster-whisper-v1",
+      "model": "tiny.en",
+      "provider_request_id": "faster-whisper-asr-7ec3a33a3c03fc1a",
+      "segment_count": 1,
+      "status": "PASS"
+    },
+    "embedding": {
+      "adapter_key": "ollama-embedding",
+      "adapter_version": "real-ollama-v1",
+      "dimension": 768,
+      "model": "nomic-embed-text",
+      "provider_request_id": "ollama-embedding-1e27316755d4abed",
+      "status": "PASS"
+    },
+    "llm": {
+      "adapter_key": "ollama-openai-llm",
+      "adapter_version": "real-openai-compatible-v1",
+      "model": "qwen2.5:3b",
+      "provider_request_id": "ollama-openai-llm-20cd7e40f4196239",
+      "sample_text": "The local provider is ready.",
+      "status": "PASS"
+    },
+    "tts": {
+      "adapter_key": "sapi-tts",
+      "adapter_version": "real-windows-sapi-v1",
+      "model": "windows-sapi",
+      "provider_request_id": "sapi-tts-215d5153a423b5e5",
+      "status": "PASS"
+    },
+    "vlm": {
+      "adapter_key": "ollama-vlm",
+      "adapter_version": "real-ollama-v1",
+      "model": "moondream",
+      "provider_request_id": "ollama-vlm-d98c3eda8a6aed09",
+      "status": "PASS"
+    }
+  },
+  "finished_at_utc": "2026-08-19T01:56:29Z",
+  "mode": "LOCAL",
+  "run_id": "real-local-provider-smoke-20260819-r2",
+  "started_at_utc": "2026-08-19T01:56:09Z"
+}

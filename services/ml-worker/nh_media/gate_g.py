@@ -105,7 +105,18 @@ def _call_llm(provider: Any, context: ProviderCallContext, request: JsonObject) 
 def _call_vlm(provider: Any, context: ProviderCallContext, request: JsonObject) -> Any:
     if not callable(getattr(provider, "analyze", None)):
         raise ProviderError("unsupported_capability", "unknown", safe_message="The configured provider has no typed VLM capability.")
-    inputs = tuple(VLMInput(str(item.get("input_id", item.get("scene_id", "scene"))), str(item.get("artifact_ref", "keyframe_ref")), str(item.get("media_type", "image/jpeg")), str(item.get("scene_id", "scene")), str(item.get("source_revision", "source_revision")), item.get("timestamp_sec")) for item in request.get("inputs", [{"scene_id": request.get("scene_id", "scene"), "artifact_ref": "keyframe_ref"}]))
+    inputs = tuple(
+        VLMInput(
+            str(item.get("input_id", item.get("scene_id", "scene"))),
+            str(item.get("artifact_ref", "keyframe_ref")),
+            str(item.get("media_type", "image/jpeg")),
+            str(item.get("scene_id", "scene")),
+            str(item.get("source_revision", "source_revision")),
+            item.get("timestamp_sec"),
+            item.get("image_bytes"),
+        )
+        for item in request.get("inputs", [{"scene_id": request.get("scene_id", "scene"), "artifact_ref": "keyframe_ref"}])
+    )
     return provider.analyze(context, VLMRequest(inputs, str(request.get("prompt", "Describe the scene.")), request.get("model"), request.get("response_schema"), request.get("language")))
 
 
@@ -118,7 +129,20 @@ def _call_tts(provider: Any, context: ProviderCallContext, request: JsonObject) 
 def _call_asr(provider: Any, context: ProviderCallContext, request: JsonObject) -> Any:
     if not callable(getattr(provider, "transcribe", None)):
         raise ProviderError("unsupported_capability", "unknown", safe_message="The configured provider has no typed ASR capability.")
-    return provider.transcribe(context, ASRRequest(str(request["audio_artifact_ref"]), request.get("language"), request.get("model"), bool(request.get("word_timestamps", True)), bool(request.get("diarization", False)), tuple(str(item) for item in request.get("vocabulary_hints", [])), str(request.get("fixture_text", "")), request.get("fixture_duration_sec")))
+    return provider.transcribe(
+        context,
+        ASRRequest(
+            str(request["audio_artifact_ref"]),
+            request.get("language"),
+            request.get("model"),
+            bool(request.get("word_timestamps", True)),
+            bool(request.get("diarization", False)),
+            tuple(str(item) for item in request.get("vocabulary_hints", [])),
+            str(request.get("fixture_text", "")),
+            request.get("fixture_duration_sec"),
+            request.get("audio_bytes"),
+        ),
+    )
 
 
 def _call_embedding(provider: Any, context: ProviderCallContext, request: JsonObject) -> Any:
@@ -208,6 +232,7 @@ def generate_script(
     duration_sec: float,
     style: ScriptStyle = ScriptStyle(),
     allow_fallback: bool = True,
+    max_output_tokens: int | None = None,
 ) -> ScriptVersion:
     if duration_sec <= 0:
         raise ValueError("script duration must be positive")
@@ -217,6 +242,10 @@ def generate_script(
         "style": style.as_dict(),
         "untrusted_input": research.result,
     }
+    if max_output_tokens is not None:
+        if max_output_tokens < 16 or max_output_tokens > 4096:
+            raise ValueError("script output token bound is invalid")
+        prompt["max_output_tokens"] = max_output_tokens
     try:
         response = _call_llm(provider, context, prompt)
         text = _response_text(response).strip()
@@ -419,6 +448,7 @@ def transcribe_segments(
     audio_artifact_ref: str | None = None,
     word_timestamps: bool = True,
     diarization: bool = False,
+    audio_bytes: bytes | None = None,
 ) -> Transcript:
     """Consume an ASR transcript for an audio Artifact.
 
@@ -432,6 +462,8 @@ def transcribe_segments(
     if duration_sec is not None and duration_sec <= 0:
         raise ValueError("ASR duration must be positive when supplied")
     request: JsonObject = {"audio_artifact_ref": artifact_ref, "language": language, "model": model, "word_timestamps": word_timestamps, "diarization": diarization}
+    if audio_bytes is not None:
+        request["audio_bytes"] = audio_bytes
     if text and not text.startswith("artifact_"):
         request["fixture_text"] = text.strip()
         request["fixture_duration_sec"] = duration_sec
@@ -752,7 +784,14 @@ class SceneAnalysis:
     confidence: float | None = None
 
 
-def analyze_scenes(scenes: Sequence[Scene], features: Sequence[SceneFeatures], provider: VLMProvider, context: ProviderCallContext, allow_partial: bool = True) -> tuple[SceneAnalysis, ...]:
+def analyze_scenes(
+    scenes: Sequence[Scene],
+    features: Sequence[SceneFeatures],
+    provider: VLMProvider,
+    context: ProviderCallContext,
+    allow_partial: bool = True,
+    keyframe_bytes: Mapping[str, bytes] | None = None,
+) -> tuple[SceneAnalysis, ...]:
     by_id = {item.scene_id: item for item in features}
     output: list[SceneAnalysis] = []
     for scene in scenes:
@@ -762,7 +801,26 @@ def analyze_scenes(scenes: Sequence[Scene], features: Sequence[SceneFeatures], p
                 output.append(SceneAnalysis(scene.scene_id, "", (), scene.source_revision, (), {"status": "missing_features"}, "degraded"))
                 continue
             raise ValueError(f"scene features missing: {scene.scene_id}")
-        response = _call_vlm(provider, context, {"scene_id": scene.scene_id, "source_revision": scene.source_revision, "inputs": [{"input_id": scene.scene_id, "artifact_ref": ref, "media_type": "image/jpeg", "scene_id": scene.scene_id, "source_revision": scene.source_revision} for ref in feature.keyframe_refs], "prompt": "Describe visible entities, actions and setting."})
+        response = _call_vlm(
+            provider,
+            context,
+            {
+                "scene_id": scene.scene_id,
+                "source_revision": scene.source_revision,
+                "inputs": [
+                    {
+                        "input_id": scene.scene_id,
+                        "artifact_ref": ref,
+                        "media_type": "image/jpeg",
+                        "scene_id": scene.scene_id,
+                        "source_revision": scene.source_revision,
+                        "image_bytes": (keyframe_bytes or {}).get(scene.scene_id),
+                    }
+                    for ref in feature.keyframe_refs
+                ],
+                "prompt": "Describe visible entities, actions and setting.",
+            },
+        )
         descriptions = getattr(response, "descriptions", ())
         if descriptions:
             description = descriptions[0]

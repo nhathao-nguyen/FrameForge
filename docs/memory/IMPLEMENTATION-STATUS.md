@@ -1,5 +1,5 @@
 ---
-last_verified: 2026-08-18
+last_verified: 2026-08-19
 source: ../IMPLEMENTATION-ORDER.md; ../10-DEVELOPMENT-ROADMAP.md; CURRENT-STATE.md; TEST-EVIDENCE.md
 owner: repository owner / task assignee
 ---
@@ -76,17 +76,17 @@ reviewable evidence is recorded.
 | T433 | Tauri client | T223, T340, T430 | complete | thin remote-only commands/capability manifest, exact LAN origin, direct browser upload, signed artifact-download URL, remote review/editor UI and current-tree LAN desktop bundle checks pass | T550 physical client |
 | T550 | Local Functional Acceptance | T323, T340, T430, T433 | complete | current local, exact-LAN server-path and controlled physical second-device runs pass the real Go/Redis/Python/SSE/upload flow; external run `lan-client-1353be68-e9ba-41d7-9ee1-b2f97340452e` reports `external_to_server=true` and current script hash match | T603 hardened acceptance |
 | T434 | Desktop packaging/security | T433 | complete | current-tree two-version signed NSIS packages pass external signature verification, fresh install/launch, N→N+1 update/launch, tamper rejection and rollback-pointer checks | Gate F physical client |
-| T500 | Provider ports/resolver | T235, T401 | complete | `services/ml-worker/nh_media/providers`; typed LLM/VLM/TTS/ASR/embedding ports, actual node-path `ProviderResolver`, normalized errors, allowlisted fallback, timeout budget, bounded exponential backoff+jitter, Retry-After and provider-configuration/endpoint/capability circuit-breaker tests | real provider credentials remain unavailable; local typed conformance is complete |
-| T510 | Research/script nodes | T402, T500 | complete | `generation/research.py`, `generation/script.py`; resolver-bound provenance, ScriptStyle perspective/control/density and immutable ScriptVersion tests; provider errors are not masked by node fallback | local fake provider only |
-| T511 | TTS/Narration | T231, T500, T510 | complete | `speech/tts.py`; resolver-selected typed TTS response consumption, measured WAV duration, voice/config/style fingerprint and ProducedBlob→Artifact handoff tests | external TTS quality not claimed |
-| T512 | ASR/alignment | T500–T511 | complete | `speech/asr.py`, `speech/alignment.py`; resolver-selected typed provider transcript timing, word/speaker validation and drift validation tests | local deterministic transcript only |
+| T500 | Provider ports/resolver | T235, T401 | complete | `services/ml-worker/nh_media/providers`; typed LLM/VLM/TTS/ASR/embedding ports, actual node-path `ProviderResolver`, normalized errors, allowlisted fallback, timeout budget, bounded exponential backoff+jitter, Retry-After and provider-configuration/endpoint/capability circuit-breaker tests; real local adapters and remote adapter boundary | API credential/live remote quality remains unavailable; local real smoke and r8 E2E are recorded separately |
+| T510 | Research/script nodes | T402, T500 | complete | `generation/research.py`, `generation/script.py`; resolver-bound provenance, ScriptStyle perspective/control/density and immutable ScriptVersion tests; real local LLM path in r8; provider errors are not masked by node fallback | remote API path is credential-blocked; model quality is not scored |
+| T511 | TTS/Narration | T231, T500, T510 | complete | `speech/tts.py`; resolver-selected typed TTS response consumption, measured WAV duration, voice/config/style fingerprint and ProducedBlob→Artifact handoff tests; real Windows SAPI WAV in local smoke/r8 | remote TTS path is credential-blocked; voice quality is not scored |
+| T512 | ASR/alignment | T500–T511 | complete | `speech/asr.py`, `speech/alignment.py`; resolver-selected typed provider transcript timing, word/speaker validation and drift validation tests; real `faster-whisper tiny.en` plus alignment in r8 | remote ASR path is credential-blocked; transcription quality is not scored |
 | T512-S1 | Subtitle generation/translation/QA | T512 | complete | `subtitles/*`; SRT/VTT/ASS, translation, bilingual composition and CPS/overlap/line-length QA tests | scoped Gate G subtask; no karaoke/OCR claim |
 | T520 | Scene detection/features | T224, T401 | complete | `video/scenes.py`; reviewed FFmpeg/ffprobe scene-cut detection and frame-derived luma/motion/quality/keyframe refs plus fixture policy tests | real local media proof; no external model quality claim |
 | T520-S1 | Scene filters/reasons | T520 | complete | quality/dark/intro filter reasons preserve source scenes and do not mutate inputs | scoped Gate G subtask |
-| T521 | VLM scene analysis | T500, T520 | complete | `vision/captioning.py`; per-scene keyframe/source/model provenance and degraded-item tests | fake VLM only |
+| T521 | VLM scene analysis | T500, T520 | complete | `vision/captioning.py`; per-scene keyframe/source/model provenance and degraded-item tests; real Ollama `moondream` keyframe calls in local smoke/r8 | remote VLM path is credential-blocked; model quality is not scored |
 | T522 | Character analysis | T207, T520–T521 | complete | `vision/characters.py`; appearance clusters and confirmed-identity preservation tests | proposal only; no identity provider claim |
-| T523 | Embedding/index Artifact | T500, T521 | complete | `matching/embeddings.py`; provider-produced vector consumption, model/dimension/metric/normalization validation and reload boundary tests | local typed provider only |
-| T523-S1 | Visual/multimodal embeddings | T523 | complete | `vision/embeddings.py`; shared port and model-space mismatch fail-closed tests | fake embedding provider only |
+| T523 | Embedding/index Artifact | T500, T521 | complete | `matching/embeddings.py`; provider-produced vector consumption, model/dimension/metric/normalization validation and reload boundary tests; real Ollama `nomic-embed-text` 768-dimensional output in smoke/r8 | remote embedding path is credential-blocked; visual embedding remains an abstract typed boundary, not a native image-vector quality claim |
+| T523-S1 | Visual/multimodal embeddings | T523 | complete | `vision/embeddings.py`; shared port and model-space mismatch fail-closed tests; local r8 uses VLM description + text embedding with provenance | native remote multimodal embedding quality is not claimed |
 | T524 | Match proposals/coverage | T510, T512, T520–T523 | complete | `matching/proposals.py`; score components, deterministic diversity/evidence and proposal tests | no provider-side semantic quality claim |
 | T524-S1 | Coverage feedback | T524 | complete | `evaluation/coverage.py`; explicit segment coverage/rationale without mutating approved script | scoped Gate G subtask |
 | T525 | Candidate evaluation/selection | T234, T500, T524 | complete | `evaluation/candidates.py`; immutable candidates, policy evaluation and user selection tests | deterministic local policy |
@@ -100,7 +100,7 @@ reviewable evidence is recorded.
 | T600 | Sandbox/secret/egress hardening | T313, T500, T531 | complete | shared security policy, media process-tree/policy tests, Gate H security matrix | residual OS/container sandbox and malware scanner remain deployment controls |
 | T601 | Observability/recovery | T340, T600 | complete | bounded telemetry, dependency-aware readiness, worker drain, authenticated PostgreSQL-authorized reconcile operation, and live Postgres/Redis/MinIO outage probes | automatic worker reconnect after Redis EOF is not claimed; tracked `dev.ps1 restart` recovery is proven |
 | T602 | Backup/restore/inventory | T222, T601 | complete | live inventory, non-destructive orphan report, real `pg_dump`/checksum manifest, clean separate-target `pg_restore`, migration, lineage and API read-through; corrupt-backup and non-clean-target negatives pass | current inventory has 713 owner-review orphan findings; no deletion was authorized or performed |
-| T603 | Local/LAN Hardened Acceptance | T434, T531–T532, T550, T600–T602 | complete | same-machine full stack acceptance: PostgreSQL/Redis/MinIO, Go API/media worker, Python worker, web, reviewed FFmpeg/ffprobe, upload→25-step movie job→TimelineVersion→render/download, restart recovery and readiness probes | physical second-device/LAN proof was not run on this host; VPS/DNS/TLS/load/power-loss remain outside T603 |
+| T603 | Local/LAN Hardened Acceptance | T434, T531–T532, T550, T600–T602 | complete | same-machine full stack acceptance: PostgreSQL/Redis/MinIO, Go API/media worker, Python worker, web, reviewed FFmpeg/ffprobe, upload→25-step movie job→TimelineVersion→render/download; real local provider policy r8 has `trace_complete=true` and zero download hash mismatches | physical second-device/LAN proof was not run in this continuation; VPS/DNS/TLS/load/power-loss remain outside T603 |
 | T604 | Upstream research refresh | T001, T003, T108 | complete | `docs/research/upstream-refresh-20260818.md`, metadata-only refresh script | research evidence only; no product coupling |
 | T605 | Internet/VPS production release | T603 | blocked | none | explicit production approval |
 
@@ -119,3 +119,10 @@ reconciliation, actual ProviderResolver node-path execution, Python native workf
 QA and cross-language/security checks pass.
 Existing signed T434 staging remains an owner-controlled release artifact boundary and is unrelated
 to the Gate G local implementation evidence.
+
+The 2026-08-19 continuation adds a real local provider mode without changing the domain boundary:
+Ollama LLM/VLM/embedding, Windows SAPI TTS and CPU/int8 faster-whisper ASR are selected by an
+immutable worker policy snapshot and pass the full Product API r8 trace. The API adapter parity
+surface is implemented through opaque environment references, but live API mode is explicitly
+credential-blocked and no remote quality claim is made. Future WEB_SESSION access remains an
+unimplemented, separately consented adapter boundary.
